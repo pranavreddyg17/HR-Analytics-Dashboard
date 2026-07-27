@@ -1,0 +1,175 @@
+{
+  "model_name": "Regularized Logistic Regression",
+  "model_version": "1.0.0",
+  "trained_at": "2026-07-27T02:48:21.687915+00:00",
+  "evaluation": "5-fold stratified out-of-fold evaluation",
+  "threshold": 0.20999999999999996,
+  "metrics": {
+    "roc_auc": 0.7097949839333929,
+    "average_precision": 0.3518937083360157,
+    "precision": 0.3054892601431981,
+    "recall": 0.540084388185654,
+    "f1": 0.3902439024390244,
+    "accuracy": 0.7278911564625851,
+    "brier_score": 0.1232391745465977,
+    "confusion_matrix": [
+      [
+        942,
+        291
+      ],
+      [
+        109,
+        128
+      ]
+    ]
+  },
+  "dataset": {
+    "rows": 1470,
+    "features": 10,
+    "excluded_from_model": [
+      "Age",
+      "MaritalStatus"
+    ],
+    "positive_rows": 237,
+    "negative_rows": 1233,
+    "observed_attrition_rate": 0.16122448979591836,
+    "source_file": "attrition.csv"
+  },
+  "numeric_columns": [
+    "DistanceFromHome",
+    "Education",
+    "EnvironmentSatisfaction",
+    "JobSatisfaction",
+    "MonthlyIncome",
+    "NumCompaniesWorked",
+    "WorkLifeBalance",
+    "YearsAtCompany"
+  ],
+  "categorical_columns": [
+    "Department",
+    "EducationField"
+  ],
+  "feature_importance": [
+    {
+      "feature": "EducationField",
+      "importance": 0.3237762140243136
+    },
+    {
+      "feature": "MonthlyIncome",
+      "importance": 0.15240360278891588
+    },
+    {
+      "feature": "Department",
+      "importance": 0.14995635183694814
+    },
+    {
+      "feature": "EnvironmentSatisfaction",
+      "importance": 0.07536897253381618
+    },
+    {
+      "feature": "JobSatisfaction",
+      "importance": 0.074956201054911
+    },
+    {
+      "feature": "YearsAtCompany",
+      "importance": 0.0580951769897741
+    },
+    {
+      "feature": "DistanceFromHome",
+      "importance": 0.055247970236310374
+    },
+    {
+      "feature": "NumCompaniesWorked",
+      "importance": 0.04721733821049598
+    },
+    {
+      "feature": "WorkLifeBalance",
+      "importance": 0.04477613119174039
+    },
+    {
+      "feature": "Education",
+      "importance": 0.018202041132774356
+    }
+  ],
+  "positive_drivers": [
+    {
+      "feature": "EducationField",
+      "share": 0.4769481456622334
+    },
+    {
+      "feature": "Department",
+      "share": 0.21936068550658747
+    },
+    {
+      "feature": "DistanceFromHome",
+      "share": 0.16374635387278963
+    },
+    {
+      "feature": "NumCompaniesWorked",
+      "share": 0.1399448149583895
+    }
+  ],
+  "categorical_options": {
+    "Department": [
+      "Human Resources",
+      "Research & Development",
+      "Sales"
+    ],
+    "EducationField": [
+      "Human Resources",
+      "Life Sciences",
+      "Marketing",
+      "Medical",
+      "Other",
+      "Technical Degree"
+    ]
+  },
+  "numeric_ranges": {
+    "DistanceFromHome": {
+      "min": 1.0,
+      "max": 29.0,
+      "median": 7.0
+    },
+    "Education": {
+      "min": 1.0,
+      "max": 5.0,
+      "median": 3.0
+    },
+    "EnvironmentSatisfaction": {
+      "min": 1.0,
+      "max": 4.0,
+      "median": 3.0
+    },
+    "JobSatisfaction": {
+      "min": 1.0,
+      "max": 4.0,
+      "median": 3.0
+    },
+    "MonthlyIncome": {
+      "min": 1009.0,
+      "max": 19999.0,
+      "median": 4919.0
+    },
+    "NumCompaniesWorked": {
+      "min": 0.0,
+      "max": 9.0,
+      "median": 2.0
+    },
+    "WorkLifeBalance": {
+      "min": 1.0,
+      "max": 4.0,
+      "median": 3.0
+    },
+    "YearsAtCompany": {
+      "min": 0.0,
+      "max": 40.0,
+      "median": 5.0
+    }
+  },
+  "notes": [
+    "Age and MaritalStatus are excluded from model training to reduce employment fairness and discrimination risk.",
+    "The uploaded dataset is historical and contains no employee names, job titles, managers, locations, dates, hiring events, leave records, training records, or promotion records.",
+    "Risk scores are model estimates, not facts or employment decisions. Human review is required.",
+    "The model is intended for demonstration and analytics validation, not automated HR action."
+  ]
+}

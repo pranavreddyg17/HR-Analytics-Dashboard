@@ -1,0 +1,12 @@
+services:
+  backend:
+    build: ./backend
+    ports:
+      - "8000:8000"
+    environment:
+      ALLOWED_ORIGINS: http://localhost:3000
+    volumes:
+      - laidbackhr_runtime:/app/runtime
+
+volumes:
+  laidbackhr_runtime:
