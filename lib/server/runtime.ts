@@ -86,6 +86,10 @@ export function getHealth() {
       prediction: "ready",
       groundedAnalytics: "ready",
       reviewActions: "ready",
+      workforceWarehouse: "ready",
+      mcpTools: "ready",
+      langchainAgent: "ready",
+      reportExports: "ready",
     },
   }
 }

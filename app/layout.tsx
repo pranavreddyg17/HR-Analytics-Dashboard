@@ -11,7 +11,7 @@ const baseMetadata: Metadata = {
     template: '%s · LaidbackHR.AI',
   },
   description:
-    'Grounded HR attrition analytics, explainable predictions, and human-reviewed AI workflows powered by a real historical dataset.',
+    'Workforce intelligence across hiring, attrition, leave, training, and promotions with persistent HR data, explainable predictions, and MCP-powered AI.',
   applicationName: 'LaidbackHR.AI',
   generator: 'LaidbackHR.AI',
 }
@@ -30,14 +30,14 @@ export async function generateMetadata(): Promise<Metadata> {
     ...baseMetadata,
     openGraph: {
       title: 'LaidbackHR.AI — People Intelligence',
-      description: 'Real-data attrition analytics and human-reviewed AI workflows.',
+      description: 'Persistent workforce analytics and human-reviewed MCP agent workflows.',
       type: 'website',
       images: [{ url: imageUrl, width: 1731, height: 909, alt: 'LaidbackHR.AI — People Intelligence' }],
     },
     twitter: {
       card: 'summary_large_image',
       title: 'LaidbackHR.AI — People Intelligence',
-      description: 'Real-data attrition analytics and human-reviewed AI workflows.',
+      description: 'Persistent workforce analytics and human-reviewed MCP agent workflows.',
       images: [imageUrl],
     },
   }

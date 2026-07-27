@@ -8,8 +8,8 @@ import { Button } from "@/components/ui/button"
 
 const titles: Record<string, { title: string; subtitle: string }> = {
   "/": {
-    title: "Executive Overview",
-    subtitle: "Real analytics from the uploaded attrition dataset",
+    title: "Workforce Intelligence",
+    subtitle: "Hiring, attrition, leave, training, and promotion analytics",
   },
   "/attrition": {
     title: "Attrition Analytics & ML",
@@ -21,7 +21,11 @@ const titles: Record<string, { title: string; subtitle: string }> = {
   },
   "/ai-agents": {
     title: "Analytics AI",
-    subtitle: "Grounded chat and data-derived review actions",
+    subtitle: "LangChain agent with visible MCP tool traces",
+  },
+  "/data": {
+    title: "HR Data Hub",
+    subtitle: "Validated CSV imports, Power BI feeds, and data readiness",
   },
   "/learning": {
     title: "Data & Model",

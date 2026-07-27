@@ -18,7 +18,24 @@ test("health reports every production capability ready", async () => {
     prediction: "ready",
     groundedAnalytics: "ready",
     reviewActions: "ready",
+    workforceWarehouse: "ready",
+    mcpTools: "ready",
+    langchainAgent: "ready",
+    reportExports: "ready",
   })
+})
+
+test("workforce analytics spans every requested HR domain", async () => {
+  const { response, body } = await json("/api/v1/workforce?department=Sales&period=quarter")
+  assert.equal(response.status, 200)
+  assert.equal(body.filters.department, "Sales")
+  assert.ok(body.kpis.totalEmployees > 0)
+  assert.ok(Array.isArray(body.hiring.trend))
+  assert.ok(Array.isArray(body.attrition.highRiskEmployees))
+  assert.ok(Array.isArray(body.leave.byType))
+  assert.ok(Array.isArray(body.training.byProgram))
+  assert.ok(Array.isArray(body.promotions.byDepartment))
+  assert.deepEqual(body.status.map((item) => item.domain), ["employees", "hiring", "attrition", "leave", "training", "promotions"])
 })
 
 test("grounded data endpoints expose the real dataset", async () => {
@@ -84,15 +101,41 @@ test("prediction rejects unsupported categories", async () => {
   assert.equal(response.status, 422)
 })
 
-test("analytics agent stays grounded in model facts", async () => {
+test("LangChain agent invokes MCP tools and returns its trace", async () => {
   const { response, body } = await json("/api/v1/chat", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ message: "Which department has the highest predicted risk?" }),
   })
   assert.equal(response.status, 200)
-  assert.equal(body.provider, "grounded-analytics-engine")
-  assert.match(body.answer, /Sales has the highest average predicted risk/)
+  assert.equal(body.provider, "langchain-mcp-grounded-agent")
+  assert.ok(body.tools.some((trace) => trace.tool === "analyze_attrition" && trace.status === "completed"))
+  assert.match(body.answer, /attrition rate/)
+})
+
+test("MCP server lists and calls the HR tools", async () => {
+  const headers = { "Content-Type": "application/json", Accept: "application/json, text/event-stream", "mcp-protocol-version": "2025-06-18" }
+  const listed = await json("/api/mcp", { method: "POST", headers, body: JSON.stringify({ jsonrpc: "2.0", id: 2, method: "tools/list", params: {} }) })
+  assert.equal(listed.response.status, 200)
+  assert.equal(listed.body.result.tools.length, 8)
+  assert.ok(listed.body.result.tools.some((tool) => tool.name === "analyze_promotions"))
+  const called = await json("/api/mcp", { method: "POST", headers, body: JSON.stringify({ jsonrpc: "2.0", id: 3, method: "tools/call", params: { name: "data_quality", arguments: {} } }) })
+  assert.equal(called.response.status, 200)
+  assert.match(called.body.result.content[0].text, /readyForOperationalDecisions/)
+})
+
+test("report and Power BI exports are valid files", async () => {
+  const [pdf, workbook, feed] = await Promise.all([
+    fetch(baseUrl + "/api/v1/reports?format=pdf&department=Sales"),
+    fetch(baseUrl + "/api/v1/reports?format=xlsx&department=Sales"),
+    fetch(baseUrl + "/api/v1/power-bi/leave?department=Sales"),
+  ])
+  assert.equal(pdf.status, 200)
+  assert.equal(workbook.status, 200)
+  assert.equal(feed.status, 200)
+  assert.equal(Buffer.from(await pdf.arrayBuffer()).subarray(0, 4).toString(), "%PDF")
+  assert.equal(Buffer.from(await workbook.arrayBuffer()).subarray(0, 2).toString(), "PK")
+  assert.match(await feed.text(), /^id,employee_id,leave_type/m)
 })
 
 test("review action status persists and can be restored", async () => {

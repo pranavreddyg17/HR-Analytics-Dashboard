@@ -1,14 +1,20 @@
-import { answerAnalytics, RequestValidationError } from "@/lib/server/runtime"
+import { runHrAgent } from "@/lib/server/hr-agent"
 
 export async function POST(request: Request) {
   try {
     const body = await request.json() as { message?: unknown }
-    return Response.json(answerAnalytics(body.message))
+    const url = new URL(request.url)
+    const headers: Record<string, string> = {}
+    const cookie = request.headers.get("cookie")
+    const authorization = request.headers.get("authorization")
+    if (cookie) headers.cookie = cookie
+    if (authorization) headers.authorization = authorization
+    return Response.json(await runHrAgent({ message: body.message, origin: url.origin, forwardedHeaders: headers }))
   } catch (error) {
     const detail = error instanceof Error ? error.message : "Invalid analytics request."
     return Response.json(
       { detail },
-      { status: error instanceof RequestValidationError || error instanceof SyntaxError ? 422 : 500 },
+      { status: error instanceof SyntaxError || /message must/.test(detail) ? 422 : 500 },
     )
   }
 }

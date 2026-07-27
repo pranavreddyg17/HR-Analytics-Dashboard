@@ -1,7 +1,7 @@
 "use client"
 
 import { useRef, useState } from "react"
-import { ArrowUp, Sparkles, User } from "lucide-react"
+import { ArrowUp, CheckCircle2, Sparkles, User, Wrench } from "lucide-react"
 
 import { Button } from "@/components/ui/button"
 import { cn } from "@/lib/utils"
@@ -10,13 +10,15 @@ import { apiBaseUrl } from "@/lib/api"
 type ChatMessage = {
   role: "user" | "assistant"
   content: string
+  tools?: Array<{ tool: string; durationMs: number; status: string }>
 }
 
 const suggestedPrompts = [
-  "Which department has the highest predicted attrition?",
-  "How well does the model perform?",
-  "What are the strongest model drivers?",
-  "Summarise the model-flagged records",
+  "Give me an executive workforce summary",
+  "Which department has the highest attrition?",
+  "What hiring source is most effective?",
+  "Which mandatory training is incomplete?",
+  "Where is career progression stalled?",
 ]
 
 export function AgentCopilot({ initialBrief }: { initialBrief: string }) {
@@ -40,8 +42,8 @@ export function AgentCopilot({ initialBrief }: { initialBrief: string }) {
         body: JSON.stringify({ message: trimmed }),
       })
       if (!response.ok) throw new Error(`Chat request failed (${response.status})`)
-      const body = await response.json() as { answer: string }
-      setMessages((current) => [...current, { role: "assistant", content: body.answer }])
+      const body = await response.json() as { answer: string; tools?: ChatMessage["tools"] }
+      setMessages((current) => [...current, { role: "assistant", content: body.answer, tools: body.tools }])
     } catch (error) {
       setMessages((current) => [
         ...current,
@@ -71,15 +73,27 @@ export function AgentCopilot({ initialBrief }: { initialBrief: string }) {
             >
               {message.role === "assistant" ? <Sparkles className="size-3.5" /> : <User className="size-3.5" />}
             </div>
-            <div
-              className={cn(
-                "max-w-[82%] rounded-xl px-3.5 py-2.5 text-sm leading-relaxed text-pretty",
-                message.role === "assistant"
-                  ? "bg-muted/60 text-foreground"
-                  : "bg-primary text-primary-foreground",
+            <div className="max-w-[84%]">
+              <div
+                className={cn(
+                  "whitespace-pre-wrap rounded-xl px-3.5 py-2.5 text-sm leading-relaxed text-pretty",
+                  message.role === "assistant"
+                    ? "bg-muted/60 text-foreground"
+                    : "bg-primary text-primary-foreground",
+                )}
+              >
+                {message.content.replace(/\*\*/g, "").replace(/_([^_]+)_/g, "$1")}
+              </div>
+              {message.tools && message.tools.length > 0 && (
+                <div className="mt-2 flex flex-wrap gap-1.5">
+                  {message.tools.map((trace, traceIndex) => (
+                    <span key={`${trace.tool}-${traceIndex}`} className="inline-flex items-center gap-1 rounded-full border border-primary/20 bg-primary/5 px-2 py-1 text-[10px] text-muted-foreground">
+                      {trace.status === "completed" ? <CheckCircle2 className="size-3 text-success" /> : <Wrench className="size-3 text-warning" />}
+                      MCP · {trace.tool} · {trace.durationMs}ms
+                    </span>
+                  ))}
+                </div>
               )}
-            >
-              {message.content}
             </div>
           </div>
         ))}
@@ -119,7 +133,7 @@ export function AgentCopilot({ initialBrief }: { initialBrief: string }) {
           <input
             value={input}
             onChange={(event) => setInput(event.target.value)}
-            placeholder="Ask about the real dataset or model..."
+            placeholder="Ask across hiring, attrition, leave, training, or promotions..."
             className="flex-1 bg-transparent text-sm outline-none placeholder:text-muted-foreground"
           />
           <Button type="submit" size="icon" disabled={!input.trim() || thinking} aria-label="Send">

@@ -1,4 +1,4 @@
-import { Bot, Zap, Clock, CheckCircle2, Database } from "lucide-react"
+import { Bot, Zap, Clock, CheckCircle2, Database, Wrench } from "lucide-react"
 
 import { Card, CardHeader, CardTitle, CardContent, CardDescription } from "@/components/ui/card"
 import { AgentCopilot } from "@/components/agent-copilot"
@@ -11,9 +11,9 @@ export const dynamic = "force-dynamic"
 export default async function AiAgentsPage() {
   const [actions, dashboard] = await Promise.all([getActions(), Promise.resolve(getDashboard())])
   const stats = [
-    { label: "Generated reviews", value: String(actions.stats.actions), icon: Zap },
+    { label: "MCP tools", value: "8", icon: Wrench },
     { label: "Awaiting approval", value: String(actions.stats.awaitingApproval), icon: Clock },
-    { label: "Completed", value: String(actions.stats.completed), icon: CheckCircle2 },
+    { label: "Completed reviews", value: String(actions.stats.completed), icon: CheckCircle2 },
   ]
 
   return (
@@ -21,7 +21,7 @@ export default async function AiAgentsPage() {
       <div className="flex items-start gap-2 rounded-xl border border-primary/20 bg-primary/5 p-3 text-sm text-muted-foreground">
         <Database className="mt-0.5 size-4 shrink-0 text-primary" />
         <p>
-          Recommendations and answers are generated from the uploaded CSV and deployed model. The analytics agent is constrained to verified dashboard and model facts, and every workflow remains under human control.
+          LangChain loads eight read-only tools from LaidbackHR.AI&apos;s Streamable HTTP MCP server. Every answer shows its tool trace, stays grounded in the filtered D1 warehouse, and keeps employee-level decisions under human control.
         </p>
       </div>
 
@@ -43,7 +43,7 @@ export default async function AiAgentsPage() {
             <CardHeader className="border-b">
               <CardTitle>Data-driven review queue</CardTitle>
               <CardDescription>
-                Suggested analyses derived from real dataset cohorts; approvals are stored durably
+                Suggested reviews derived from workforce and model cohorts; approvals are stored durably
               </CardDescription>
             </CardHeader>
             <CardContent>
@@ -59,10 +59,10 @@ export default async function AiAgentsPage() {
                 <Bot className="size-4 text-primary" />
                 Analytics copilot
               </CardTitle>
-              <CardDescription>Grounded in API data and model metadata</CardDescription>
+              <CardDescription>LangChain + MCP tools · deterministic private synthesis by default</CardDescription>
             </CardHeader>
             <CardContent className="min-h-0 flex-1">
-              <AgentCopilot initialBrief={dashboard.dailyBrief} />
+              <AgentCopilot initialBrief={`I can analyze hiring, attrition, leave, training, promotions, employee drill-downs, and data quality through eight MCP tools. ${dashboard.dailyBrief}`} />
             </CardContent>
           </Card>
         </div>

@@ -8,6 +8,7 @@ import {
   Users,
   Bot,
   Database,
+  UploadCloud,
   Sparkles,
   type LucideIcon,
 } from "lucide-react"
@@ -20,6 +21,7 @@ const icons: Record<string, LucideIcon> = {
   Users,
   Bot,
   Database,
+  UploadCloud,
 }
 
 const nav = [
@@ -27,8 +29,11 @@ const nav = [
   { href: "/attrition", label: "Attrition & ML", icon: "TrendingDown" },
   { href: "/employees", label: "Scored Records", icon: "Users" },
   { href: "/ai-agents", label: "Analytics AI", icon: "Bot" },
+  { href: "/data", label: "Data Hub", icon: "UploadCloud" },
   { href: "/learning", label: "Data & Model", icon: "Database" },
 ]
+
+const mobileNav = nav.filter((item) => item.href !== "/employees")
 
 export function AppSidebar() {
   const pathname = usePathname()
@@ -75,14 +80,14 @@ export function AppSidebar() {
             <Database className="size-4" />
           </div>
           <div className="flex flex-col leading-tight">
-            <span className="text-sm font-medium">IBM HR sample</span>
-            <span className="text-xs text-muted-foreground">1,470 historical rows</span>
+            <span className="text-sm font-medium">Persistent D1 + ML</span>
+            <span className="text-xs text-muted-foreground">6 HR domains · 8 MCP tools</span>
           </div>
         </div>
       </div>
     </aside>
     <nav aria-label="Mobile navigation" className="fixed inset-x-3 bottom-3 z-40 grid grid-cols-5 rounded-2xl border border-sidebar-border bg-sidebar/95 p-1.5 shadow-2xl backdrop-blur md:hidden">
-      {nav.map((item) => {
+      {mobileNav.map((item) => {
         const Icon = icons[item.icon]
         const active = pathname === item.href
         return (
