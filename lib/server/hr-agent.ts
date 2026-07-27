@@ -1,10 +1,13 @@
 import { env } from "cloudflare:workers"
-import { MultiServerMCPClient } from "@langchain/mcp-adapters"
+import { loadMcpTools } from "@langchain/mcp-adapters"
 import { ChatOpenAI } from "@langchain/openai"
+import { Client } from "@modelcontextprotocol/sdk/client/index.js"
+import { InMemoryTransport } from "@modelcontextprotocol/sdk/inMemory.js"
 import { createAgent } from "langchain"
 
 import type { HrFilters } from "@/lib/hr-types"
 import { getWorkforceAnalytics } from "@/lib/server/hr-analytics"
+import { createHrMcpServer } from "@/lib/server/hr-mcp"
 
 type ToolTrace = {
   tool: string
@@ -129,24 +132,30 @@ function messageText(message: unknown): string {
   return ""
 }
 
-export async function runHrAgent({ message, origin, forwardedHeaders }: { message: unknown; origin: string; forwardedHeaders?: Record<string, string> }): Promise<AgentAnswer> {
-  if (typeof message !== "string" || !message.trim() || message.length > 2000) throw new Error("message must contain between 1 and 2,000 characters.")
-  const client = new MultiServerMCPClient({
-    throwOnLoadError: true,
-    prefixToolNameWithServerName: false,
-    onConnectionError: "throw",
-    mcpServers: {
-      laidbackhr: {
-        transport: "http",
-        url: `${origin}/api/mcp`,
-        headers: forwardedHeaders,
-        automaticSSEFallback: false,
-      },
+async function loadInProcessMcpTools() {
+  const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair()
+  const mcpServer = createHrMcpServer()
+  const mcpClient = new Client({ name: "LaidbackHR.AI LangChain Agent", version: "2.0.0" }, { capabilities: {} })
+  await mcpServer.connect(serverTransport)
+  await mcpClient.connect(clientTransport)
+  // pnpm may instantiate the MCP SDK once with Zod 3 and once with Zod 4;
+  // the runtime Client contract is identical even though its private TS brand differs.
+  const tools = await loadMcpTools("laidbackhr", mcpClient as unknown as Parameters<typeof loadMcpTools>[1])
+  return {
+    tools,
+    close: async () => {
+      await mcpClient.close()
+      if (mcpServer.isConnected()) await mcpServer.close()
     },
-  })
+  }
+}
+
+export async function runHrAgent({ message }: { message: unknown }): Promise<AgentAnswer> {
+  if (typeof message !== "string" || !message.trim() || message.length > 2000) throw new Error("message must contain between 1 and 2,000 characters.")
+  const mcp = await loadInProcessMcpTools()
   const traces: ToolTrace[] = []
   try {
-    const tools = await client.getTools()
+    const tools = mcp.tools
     const apiKey = getWorkerSecret("OPENAI_API_KEY")
     if (apiKey) {
       const model = new ChatOpenAI({ apiKey, model: getWorkerSecret("OPENAI_MODEL") ?? "gpt-4.1-mini", temperature: 0 })
@@ -183,6 +192,6 @@ export async function runHrAgent({ message, origin, forwardedHeaders }: { messag
     const answer = evidence.map(({ tool, data }) => explainTool(tool, data)).join("\n\n")
     return { answer: `${answer}\n\n_MCP evidence retrieved through LangChain. ${apiKey ? "LLM synthesis enabled." : "Deterministic synthesis is active; no employee data was sent to an external model."}_`, provider: "langchain-mcp-grounded-agent", tools: traces, groundedAt: new Date().toISOString() }
   } finally {
-    await client.close()
+    await mcp.close()
   }
 }
