@@ -4,8 +4,6 @@ import "@fontsource-variable/manrope"
 import "@fontsource-variable/newsreader"
 import "./globals.css"
 
-import { getChatGPTUser } from "@/app/chatgpt-auth"
-import { AppShell } from "@/components/app-shell"
 
 const baseMetadata: Metadata = {
   title: {
@@ -51,15 +49,10 @@ export const viewport: Viewport = {
 }
 
 export default async function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {
-  const authenticatedUser = await getChatGPTUser()
-  const user = authenticatedUser
-    ? { displayName: authenticatedUser.displayName, email: authenticatedUser.email, authenticated: true }
-    : { displayName: "Local HR Admin", email: "local-admin@laidbackhr.ai", authenticated: false }
-
   return (
     <html lang="en" className="bg-background" suppressHydrationWarning>
       <body className="font-sans antialiased">
-        <AppShell user={user}>{children}</AppShell>
+        {children}
       </body>
     </html>
   )

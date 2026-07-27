@@ -3,6 +3,7 @@
 import Link from "next/link"
 import { usePathname, useSearchParams } from "next/navigation"
 import { Bell, Bot, ChevronDown, LogOut, Plus, Search } from "lucide-react"
+import { signOut } from "next-auth/react"
 
 import { BrandLogo } from "@/components/brand-logo"
 import type { ShellUser } from "@/components/app-sidebar"
@@ -14,6 +15,7 @@ const pageMeta: Record<string, { title: string; subtitle: string }> = {
   "/attrition": { title: "Attrition risk", subtitle: "Explainable signals for responsible human review" },
   "/ai-agents": { title: "AI assistant", subtitle: "Ask questions across your workforce data" },
   "/data": { title: "Data hub", subtitle: "Imports, integrations, and data readiness" },
+  "/access": { title: "Access", subtitle: "Google sign-in, roles, and workspace membership" },
   "/learning": { title: "Data & model", subtitle: "Model provenance, quality, and limitations" },
   "/employees": { title: "People", subtitle: "Directory, profiles, and employee records" },
   "/risk-review": { title: "Model review", subtitle: "Historical scored records for responsible audit" },
@@ -82,9 +84,9 @@ export function Topbar({ user, onOpenPalette }: { user: ShellUser; onOpenPalette
               <p className="mt-0.5 truncate text-xs text-muted-foreground">{user.email}</p>
             </div>
             {user.authenticated ? (
-              <a href="/signout-with-chatgpt?return_to=%2F" className="user-menu__item">
+              <button type="button" onClick={() => signOut({ callbackUrl: "/login" })} className="user-menu__item w-full">
                 <LogOut className="size-4" /> Sign out
-              </a>
+              </button>
             ) : (
               <p className="px-3.5 py-2.5 text-xs text-muted-foreground">Local development session</p>
             )}

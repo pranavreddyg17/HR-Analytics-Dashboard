@@ -11,6 +11,7 @@ import {
   GraduationCap,
   House,
   Inbox,
+  KeyRound,
   Menu,
   Search,
   ShieldAlert,
@@ -26,6 +27,7 @@ export type ShellUser = {
   displayName: string
   email: string
   authenticated: boolean
+  role?: string
 }
 
 export type NavigationItem = {
@@ -62,7 +64,10 @@ export const navigationGroups: Array<{ label: string; items: NavigationItem[] }>
   },
   {
     label: "Admin",
-    items: [{ href: "/data", label: "Data hub", icon: Database }],
+    items: [
+      { href: "/data", label: "Data hub", icon: Database },
+      { href: "/access", label: "Access", icon: KeyRound },
+    ],
   },
 ]
 
@@ -133,7 +138,7 @@ export function AppSidebar({
             <div key={group.label} className="mb-4">
               {!collapsed && <p className="sidebar-group-label">{group.label}</p>}
               <div className="space-y-1">
-                {group.items.map((item) => {
+                {group.items.filter((item) => item.href !== "/access" || user.role === "admin").map((item) => {
                   const active = isActive(pathname, currentView, item)
                   const Icon = item.icon
                   return (
