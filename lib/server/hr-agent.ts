@@ -82,6 +82,11 @@ function explainTool(toolName: string, data: Record<string, unknown>): string {
     const gaps = Array.isArray(data.gaps) ? data.gaps.map(String) : []
     return gaps.length ? `The analytics warehouse is still in demo mode for: ${gaps.join(", ")}. Import those domains before using the numbers for operational decisions.` : "All six HR domains contain imported operational data."
   }
+  if (toolName === "analyze_employees") {
+    const department = topLabel(data.byDepartment)
+    const location = topLabel(data.byLocation)
+    return `The selected workforce contains **${numberValue(data, "total")} employee records**: ${numberValue(data, "active")} active, ${numberValue(data, "onLeave")} on leave, ${numberValue(data, "preboarding")} preboarding, and ${numberValue(data, "terminated")} terminated.${department ? ` ${department.label} is the largest department (${department.value}).` : ""}${location ? ` ${location.label} is the largest location (${location.value}).` : ""}`
+  }
   if (toolName === "employee_drilldown") {
     return data.employee ? `I found the employee record and related operational history. Review the employee-level rows in the returned evidence with appropriate HR access controls.` : "No matching employee was found in the current filtered dataset."
   }
@@ -96,6 +101,7 @@ function selectTools(message: string): string[] {
   if (/leave|pto|absence|vacation|sick/.test(text)) selected.push("analyze_leave")
   if (/training|learning|course|assessment|mandatory/.test(text)) selected.push("analyze_training")
   if (/promotion|promote|career|progression|mobility/.test(text)) selected.push("analyze_promotions")
+  if (/employee|headcount|workforce|directory|location|employment type|manager span/.test(text)) selected.push("analyze_employees")
   if (/quality|demo|import|source data|coverage/.test(text)) selected.push("data_quality")
   const employeeMatch = text.match(/(?:employee|id)\s*[:#-]?\s*(emp[-_ ]?\d+|ibm[-_ ]?\d+)/i)
   if (employeeMatch) selected.unshift("employee_drilldown")

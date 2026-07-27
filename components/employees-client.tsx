@@ -1,7 +1,7 @@
 "use client"
 
 import { useMemo, useState } from "react"
-import { Search, Sparkles, ChevronDown, DollarSign, Database, Loader2 } from "lucide-react"
+import { Search, ShieldCheck, ChevronDown, DollarSign, Database, Loader2 } from "lucide-react"
 
 import { Card, CardHeader, CardTitle, CardContent, CardDescription } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
@@ -147,7 +147,7 @@ export function EmployeesClient({ employees, total }: { employees: Employee[]; t
                   </div>
 
                   <Button variant="outline" size="sm" className="gap-1.5" onClick={() => setOpenId(open ? null : employee.id)}>
-                    <Sparkles className="size-3.5 text-primary" />
+                    <ShieldCheck className="size-3.5 text-primary" />
                     Review
                     <ChevronDown className={cn("size-3.5 transition-transform", open && "rotate-180")} />
                   </Button>
@@ -157,7 +157,7 @@ export function EmployeesClient({ employees, total }: { employees: Employee[]; t
                   <div className="border-t border-border/60 bg-primary/5 p-3">
                     <div className="flex items-start gap-2.5">
                       <div className="flex size-7 shrink-0 items-center justify-center rounded-md bg-primary/15 text-primary">
-                        <Sparkles className="size-3.5" />
+                        <ShieldCheck className="size-3.5" />
                       </div>
                       <div className="flex-1">
                         <p className="text-xs font-medium text-primary">Human-review recommendation</p>

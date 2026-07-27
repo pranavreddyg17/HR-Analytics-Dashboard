@@ -27,7 +27,9 @@ const tableByDomain: Record<HrDomain, string> = {
 }
 
 const createStatements = [
-  "CREATE TABLE IF NOT EXISTS employees (employee_id TEXT PRIMARY KEY, department TEXT NOT NULL, job_title TEXT NOT NULL, location TEXT NOT NULL, manager TEXT NOT NULL, hire_date TEXT NOT NULL, employment_status TEXT NOT NULL, tenure_years REAL NOT NULL, data_source TEXT NOT NULL DEFAULT 'imported', updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP)",
+  "CREATE TABLE IF NOT EXISTS employees (employee_id TEXT PRIMARY KEY, first_name TEXT NOT NULL DEFAULT '', last_name TEXT NOT NULL DEFAULT '', preferred_name TEXT, work_email TEXT, phone TEXT, department TEXT NOT NULL, job_title TEXT NOT NULL, location TEXT NOT NULL, manager TEXT NOT NULL, manager_id TEXT, hire_date TEXT NOT NULL, employment_type TEXT NOT NULL DEFAULT 'Full-time', employment_status TEXT NOT NULL, tenure_years REAL NOT NULL, data_source TEXT NOT NULL DEFAULT 'imported', archived_at TEXT, version INTEGER NOT NULL DEFAULT 1, created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP, updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP)",
+  "CREATE TABLE IF NOT EXISTS employee_activity (id TEXT PRIMARY KEY, employee_id TEXT NOT NULL, event_type TEXT NOT NULL, summary TEXT NOT NULL, changes_json TEXT, actor_email TEXT NOT NULL, created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP)",
+  "CREATE TABLE IF NOT EXISTS workspace_settings (key TEXT PRIMARY KEY, value TEXT NOT NULL, updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP)",
   "CREATE TABLE IF NOT EXISTS hiring_records (id TEXT PRIMARY KEY, position TEXT NOT NULL, department TEXT NOT NULL, application_date TEXT NOT NULL, hiring_date TEXT, hiring_source TEXT NOT NULL, time_to_hire_days INTEGER, recruitment_status TEXT NOT NULL, location TEXT NOT NULL, data_source TEXT NOT NULL DEFAULT 'imported', updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP)",
   "CREATE TABLE IF NOT EXISTS attrition_events (id TEXT PRIMARY KEY, employee_id TEXT NOT NULL, exit_date TEXT NOT NULL, exit_reason TEXT NOT NULL, exit_type TEXT NOT NULL, department TEXT NOT NULL, tenure_years REAL NOT NULL, data_source TEXT NOT NULL DEFAULT 'imported', updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP)",
   "CREATE TABLE IF NOT EXISTS leave_records (id TEXT PRIMARY KEY, employee_id TEXT NOT NULL, leave_type TEXT NOT NULL, start_date TEXT NOT NULL, end_date TEXT NOT NULL, leave_days REAL NOT NULL, approval_status TEXT NOT NULL, department TEXT NOT NULL, data_source TEXT NOT NULL DEFAULT 'imported', updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP)",
@@ -58,6 +60,8 @@ function numericTenure(value: string): number {
 export function generateDemoDataset(): Dataset {
   const sourceEmployees = getEmployees({ limit: 240 }).items
   const locations = ["Austin", "London", "New York", "Remote", "San Francisco", "Singapore"]
+  const firstNames = ["Avery", "Maya", "Noah", "Elena", "Miles", "Priya", "Theo", "Naomi", "Liam", "Sofia", "Jordan", "Amara", "Kai", "Leila", "Owen", "Nina", "Elliot", "Zara"]
+  const lastNames = ["Chen", "Patel", "Williams", "Garcia", "Kim", "Okafor", "Martin", "Singh", "Rivera", "Brown", "Davis", "Wilson", "Nguyen", "Taylor", "Johnson"]
   const sources = ["Employee referral", "LinkedIn", "Careers site", "Agency", "University"]
   const leaveTypes = ["Annual", "Sick", "Parental", "Personal", "Caregiver"]
   const programs = ["Security & privacy", "Manager essentials", "Inclusive leadership", "Data literacy", "Safety"]
@@ -65,13 +69,22 @@ export function generateDemoDataset(): Dataset {
 
   const employees = sourceEmployees.slice(0, 180).map((employee, index) => {
     const tenure = numericTenure(employee.tenure)
+    const firstName = firstNames[index % firstNames.length]
+    const lastName = lastNames[(index * 7) % lastNames.length]
     return {
       employee_id: employee.id,
+      first_name: firstName,
+      last_name: lastName,
+      preferred_name: index % 9 === 0 ? firstName.slice(0, Math.max(3, firstName.length - 1)) : null,
+      work_email: `${firstName}.${lastName}.${String(index + 1).padStart(3, "0")}@demo.laidbackhr.ai`.toLowerCase(),
+      phone: `+1 555 ${String(100 + (index % 900)).padStart(3, "0")} ${String(1000 + index).slice(-4)}`,
       department: employee.department,
       job_title: employee.role,
       location: locations[index % locations.length],
       manager: `${employee.department} Manager ${1 + (index % 4)}`,
+      manager_id: index < 8 ? null : sourceEmployees[Math.max(0, Math.floor(index / 8) * 8 - 8)]?.id ?? null,
       hire_date: dateShift(-Math.max(2, Math.round(tenure * 12)), -(index % 19)),
+      employment_type: index % 12 === 0 ? "Contract" : index % 9 === 0 ? "Part-time" : "Full-time",
       employment_status: employee.observedAttrition === "Yes" ? "Terminated" : index % 17 === 0 ? "On leave" : "Active",
       tenure_years: tenure,
       data_source: "demo",
@@ -167,7 +180,7 @@ export function generateDemoDataset(): Dataset {
 }
 
 const insertSql: Record<HrDomain, string> = {
-  employees: "INSERT INTO employees(employee_id, department, job_title, location, manager, hire_date, employment_status, tenure_years, data_source, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP) ON CONFLICT(employee_id) DO UPDATE SET department=excluded.department, job_title=excluded.job_title, location=excluded.location, manager=excluded.manager, hire_date=excluded.hire_date, employment_status=excluded.employment_status, tenure_years=excluded.tenure_years, data_source=excluded.data_source, updated_at=CURRENT_TIMESTAMP",
+  employees: "INSERT INTO employees(employee_id, first_name, last_name, preferred_name, work_email, phone, department, job_title, location, manager, manager_id, hire_date, employment_type, employment_status, tenure_years, data_source, archived_at, version, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, 1, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP) ON CONFLICT(employee_id) DO UPDATE SET first_name=excluded.first_name, last_name=excluded.last_name, preferred_name=excluded.preferred_name, work_email=excluded.work_email, phone=excluded.phone, department=excluded.department, job_title=excluded.job_title, location=excluded.location, manager=excluded.manager, manager_id=excluded.manager_id, hire_date=excluded.hire_date, employment_type=excluded.employment_type, employment_status=excluded.employment_status, tenure_years=excluded.tenure_years, data_source=excluded.data_source, archived_at=NULL, version=employees.version+1, updated_at=CURRENT_TIMESTAMP",
   hiring: "INSERT INTO hiring_records(id, position, department, application_date, hiring_date, hiring_source, time_to_hire_days, recruitment_status, location, data_source, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP) ON CONFLICT(id) DO UPDATE SET position=excluded.position, department=excluded.department, application_date=excluded.application_date, hiring_date=excluded.hiring_date, hiring_source=excluded.hiring_source, time_to_hire_days=excluded.time_to_hire_days, recruitment_status=excluded.recruitment_status, location=excluded.location, data_source=excluded.data_source, updated_at=CURRENT_TIMESTAMP",
   attrition: "INSERT INTO attrition_events(id, employee_id, exit_date, exit_reason, exit_type, department, tenure_years, data_source, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP) ON CONFLICT(id) DO UPDATE SET employee_id=excluded.employee_id, exit_date=excluded.exit_date, exit_reason=excluded.exit_reason, exit_type=excluded.exit_type, department=excluded.department, tenure_years=excluded.tenure_years, data_source=excluded.data_source, updated_at=CURRENT_TIMESTAMP",
   leave: "INSERT INTO leave_records(id, employee_id, leave_type, start_date, end_date, leave_days, approval_status, department, data_source, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP) ON CONFLICT(id) DO UPDATE SET employee_id=excluded.employee_id, leave_type=excluded.leave_type, start_date=excluded.start_date, end_date=excluded.end_date, leave_days=excluded.leave_days, approval_status=excluded.approval_status, department=excluded.department, data_source=excluded.data_source, updated_at=CURRENT_TIMESTAMP",
@@ -192,6 +205,47 @@ async function seedEmptyDomains(database: Database): Promise<void> {
   }
 }
 
+async function seedDemoOnce(database: Database): Promise<void> {
+  const initialized = await database.prepare("SELECT value FROM workspace_settings WHERE key = 'demo_seed_initialized'").first<{ value: string }>()
+  if (initialized) return
+  await seedEmptyDomains(database)
+  await database.prepare("INSERT INTO workspace_settings(key, value, updated_at) VALUES ('demo_seed_initialized', 'true', CURRENT_TIMESTAMP) ON CONFLICT(key) DO UPDATE SET value='true', updated_at=CURRENT_TIMESTAMP").run()
+}
+
+const profileColumnDefinitions: Record<string, string> = {
+  first_name: "TEXT NOT NULL DEFAULT ''",
+  last_name: "TEXT NOT NULL DEFAULT ''",
+  preferred_name: "TEXT",
+  work_email: "TEXT",
+  phone: "TEXT",
+  manager_id: "TEXT",
+  employment_type: "TEXT NOT NULL DEFAULT 'Full-time'",
+  archived_at: "TEXT",
+  version: "INTEGER NOT NULL DEFAULT 1",
+  created_at: "TEXT",
+}
+
+async function ensureEmployeeProfileColumns(database: Database): Promise<void> {
+  const result = await database.prepare("PRAGMA table_info(employees)").all<{ name: string }>()
+  const present = new Set((result.results ?? []).map((column) => column.name))
+  for (const [name, definition] of Object.entries(profileColumnDefinitions)) {
+    if (!present.has(name)) await database.prepare(`ALTER TABLE employees ADD COLUMN ${name} ${definition}`).run()
+  }
+}
+
+async function backfillDemoProfiles(database: Database): Promise<void> {
+  const blanks = await database.prepare("SELECT employee_id FROM employees WHERE data_source = 'demo' AND COALESCE(first_name, '') = ''").all<{ employee_id: string }>()
+  if (!(blanks.results ?? []).length) return
+  const demoById = new Map(generateDemoDataset().employees.map((row) => [String(row.employee_id), row]))
+  const statements = (blanks.results ?? []).flatMap(({ employee_id }) => {
+    const row = demoById.get(employee_id)
+    if (!row) return []
+    return [database.prepare("UPDATE employees SET first_name=?, last_name=?, preferred_name=?, work_email=?, phone=?, manager_id=?, employment_type=?, updated_at=CURRENT_TIMESTAMP WHERE employee_id=?")
+      .bind(row.first_name, row.last_name, row.preferred_name, row.work_email, row.phone, row.manager_id, row.employment_type, employee_id)]
+  })
+  for (let index = 0; index < statements.length; index += 80) await database.batch(statements.slice(index, index + 80))
+}
+
 export async function ensureHrDatabase(): Promise<Database | null> {
   const database = getHrDatabase()
   if (!database) return null
@@ -202,7 +256,9 @@ export async function ensureHrDatabase(): Promise<Database | null> {
   readyDatabase = database
   setupPromise = (async () => {
     for (const statement of createStatements) await database.prepare(statement).run()
-    await seedEmptyDomains(database)
+    await ensureEmployeeProfileColumns(database)
+    await seedDemoOnce(database)
+    await backfillDemoProfiles(database)
   })()
   try {
     await setupPromise
@@ -221,7 +277,7 @@ function normalizeRow(row: unknown): Record<string, unknown> {
   ]))
 }
 
-const nullableFields = new Set(["hiring_date", "time_to_hire_days", "completion_date", "assessment_score"])
+const nullableFields = new Set(["preferred_name", "work_email", "phone", "manager_id", "hiring_date", "time_to_hire_days", "completion_date", "assessment_score"])
 const numberFields = new Set(["tenure_years", "time_to_hire_days", "leave_days", "training_hours", "assessment_score", "months_since_previous_promotion"])
 const dateFields = new Set(["hire_date", "application_date", "hiring_date", "exit_date", "start_date", "end_date", "completion_date", "promotion_date"])
 
@@ -234,6 +290,9 @@ function validatedRows(domain: HrDomain, rows: unknown[]): Array<Record<string, 
       for (const field of importFields[domain]) {
         let value = row[field]
         if (field === "id" && (value === undefined || value === "")) value = `${domain.slice(0, 3).toUpperCase()}-${crypto.randomUUID()}`
+        if (domain === "employees" && field === "first_name" && (value === undefined || value === "")) value = "Employee"
+        if (domain === "employees" && field === "last_name" && (value === undefined || value === "")) value = String(row.employee_id ?? "")
+        if (domain === "employees" && field === "employment_type" && (value === undefined || value === "")) value = "Full-time"
         if ((value === undefined || value === "") && nullableFields.has(field)) {
           result[field] = null
           continue

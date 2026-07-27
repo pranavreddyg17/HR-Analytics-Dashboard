@@ -1,9 +1,7 @@
-import { EmployeesClient } from "@/components/employees-client"
-import { getEmployees } from "@/lib/server/runtime"
+import { redirect } from "next/navigation"
 
 export const dynamic = "force-dynamic"
 
-export default async function EmployeesPage() {
-  const response = getEmployees({ limit: 100 })
-  return <EmployeesClient employees={response.items} total={response.total} />
+export default function EmployeesPage() {
+  redirect("/people")
 }

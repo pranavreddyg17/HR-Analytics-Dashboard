@@ -11,7 +11,7 @@ export const dynamic = "force-dynamic"
 export default async function AiAgentsPage() {
   const [actions, dashboard] = await Promise.all([getActions(), Promise.resolve(getDashboard())])
   const stats = [
-    { label: "MCP tools", value: "8", icon: Wrench },
+    { label: "MCP tools", value: "9", icon: Wrench },
     { label: "Awaiting approval", value: String(actions.stats.awaitingApproval), icon: Clock },
     { label: "Completed reviews", value: String(actions.stats.completed), icon: CheckCircle2 },
   ]
@@ -21,7 +21,7 @@ export default async function AiAgentsPage() {
       <div className="flex items-start gap-2 rounded-xl border border-primary/20 bg-primary/5 p-3 text-sm text-muted-foreground">
         <Database className="mt-0.5 size-4 shrink-0 text-primary" />
         <p>
-          LangChain loads eight read-only tools from LaidbackHR.AI&apos;s Streamable HTTP MCP server. Every answer shows its tool trace, stays grounded in the filtered D1 warehouse, and keeps employee-level decisions under human control.
+          LangChain loads nine read-only tools from LaidbackHR.AI&apos;s MCP server. Every answer shows its tool trace, stays grounded in the filtered D1 warehouse, and keeps employee-level decisions under human control.
         </p>
       </div>
 
@@ -62,7 +62,7 @@ export default async function AiAgentsPage() {
               <CardDescription>LangChain + MCP tools · deterministic private synthesis by default</CardDescription>
             </CardHeader>
             <CardContent className="min-h-0 flex-1">
-              <AgentCopilot initialBrief={`I can analyze hiring, attrition, leave, training, promotions, employee drill-downs, and data quality through eight MCP tools. ${dashboard.dailyBrief}`} />
+              <AgentCopilot initialBrief={`I can analyze employees, hiring, attrition, leave, training, promotions, individual profiles, and data quality through nine MCP tools. ${dashboard.dailyBrief}`} />
             </CardContent>
           </Card>
         </div>

@@ -1,30 +1,46 @@
 # LaidbackHR.AI
 
-LaidbackHR.AI is a real-data HR attrition analytics application with explainable predictions, a grounded analytics agent, and human-reviewed action workflows.
+LaidbackHR.AI is a people-operations workspace for employee records, hiring, time off, training, promotions, workforce analytics, explainable attrition-risk review, and grounded AI assistance.
 
-The application uses all 1,470 rows from the supplied IBM HR sample dataset. It does not substitute names, job titles, managers, locations, dates, or other fields that are absent from the source.
+It deliberately separates two kinds of data:
+
+- Live HR records stored in D1 and managed through People, Inbox, Data Hub, and Insights.
+- The supplied 1,470-row IBM sample dataset, used only by the validated historical attrition model and its clearly labelled review surface.
 
 ## Production architecture
 
 The deployed application is a single Cloudflare-compatible web runtime:
 
 - Next.js-compatible pages are built with Vinext.
+- The private Sites access gate provides ChatGPT sign-in, and the authenticated identity is attached to employee changes and leave decisions.
+- Employee profiles, reporting lines, soft archival, operational HR domains, approvals, imports, and activity history are stored in D1.
 - The persisted scikit-learn pipeline is exported into an equivalent TypeScript inference runtime.
 - Predictions from the web runtime are parity-tested against the Python model.
-- Dashboard values, anonymised scored records, model metadata, and the analytics agent are grounded in the exported dataset and model.
-- Review-action status is stored in D1 and survives sessions and deployments.
+- Nine in-process MCP tools ground a LangChain agent across employees, hiring, attrition, leave, training, promotions, employee drill-down, data quality, and executive summaries.
+- Reports export to PDF and Excel, while domain feeds support Power BI refreshes.
 - The original FastAPI backend remains in `backend/` as the reproducible training and reference implementation.
 
-## What is real
+## Product surfaces
+
+- `/` — personalized My Day home with priorities and workforce pulse
+- `/people` — searchable employee directory and add-employee workflow
+- `/people/{id}` — profile, reporting line, time off, growth, and attributable activity
+- `/inbox` — leave approvals plus hiring, training, and human-review follow-ups
+- `/insights` — employee, hiring, attrition, leave, training, promotion, and executive analytics
+- `/attrition` and `/risk-review` — governed historical model diagnostics and anonymized review rows
+- `/ai-agents` — grounded LangChain + MCP copilot with a visible tool trace
+- `/data` — imports, templates, data readiness, and Power BI feeds
+
+## Data truth
 
 - All 1,470 historical rows are scored by the deployed model.
 - `POST /api/v1/predict` runs the real logistic-regression coefficients and preprocessing statistics.
-- The analytics agent answers only from verified dashboard and model facts.
-- Review actions are derived from real cohorts and have durable, human-controlled statuses.
-- Dashboard KPIs, department risk, tenure cohorts, model signals, risk distribution, and data provenance come from the supplied CSV.
+- The LangChain agent calls MCP tools and answers from the returned HR analytics evidence.
+- Employee and leave mutations are durable and write an attributable activity entry.
+- Imports replace demo rows one HR domain at a time and remain labelled by source.
 - Age and marital status are excluded from training.
 
-The dataset has no employee names, job titles, managers, locations, dates, hiring events, leave records, training records, promotion records, or exit reasons. Unsupported sections from the original mock app were replaced with auditable alternatives.
+The IBM source dataset has no employee names, managers, locations, dates, hiring events, leave records, training records, promotion records, or exit reasons. For that reason, the initial operational workspace contains conspicuously labelled demo records until an HR team adds or imports its own data. Demo identities never become attrition-model identities.
 
 ## Local development
 
@@ -39,9 +55,10 @@ The production API is same-origin, so `NEXT_PUBLIC_API_BASE_URL` should normally
 
 ## Verification
 
-Run strict TypeScript checks and the production build:
+Run lint, strict TypeScript checks, and the production build:
 
 ```bash
+pnpm lint
 pnpm exec tsc --noEmit
 pnpm build
 ```
@@ -78,7 +95,18 @@ PYTHONPATH=. .venv/bin/python scripts/export_worker_runtime.py
 | GET | `/api/v1/model` | Model metrics and provenance |
 | GET | `/api/v1/schema` | Predictor ranges and categories |
 | POST | `/api/v1/predict` | Score one employee profile |
-| GET | `/api/v1/employees` | Filterable anonymised scored rows |
+| GET | `/api/v1/employees` | Filterable anonymised historical model rows |
+| GET/POST | `/api/v1/hr/people` | Search or create managed employee profiles |
+| GET/PATCH | `/api/v1/hr/people/{id}` | Read or edit one employee profile |
+| POST | `/api/v1/hr/people/{id}/archive` | Soft-archive an employee |
+| POST | `/api/v1/hr/people/{id}/restore` | Restore an archived employee |
+| GET | `/api/v1/hr/inbox` | Unified HR work queue |
+| POST | `/api/v1/hr/leave/{id}/decision` | Approve or reject leave with audit history |
+| GET | `/api/v1/workforce` | Filtered seven-view workforce analytics |
+| POST | `/api/v1/data/import` | Authenticated domain import |
+| GET | `/api/v1/reports` | PDF or Excel report export |
+| GET | `/api/v1/power-bi/{domain}` | Power BI-ready CSV feed |
+| GET/POST/DELETE | `/api/mcp` | Streamable HTTP MCP endpoint with nine tools |
 | GET | `/api/v1/actions` | Data-derived review actions |
 | POST | `/api/v1/actions/{id}` | Persist a review action status |
 | POST | `/api/v1/chat` | Grounded analytics agent |
@@ -97,4 +125,4 @@ The limited sample is suitable for demonstrating a working architecture, not for
 
 ## Responsible-use boundary
 
-Risk scores are statistical estimates, not facts or automated employment decisions. Before using real employee data, add identity and role controls, encryption, audit logging, governed data retention, fairness testing, drift monitoring, employee or works-council review where applicable, and a documented human-review process.
+Risk scores are statistical estimates, not facts or automated employment decisions. The current private workspace adds signed-in identity, mutation authorization, soft archival, audit history, and model/live-data separation. Before a multi-team production rollout, add organization-scoped roles, a verified enterprise identity provider where required, governed retention, fairness and drift monitoring, regional privacy review, and a documented human-review process.

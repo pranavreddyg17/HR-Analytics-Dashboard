@@ -9,20 +9,52 @@ export const actionStatus = sqliteTable("action_status", {
 
 export const employees = sqliteTable("employees", {
   employeeId: text("employee_id").primaryKey(),
+  firstName: text("first_name").notNull().default(""),
+  lastName: text("last_name").notNull().default(""),
+  preferredName: text("preferred_name"),
+  workEmail: text("work_email"),
+  phone: text("phone"),
   department: text("department").notNull(),
   jobTitle: text("job_title").notNull(),
   location: text("location").notNull(),
   manager: text("manager").notNull(),
+  managerId: text("manager_id"),
   hireDate: text("hire_date").notNull(),
+  employmentType: text("employment_type").notNull().default("Full-time"),
   employmentStatus: text("employment_status").notNull(),
   tenureYears: real("tenure_years").notNull(),
   dataSource: text("data_source").notNull().default("imported"),
+  archivedAt: text("archived_at"),
+  version: integer("version").notNull().default(1),
+  createdAt: text("created_at").notNull().default(sql`CURRENT_TIMESTAMP`),
   updatedAt: text("updated_at").notNull().default(sql`CURRENT_TIMESTAMP`),
 }, (table) => [
   index("employees_department_idx").on(table.department),
   index("employees_job_title_idx").on(table.jobTitle),
   index("employees_location_idx").on(table.location),
+  index("employees_status_idx").on(table.employmentStatus),
+  index("employees_manager_idx").on(table.managerId),
+  index("employees_work_email_idx").on(table.workEmail),
 ])
+
+export const employeeActivity = sqliteTable("employee_activity", {
+  id: text("id").primaryKey(),
+  employeeId: text("employee_id").notNull(),
+  eventType: text("event_type").notNull(),
+  summary: text("summary").notNull(),
+  changesJson: text("changes_json"),
+  actorEmail: text("actor_email").notNull(),
+  createdAt: text("created_at").notNull().default(sql`CURRENT_TIMESTAMP`),
+}, (table) => [
+  index("employee_activity_employee_idx").on(table.employeeId),
+  index("employee_activity_created_idx").on(table.createdAt),
+])
+
+export const workspaceSettings = sqliteTable("workspace_settings", {
+  key: text("key").primaryKey(),
+  value: text("value").notNull(),
+  updatedAt: text("updated_at").notNull().default(sql`CURRENT_TIMESTAMP`),
+})
 
 export const hiringRecords = sqliteTable("hiring_records", {
   id: text("id").primaryKey(),

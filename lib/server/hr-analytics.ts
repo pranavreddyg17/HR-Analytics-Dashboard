@@ -143,6 +143,16 @@ export async function getWorkforceAnalytics(filters: HrFilters = {}): Promise<Wo
   const trainingByDepartment = groupBy(training, (record) => record.department, (record) => record.training_hours)
   const promotionByDepartment = groupBy(promotions, (record) => record.department)
   const status = await getDomainStatus({ employees: employeeRows, hiring: hiringRows, attrition: attritionRows, leave: leaveRows, training: trainingRows, promotions: promotionRows })
+  const employeeByDepartment = groupBy(employees, (record) => record.department)
+  const managerCounts = new Map<string, number>()
+  for (const employee of employees) {
+    if (employee.manager_id) managerCounts.set(employee.manager_id, (managerCounts.get(employee.manager_id) ?? 0) + 1)
+  }
+  const managerSpan = [...managerCounts.entries()].map(([managerId, count]) => {
+    const manager = employeeMap.get(managerId)
+    const name = manager ? `${manager.preferred_name || manager.first_name || manager.employee_id} ${manager.last_name || ""}`.trim() : managerId
+    return { label: name, value: count }
+  }).sort((left, right) => right.value - left.value)
 
   const insights: string[] = []
   if (attritionByDepartment[0]) insights.push(`${attritionByDepartment[0].label} recorded the most exits (${attritionByDepartment[0].value}) in the selected period; compare exit reasons and manager cohorts before intervening.`)
@@ -170,6 +180,21 @@ export async function getWorkforceAnalytics(filters: HrFilters = {}): Promise<Wo
       leaveDays: Number(approvedLeave.reduce((sum, record) => sum + record.leave_days, 0).toFixed(1)),
       trainingCompletionRate: percent(completedTraining.length, training.length),
       promotions: promotions.length,
+    },
+    employeeAnalytics: {
+      total: employees.length,
+      active: employees.filter((record) => record.employment_status.toLowerCase() === "active").length,
+      onLeave: employees.filter((record) => record.employment_status.toLowerCase() === "on leave").length,
+      preboarding: employees.filter((record) => record.employment_status.toLowerCase() === "preboarding").length,
+      terminated: employees.filter((record) => record.employment_status.toLowerCase() === "terminated").length,
+      byDepartment: employeeByDepartment,
+      byJobTitle: groupBy(employees, (record) => record.job_title),
+      byLocation: groupBy(employees, (record) => record.location),
+      byStatus: groupBy(employees, (record) => record.employment_status),
+      byEmploymentType: groupBy(employees, (record) => record.employment_type || "Not specified"),
+      byTenure: groupBy(employees, (record) => record.tenure_years < 1 ? "< 1 year" : record.tenure_years < 3 ? "1–2 years" : record.tenure_years < 5 ? "3–4 years" : "5+ years"),
+      managerSpan,
+      rows: employees.slice(0, 500),
     },
     hiring: {
       totalHired: hired.length,

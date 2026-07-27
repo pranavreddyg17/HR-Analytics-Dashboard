@@ -34,6 +34,7 @@ export const mcpToolCatalog = [
   { name: "analyze_promotions", description: "Promotion rate, time-to-promotion, departments, trends, and stalled progression" },
   { name: "employee_drilldown", description: "Employee-level operational records across HR domains" },
   { name: "data_quality", description: "Import status, data mode, row counts, and detected coverage gaps" },
+  { name: "analyze_employees", description: "Headcount, status, department, role, location, tenure, employment type, and manager span analytics" },
 ] as const
 
 export function createHrMcpServer(): McpServer {
@@ -115,6 +116,16 @@ export function createHrMcpServer(): McpServer {
       promotions: analytics.promotions.rows.filter((record) => record.employee_id.toLowerCase() === employeeId.toLowerCase()),
       disclaimer: "Use employee-level information only for legitimate HR review and never as the sole basis for an employment decision.",
     })
+  })
+
+  server.registerTool("analyze_employees", {
+    title: "Analyze employees",
+    description: mcpToolCatalog[8].description,
+    inputSchema: filtersShape,
+    annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false },
+  }, async (filters: FilterArgs) => {
+    const analytics = await getWorkforceAnalytics(filters)
+    return result({ filters: analytics.filters, ...analytics.employeeAnalytics })
   })
 
   server.registerTool("data_quality", {

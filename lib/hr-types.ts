@@ -17,14 +17,25 @@ export type TimePoint = { period: string; value: number; secondary?: number }
 
 export type EmployeeRecord = {
   employee_id: string
+  first_name: string
+  last_name: string
+  preferred_name: string | null
+  work_email: string | null
+  phone: string | null
   department: string
   job_title: string
   location: string
   manager: string
+  manager_id: string | null
   hire_date: string
+  employment_type: string
   employment_status: string
   tenure_years: number
   data_source: string
+  archived_at: string | null
+  version: number
+  created_at?: string
+  updated_at?: string
 }
 
 export type HiringRecord = {
@@ -108,6 +119,21 @@ export type WorkforceAnalytics = {
     trainingCompletionRate: number
     promotions: number
   }
+  employeeAnalytics: {
+    total: number
+    active: number
+    onLeave: number
+    preboarding: number
+    terminated: number
+    byDepartment: BreakdownPoint[]
+    byJobTitle: BreakdownPoint[]
+    byLocation: BreakdownPoint[]
+    byStatus: BreakdownPoint[]
+    byEmploymentType: BreakdownPoint[]
+    byTenure: BreakdownPoint[]
+    managerSpan: BreakdownPoint[]
+    rows: EmployeeRecord[]
+  }
   hiring: {
     totalHired: number
     averageTimeToHire: number
@@ -165,7 +191,7 @@ export type WorkforceAnalytics = {
 }
 
 export const importFields: Record<HrDomain, string[]> = {
-  employees: ["employee_id", "department", "job_title", "location", "manager", "hire_date", "employment_status", "tenure_years"],
+  employees: ["employee_id", "first_name", "last_name", "preferred_name", "work_email", "phone", "department", "job_title", "location", "manager", "manager_id", "hire_date", "employment_type", "employment_status", "tenure_years"],
   hiring: ["id", "position", "department", "application_date", "hiring_date", "hiring_source", "time_to_hire_days", "recruitment_status", "location"],
   attrition: ["id", "employee_id", "exit_date", "exit_reason", "exit_type", "department", "tenure_years"],
   leave: ["id", "employee_id", "leave_type", "start_date", "end_date", "leave_days", "approval_status", "department"],

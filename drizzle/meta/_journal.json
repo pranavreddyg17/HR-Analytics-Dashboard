@@ -15,6 +15,13 @@
       "when": 1785125373042,
       "tag": "0001_furry_spyke",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "6",
+      "when": 1785129003349,
+      "tag": "0002_smart_enchantress",
+      "breakpoints": true
     }
   ]
 }

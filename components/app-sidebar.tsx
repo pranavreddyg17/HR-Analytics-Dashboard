@@ -1,112 +1,207 @@
 "use client"
 
 import Link from "next/link"
-import { usePathname } from "next/navigation"
+import { usePathname, useSearchParams } from "next/navigation"
 import {
-  LayoutDashboard,
-  TrendingDown,
-  Users,
+  BarChart3,
   Bot,
+  BriefcaseBusiness,
+  ChevronLeft,
   Database,
-  UploadCloud,
-  Sparkles,
+  GraduationCap,
+  House,
+  Inbox,
+  Menu,
+  Search,
+  ShieldAlert,
+  Umbrella,
+  Users,
   type LucideIcon,
 } from "lucide-react"
 
+import { BrandLogo } from "@/components/brand-logo"
 import { cn } from "@/lib/utils"
 
-const icons: Record<string, LucideIcon> = {
-  LayoutDashboard,
-  TrendingDown,
-  Users,
-  Bot,
-  Database,
-  UploadCloud,
+export type ShellUser = {
+  displayName: string
+  email: string
+  authenticated: boolean
 }
 
-const nav = [
-  { href: "/", label: "Overview", icon: "LayoutDashboard" },
-  { href: "/attrition", label: "Attrition & ML", icon: "TrendingDown" },
-  { href: "/employees", label: "Scored Records", icon: "Users" },
-  { href: "/ai-agents", label: "Analytics AI", icon: "Bot" },
-  { href: "/data", label: "Data Hub", icon: "UploadCloud" },
-  { href: "/learning", label: "Data & Model", icon: "Database" },
+export type NavigationItem = {
+  href: string
+  label: string
+  icon: LucideIcon
+  view?: string
+}
+
+export const navigationGroups: Array<{ label: string; items: NavigationItem[] }> = [
+  {
+    label: "Workspace",
+    items: [
+      { href: "/", label: "Home", icon: House },
+      { href: "/people", label: "People", icon: Users },
+      { href: "/inbox", label: "Inbox", icon: Inbox },
+    ],
+  },
+  {
+    label: "Manage",
+    items: [
+      { href: "/insights?view=hiring", label: "Hiring", icon: BriefcaseBusiness, view: "hiring" },
+      { href: "/insights?view=leave", label: "Time off", icon: Umbrella, view: "leave" },
+      { href: "/insights?view=training", label: "Growth", icon: GraduationCap, view: "training" },
+    ],
+  },
+  {
+    label: "Intelligence",
+    items: [
+      { href: "/insights", label: "Insights", icon: BarChart3 },
+      { href: "/attrition", label: "Attrition risk", icon: ShieldAlert },
+      { href: "/ai-agents", label: "AI assistant", icon: Bot },
+    ],
+  },
+  {
+    label: "Admin",
+    items: [{ href: "/data", label: "Data hub", icon: Database }],
+  },
 ]
 
-const mobileNav = nav.filter((item) => item.href !== "/employees")
+function initials(name: string): string {
+  return name
+    .split(/\s+/)
+    .filter(Boolean)
+    .slice(0, 2)
+    .map((part) => part[0]?.toUpperCase())
+    .join("") || "HR"
+}
 
-export function AppSidebar() {
+function isActive(pathname: string, currentView: string | null, item: NavigationItem): boolean {
+  const path = item.href.split("?")[0]
+  if (path === "/") return pathname === "/"
+  if (path !== pathname) return false
+  if (path !== "/insights") return true
+  if (item.view) return currentView === item.view
+  return !currentView || currentView === "executive"
+}
+
+export function AppSidebar({
+  collapsed,
+  user,
+  onToggle,
+  onOpenPalette,
+  onOpenMobileMore,
+}: {
+  collapsed: boolean
+  user: ShellUser
+  onToggle: () => void
+  onOpenPalette: () => void
+  onOpenMobileMore: () => void
+}) {
   const pathname = usePathname()
+  const searchParams = useSearchParams()
+  const currentView = searchParams.get("view")
 
   return (
     <>
-    <aside className="hidden w-60 shrink-0 flex-col border-r border-sidebar-border bg-sidebar md:flex">
-      <div className="flex h-16 items-center gap-2.5 border-b border-sidebar-border px-5">
-        <div className="flex size-8 items-center justify-center rounded-lg bg-primary text-primary-foreground">
-          <Sparkles className="size-4" />
+      <aside
+        className={cn(
+          "sticky top-0 z-30 hidden h-dvh shrink-0 flex-col border-r border-sidebar-border bg-sidebar transition-[width] duration-300 ease-out md:flex",
+          collapsed ? "w-[84px]" : "w-[272px]",
+        )}
+      >
+        <div className={cn("flex h-[76px] items-center border-b border-sidebar-border", collapsed ? "justify-center px-3" : "px-5")}>
+          <Link href="/" className="min-w-0" aria-label="LaidbackHR.AI home">
+            <BrandLogo compact={collapsed} />
+          </Link>
         </div>
-        <div className="flex flex-col leading-tight">
-          <span className="text-sm font-semibold">LaidbackHR.AI</span>
-          <span className="text-xs text-muted-foreground">People Intelligence</span>
-        </div>
-      </div>
 
-      <nav className="flex flex-1 flex-col gap-1 p-3">
-        <p className="px-3 pb-1 pt-2 text-xs font-medium tracking-wide text-muted-foreground uppercase">Workspace</p>
-        {nav.map((item) => {
-          const Icon = icons[item.icon]
-          const active = pathname === item.href
+        {!collapsed && (
+          <button type="button" onClick={onOpenPalette} className="sidebar-search" aria-label="Search people and navigate">
+            <Search className="size-4" />
+            <span>Search anything</span>
+            <kbd>⌘ K</kbd>
+          </button>
+        )}
+        {collapsed && (
+          <button type="button" onClick={onOpenPalette} className="sidebar-icon-button mx-auto mt-4" aria-label="Search people and navigate">
+            <Search className="size-[18px]" />
+          </button>
+        )}
+
+        <nav className={cn("min-h-0 flex-1 overflow-y-auto py-3", collapsed ? "px-3" : "px-4")} aria-label="Primary navigation">
+          {navigationGroups.map((group) => (
+            <div key={group.label} className="mb-4">
+              {!collapsed && <p className="sidebar-group-label">{group.label}</p>}
+              <div className="space-y-1">
+                {group.items.map((item) => {
+                  const active = isActive(pathname, currentView, item)
+                  const Icon = item.icon
+                  return (
+                    <Link
+                      key={item.href}
+                      href={item.href}
+                      title={collapsed ? item.label : undefined}
+                      aria-current={active ? "page" : undefined}
+                      className={cn("sidebar-nav-item", collapsed && "justify-center px-0", active && "sidebar-nav-item--active")}
+                    >
+                      <Icon className="size-[18px]" strokeWidth={1.8} />
+                      {!collapsed && <span className="truncate">{item.label}</span>}
+                      {active && !collapsed && <span className="ml-auto size-1.5 rounded-full bg-primary" aria-hidden="true" />}
+                    </Link>
+                  )
+                })}
+              </div>
+            </div>
+          ))}
+        </nav>
+
+        <div className={cn("border-t border-sidebar-border", collapsed ? "p-3" : "p-4")}>
+          <div className={cn("flex items-center rounded-xl", collapsed ? "justify-center" : "gap-3 bg-sidebar-accent/65 p-2.5")}>
+            <span className="avatar-soft" title={user.displayName}>{initials(user.displayName)}</span>
+            {!collapsed && (
+              <span className="min-w-0 flex-1 leading-tight">
+                <span className="block truncate text-sm font-semibold text-sidebar-foreground">{user.displayName}</span>
+                <span className="mt-0.5 flex items-center gap-1.5 truncate text-[11px] text-muted-foreground">
+                  <span className="size-1.5 shrink-0 rounded-full bg-success" />
+                  {user.authenticated ? "Secure workspace" : "Local workspace"}
+                </span>
+              </span>
+            )}
+          </div>
+          <button type="button" onClick={onToggle} className={cn("sidebar-collapse-button", collapsed && "justify-center px-0")} aria-label={collapsed ? "Expand sidebar" : "Collapse sidebar"}>
+            <ChevronLeft className={cn("size-4 transition-transform", collapsed && "rotate-180")} />
+            {!collapsed && <span>Collapse sidebar</span>}
+          </button>
+        </div>
+      </aside>
+
+      <nav className="mobile-dock" aria-label="Mobile navigation">
+        {[
+          { href: "/", label: "Home", icon: House },
+          { href: "/people", label: "People", icon: Users },
+          { href: "/inbox", label: "Inbox", icon: Inbox },
+        ].map((item) => {
+          const active = item.href === "/" ? pathname === "/" : pathname.startsWith(item.href)
+          const Icon = item.icon
           return (
-            <Link
-              key={item.href}
-              href={item.href}
-              className={cn(
-                "flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium transition-colors",
-                active
-                  ? "bg-sidebar-accent text-sidebar-accent-foreground ring-1 ring-primary/30"
-                  : "text-muted-foreground hover:bg-sidebar-accent/60 hover:text-sidebar-accent-foreground",
-              )}
-            >
-              <Icon className={cn("size-4", active && "text-primary")} />
-              {item.label}
+            <Link key={item.href} href={item.href} className={cn("mobile-dock__item", active && "mobile-dock__item--active")} aria-current={active ? "page" : undefined}>
+              <Icon className="size-5" strokeWidth={1.8} />
+              <span>{item.label}</span>
             </Link>
           )
         })}
+        <button
+          type="button"
+          onClick={onOpenMobileMore}
+          className={cn("mobile-dock__item", !["/", "/people", "/inbox"].some((route) => route === "/" ? pathname === route : pathname.startsWith(route)) && "mobile-dock__item--active")}
+          aria-label="More navigation"
+        >
+          <Menu className="size-5" strokeWidth={1.8} />
+          <span>More</span>
+        </button>
       </nav>
-
-      <div className="border-t border-sidebar-border p-3">
-        <div className="flex items-center gap-3 rounded-lg bg-sidebar-accent/50 p-3">
-          <div className="flex size-9 items-center justify-center rounded-full bg-primary/20 text-primary">
-            <Database className="size-4" />
-          </div>
-          <div className="flex flex-col leading-tight">
-            <span className="text-sm font-medium">Persistent D1 + ML</span>
-            <span className="text-xs text-muted-foreground">6 HR domains · 8 MCP tools</span>
-          </div>
-        </div>
-      </div>
-    </aside>
-    <nav aria-label="Mobile navigation" className="fixed inset-x-3 bottom-3 z-40 grid grid-cols-5 rounded-2xl border border-sidebar-border bg-sidebar/95 p-1.5 shadow-2xl backdrop-blur md:hidden">
-      {mobileNav.map((item) => {
-        const Icon = icons[item.icon]
-        const active = pathname === item.href
-        return (
-          <Link
-            key={item.href}
-            href={item.href}
-            aria-label={item.label}
-            aria-current={active ? "page" : undefined}
-            className={cn(
-              "flex min-w-0 flex-col items-center gap-1 rounded-xl px-1 py-2 text-[10px] font-medium",
-              active ? "bg-sidebar-accent text-primary" : "text-muted-foreground",
-            )}
-          >
-            <Icon className="size-4" />
-            <span className="max-w-full truncate">{item.label.replace(" & ML", "")}</span>
-          </Link>
-        )
-      })}
-    </nav>
     </>
   )
 }
+
+export const commandNavigation = navigationGroups.flatMap((group) => group.items)

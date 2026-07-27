@@ -19,6 +19,7 @@ const suggestedPrompts = [
   "What hiring source is most effective?",
   "Which mandatory training is incomplete?",
   "Where is career progression stalled?",
+  "Break down employees by location and status",
 ]
 
 export function AgentCopilot({ initialBrief }: { initialBrief: string }) {

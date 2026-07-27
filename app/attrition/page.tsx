@@ -1,10 +1,12 @@
 import { Brain, Info, ShieldCheck } from "lucide-react"
+import Link from "next/link"
 
 import { Card, CardHeader, CardTitle, CardContent, CardDescription } from "@/components/ui/card"
 import { AttritionTrendChart } from "@/components/charts/attrition-trend-chart"
 import { FeatureImportanceChart } from "@/components/charts/feature-importance-chart"
 import { RiskDistributionChart } from "@/components/charts/risk-distribution-chart"
 import { AttritionPredictor } from "@/components/attrition-predictor"
+import { Button } from "@/components/ui/button"
 import { getDashboard, getPredictionSchema } from "@/lib/server/runtime"
 
 export const dynamic = "force-dynamic"
@@ -15,13 +17,19 @@ export default async function AttritionPage() {
 
   return (
     <div className="flex flex-col gap-5">
+      <div>
+        <p className="eyebrow">Responsible people intelligence</p>
+        <h1 className="page-title">Attrition risk review</h1>
+        <p className="page-description">Explore transparent historical signals, test scenarios, and keep every employment decision with a qualified human reviewer.</p>
+      </div>
       <Card className="gap-4 p-4">
         <div className="flex items-center gap-2">
           <Brain className="size-4 text-primary" />
-          <p className="text-sm font-medium">Prediction model</p>
+          <p className="text-sm font-medium">Validated historical model</p>
           <span className="ml-auto flex items-center gap-1 rounded-full bg-success/10 px-2 py-0.5 text-xs font-medium text-success">
             <ShieldCheck className="size-3" /> API healthy
           </span>
+          <Button nativeButton={false} variant="outline" size="sm" render={<Link href="/risk-review" />}>Review scored records</Button>
         </div>
         <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-6">
           {dashboard.modelMetrics.map((metric) => (

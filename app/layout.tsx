@@ -1,68 +1,65 @@
-import type { Metadata, Viewport } from 'next'
-import { headers } from 'next/headers'
-import './globals.css'
+import type { Metadata, Viewport } from "next"
+import { headers } from "next/headers"
+import "@fontsource-variable/manrope"
+import "@fontsource-variable/newsreader"
+import "./globals.css"
 
-import { AppSidebar } from '@/components/app-sidebar'
-import { Topbar } from '@/components/topbar'
+import { getChatGPTUser } from "@/app/chatgpt-auth"
+import { AppShell } from "@/components/app-shell"
 
 const baseMetadata: Metadata = {
   title: {
-    default: 'LaidbackHR.AI — People Intelligence',
-    template: '%s · LaidbackHR.AI',
+    default: "LaidbackHR.AI — People Operations",
+    template: "%s · LaidbackHR.AI",
   },
   description:
-    'Workforce intelligence across hiring, attrition, leave, training, and promotions with persistent HR data, explainable predictions, and MCP-powered AI.',
-  applicationName: 'LaidbackHR.AI',
-  generator: 'LaidbackHR.AI',
+    "A calm people operations workspace for employee records, hiring, time off, growth, workforce insights, and responsible AI assistance.",
+  applicationName: "LaidbackHR.AI",
+  generator: "LaidbackHR.AI",
 }
 
 export async function generateMetadata(): Promise<Metadata> {
   const requestHeaders = await headers()
-  const hostCandidate = (requestHeaders.get('x-forwarded-host') ?? requestHeaders.get('host') ?? '').split(',')[0].trim()
-  const host = /^[a-z0-9.-]+(?::\d+)?$/i.test(hostCandidate) ? hostCandidate : 'localhost:3000'
-  const forwardedProtocol = (requestHeaders.get('x-forwarded-proto') ?? '').split(',')[0].trim()
-  const protocol = forwardedProtocol === 'http' || forwardedProtocol === 'https'
+  const hostCandidate = (requestHeaders.get("x-forwarded-host") ?? requestHeaders.get("host") ?? "").split(",")[0].trim()
+  const host = /^[a-z0-9.-]+(?::\d+)?$/i.test(hostCandidate) ? hostCandidate : "localhost:3000"
+  const forwardedProtocol = (requestHeaders.get("x-forwarded-proto") ?? "").split(",")[0].trim()
+  const protocol = forwardedProtocol === "http" || forwardedProtocol === "https"
     ? forwardedProtocol
-    : host.startsWith('localhost') ? 'http' : 'https'
-  const imageUrl = `${protocol}://${host}/og.png`
+    : host.startsWith("localhost") ? "http" : "https"
+  const imageUrl = `${protocol}://${host}/og-v2.png`
 
   return {
     ...baseMetadata,
     openGraph: {
-      title: 'LaidbackHR.AI — People Intelligence',
-      description: 'Persistent workforce analytics and human-reviewed MCP agent workflows.',
-      type: 'website',
-      images: [{ url: imageUrl, width: 1731, height: 909, alt: 'LaidbackHR.AI — People Intelligence' }],
+      title: "LaidbackHR.AI — People Operations",
+      description: "Employee management and workforce intelligence in one calm workspace.",
+      type: "website",
+      images: [{ url: imageUrl, width: 1672, height: 941, alt: "LaidbackHR.AI — calm people operations, powered by grounded intelligence" }],
     },
     twitter: {
-      card: 'summary_large_image',
-      title: 'LaidbackHR.AI — People Intelligence',
-      description: 'Persistent workforce analytics and human-reviewed MCP agent workflows.',
+      card: "summary_large_image",
+      title: "LaidbackHR.AI — People Operations",
+      description: "Employee management and workforce intelligence in one calm workspace.",
       images: [imageUrl],
     },
   }
 }
 
 export const viewport: Viewport = {
-  colorScheme: 'dark',
-  themeColor: '#1a1f26',
+  colorScheme: "light",
+  themeColor: "#f6f7f2",
 }
 
-export default function RootLayout({
-  children,
-}: Readonly<{
-  children: React.ReactNode
-}>) {
+export default async function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {
+  const authenticatedUser = await getChatGPTUser()
+  const user = authenticatedUser
+    ? { displayName: authenticatedUser.displayName, email: authenticatedUser.email, authenticated: true }
+    : { displayName: "Local HR Admin", email: "local-admin@laidbackhr.ai", authenticated: false }
+
   return (
-    <html lang="en" className="dark bg-background">
+    <html lang="en" className="bg-background" suppressHydrationWarning>
       <body className="font-sans antialiased">
-        <div className="flex min-h-screen">
-          <AppSidebar />
-          <div className="flex min-w-0 flex-1 flex-col">
-            <Topbar />
-            <main className="flex-1 p-4 pb-24 sm:p-5 sm:pb-24 md:pb-5">{children}</main>
-          </div>
-        </div>
+        <AppShell user={user}>{children}</AppShell>
       </body>
     </html>
   )
