@@ -61,6 +61,20 @@ export async function updateAccessUser(emailValue: string, input: { role?: strin
   return findAccessUser(email)
 }
 
+export async function removeAccessUser(emailValue: string, actor: string) {
+  const email = normalizedEmail(emailValue)
+  if (email === ownerEmail) throw new Error("OWNER_PROTECTED")
+  const current = await findAccessUser(email)
+  if (!current) throw new Error("USER_NOT_FOUND")
+  const db = await database()
+  await db.batch([
+    db.prepare("DELETE FROM app_users WHERE email=?").bind(email),
+    db.prepare("INSERT INTO access_audit(id, actor_email, action, target_email, details_json) VALUES (?, ?, 'access_removed', ?, ?)")
+      .bind(crypto.randomUUID(), actor, email, JSON.stringify({ previousRole: current.role, previousStatus: current.status })),
+  ])
+  return { removed: true, email }
+}
+
 export async function listAccessAudit() {
   const db = await database()
   const result = await db.prepare("SELECT id, actor_email, action, target_email, details_json, created_at FROM access_audit ORDER BY created_at DESC LIMIT 100").all<Record<string, string>>()

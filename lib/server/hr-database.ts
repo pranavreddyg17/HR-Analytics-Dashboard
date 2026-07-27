@@ -262,7 +262,6 @@ export async function ensureHrDatabase(): Promise<Database | null> {
     await seedDemoOnce(database)
     await backfillDemoProfiles(database)
     await database.prepare("INSERT OR IGNORE INTO app_users(email, display_name, role, status, invited_by) VALUES ('pranavreddyg17@gmail.com', 'Pranav Reddy', 'admin', 'active', 'system')").run()
-    await database.prepare("INSERT OR IGNORE INTO app_users(email, display_name, role, status, invited_by) VALUES ('venkatasaimonisha.p15@gmail.com', 'Venkata Sai Monisha', 'hr', 'active', 'pranavreddyg17@gmail.com')").run()
   })()
   try {
     await setupPromise
