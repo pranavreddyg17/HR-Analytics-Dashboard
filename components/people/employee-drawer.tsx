@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react"
 import { AnimatePresence, motion, useReducedMotion } from "motion/react"
-import { BriefcaseBusiness, Check, ChevronRight, Mail, MapPin, UserRound, X } from "lucide-react"
+import { BriefcaseBusiness, Check, ChevronRight, Mail, MapPin, Save, UserRound, X } from "lucide-react"
 
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -185,10 +185,10 @@ function EmployeeDrawerPanel({
               </div>
 
               <div className="relative mt-5 grid grid-cols-3 gap-2">
-                {["Basics", "Role", "Employment"].map((label, index) => (
-                  <button key={label} type="button" onClick={() => { if (index <= step || stepValid(step)) setStep(index) }} className="group text-left">
+                {["Basics", "Role", "Review & save"].map((label, index) => (
+                  <button key={label} type="button" disabled={index > step} onClick={() => setStep(index)} className="group text-left disabled:cursor-not-allowed">
                     <span className={cn("mb-2 block h-1 rounded-full transition-colors", index <= step ? "bg-primary" : "bg-muted")} />
-                    <span className={cn("text-xs font-medium", index === step ? "text-foreground" : "text-muted-foreground")}>{label}</span>
+                    <span className={cn("text-xs font-medium", index === step ? "text-foreground" : "text-muted-foreground", index > step && "opacity-60")}>{label}</span>
                   </button>
                 ))}
               </div>
@@ -251,14 +251,17 @@ function EmployeeDrawerPanel({
                     )}
                   </motion.div>
                 </AnimatePresence>
-                {error && <p role="alert" className="mt-5 rounded-xl border border-destructive/20 bg-destructive/5 px-3 py-2.5 text-sm text-destructive">{error}</p>}
+                {error && <p role="alert" aria-live="polite" className="mt-5 rounded-xl border border-destructive/20 bg-destructive/5 px-3 py-2.5 text-sm text-destructive">{error}</p>}
               </div>
 
-              <div className="flex items-center gap-3 border-t border-border/70 bg-muted/20 px-6 py-4">
+              <div className="flex shrink-0 flex-col gap-3 border-t border-border/70 bg-background px-5 py-4 shadow-[0_-10px_30px_rgba(15,23,42,0.06)] sm:flex-row sm:items-center sm:px-6">
                 {step > 0 && <Button type="button" variant="ghost" size="lg" onClick={() => setStep((current) => current - 1)} disabled={saving}>Back</Button>}
-                <p className="hidden flex-1 text-xs text-muted-foreground sm:block">Step {step + 1} of 3</p>
-                <Button type="submit" size="lg" className="ml-auto min-w-28 rounded-xl" disabled={saving || !stepValid(step)}>
-                  {saving ? "Saving…" : step < 2 ? <>Continue <ChevronRight className="size-4" /></> : mode === "create" ? "Add employee" : "Save changes"}
+                <div className="min-w-0 flex-1">
+                  <p className="text-xs font-semibold text-foreground">Step {step + 1} of 3</p>
+                  <p className="text-[11px] text-muted-foreground">{step < 2 ? "Complete the required fields, then continue." : mode === "create" ? "This saves the employee to your HR database." : "This updates the employee’s saved record."}</p>
+                </div>
+                <Button type="submit" size="lg" className="min-w-40 rounded-xl" disabled={saving}>
+                  {saving ? "Saving employee…" : step === 0 ? <>Continue to role <ChevronRight className="size-4" /></> : step === 1 ? <>Continue to review <ChevronRight className="size-4" /></> : mode === "create" ? <><Save className="size-4" />Save employee</> : <><Save className="size-4" />Save changes</>}
                 </Button>
               </div>
             </form>
