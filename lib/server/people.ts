@@ -219,20 +219,40 @@ export async function setPersonArchived(employeeId: string, archived: boolean, a
   return (await getPerson(employeeId)).employee
 }
 
-export async function listInboxItems(): Promise<InboxItem[]> {
+export async function listInboxItems(actor?: RequestActor): Promise<InboxItem[]> {
   const database = await databaseOrThrow()
-  const [leave, hiring, training, actions] = await Promise.all([
-    database.prepare("SELECT l.*, e.first_name, e.last_name, e.preferred_name FROM leave_records l LEFT JOIN employees e ON e.employee_id=l.employee_id WHERE LOWER(l.approval_status)='pending' ORDER BY l.start_date LIMIT 20").all<LeaveRecord & { first_name?: string; last_name?: string; preferred_name?: string | null }>(),
-    database.prepare("SELECT * FROM hiring_records WHERE LOWER(recruitment_status) IN ('open', 'offer') ORDER BY application_date LIMIT 10").all<Record<string, unknown>>(),
-    database.prepare("SELECT t.*, e.first_name, e.last_name, e.preferred_name FROM training_records t LEFT JOIN employees e ON e.employee_id=t.employee_id WHERE LOWER(t.completion_status) <> 'completed' AND (LOWER(t.training_program) LIKE '%security%' OR LOWER(t.training_program) LIKE '%safety%') LIMIT 10").all<TrainingRecord & { first_name?: string; last_name?: string; preferred_name?: string | null }>(),
+  type WorkflowPerson = { first_name?: string; last_name?: string; preferred_name?: string | null; work_email?: string | null; manager_id?: string | null; requested_by_email?: string | null; details_json?: string | null }
+  const [leave, hiring, training, actions, actorEmployee] = await Promise.all([
+    database.prepare("SELECT l.*, e.first_name, e.last_name, e.preferred_name, e.work_email, e.manager_id, w.requested_by_email, w.details_json FROM leave_records l LEFT JOIN employees e ON e.employee_id=l.employee_id LEFT JOIN workflow_requests w ON w.id=l.id WHERE LOWER(l.approval_status)='pending' AND LOWER(l.data_source) <> 'demo' ORDER BY l.start_date LIMIT 100").all<LeaveRecord & WorkflowPerson>(),
+    database.prepare("SELECT h.*, w.requested_by_email, w.details_json FROM hiring_records h LEFT JOIN workflow_requests w ON w.id=h.id WHERE LOWER(h.recruitment_status) IN ('requested','offer') AND LOWER(h.data_source) <> 'demo' ORDER BY h.application_date LIMIT 100").all<Record<string, unknown> & WorkflowPerson>(),
+    database.prepare("SELECT t.*, e.first_name, e.last_name, e.preferred_name, e.work_email, e.manager_id, w.requested_by_email, w.details_json FROM training_records t LEFT JOIN employees e ON e.employee_id=t.employee_id LEFT JOIN workflow_requests w ON w.id=t.id WHERE LOWER(t.completion_status) <> 'completed' AND LOWER(t.data_source) <> 'demo' LIMIT 100").all<TrainingRecord & WorkflowPerson>(),
     getActions(),
+    actor ? database.prepare("SELECT employee_id FROM employees WHERE LOWER(work_email)=LOWER(?) AND archived_at IS NULL").bind(actor.email).first<{ employee_id: string }>() : Promise.resolve(null),
   ])
   const personName = (row: { first_name?: string; last_name?: string; preferred_name?: string | null; employee_id: string }) => `${row.preferred_name || row.first_name || row.employee_id} ${row.last_name || ""}`.trim()
+  const isPeopleTeam = !actor || actor.role === "admin" || actor.role === "hr"
+  const ownEmail = actor?.email.toLowerCase() ?? ""
+  const employeeId = actorEmployee?.employee_id ?? null
+  const visibleLeave = (leave.results ?? []).filter((row) => isPeopleTeam || row.work_email?.toLowerCase() === ownEmail || actor?.role === "manager" && row.manager_id === employeeId)
+  const visibleHiring = (hiring.results ?? []).filter((row) => isPeopleTeam || actor?.role === "manager" && String(row.requested_by_email ?? "").toLowerCase() === ownEmail)
+  const visibleTraining = (training.results ?? []).filter((row) => isPeopleTeam || row.work_email?.toLowerCase() === ownEmail || actor?.role === "manager" && row.manager_id === employeeId)
+  const workflowDate = (row: WorkflowPerson): string | null => {
+    try { return String(JSON.parse(row.details_json ?? "{}").dueDate ?? "") || null } catch { return null }
+  }
   return [
-    ...(leave.results ?? []).map((row): InboxItem => ({ id: row.id, type: "leave", title: `${row.leave_type} leave request`, detail: `${row.leave_days} days · ${row.start_date} to ${row.end_date}`, person: personName(row), employeeId: row.employee_id, dueDate: row.start_date, status: row.approval_status, priority: row.start_date <= new Date().toISOString().slice(0, 10) ? "high" : "medium", actionable: true })),
-    ...(hiring.results ?? []).map((row): InboxItem => ({ id: String(row.id), type: "hiring", title: `${row.recruitment_status}: ${row.position}`, detail: `${row.department} · ${row.location} · ${row.hiring_source}`, person: null, employeeId: null, dueDate: String(row.application_date), status: String(row.recruitment_status), priority: String(row.recruitment_status).toLowerCase() === "offer" ? "high" : "low", actionable: false })),
-    ...(training.results ?? []).map((row): InboxItem => ({ id: row.id, type: "training", title: "Mandatory training incomplete", detail: `${row.training_program} · ${row.training_hours} hours`, person: personName(row), employeeId: row.employee_id, dueDate: row.completion_date, status: row.completion_status, priority: "high", actionable: false })),
-    ...actions.items.filter((item) => item.status === "needs_approval").slice(0, 5).map((item): InboxItem => ({ id: item.id, type: "review", title: item.title, detail: item.detail, person: null, employeeId: null, dueDate: null, status: item.status, priority: "medium", actionable: false })),
+    ...visibleLeave.map((row): InboxItem => {
+      const canDecide = Boolean(row.requested_by_email && actor && row.work_email?.toLowerCase() !== ownEmail && (isPeopleTeam || actor.role === "manager" && row.manager_id === employeeId))
+      return { id: row.id, type: "leave", title: `${row.leave_type} leave request`, detail: `${row.leave_days} days · ${row.start_date} to ${row.end_date}`, person: personName(row), employeeId: row.employee_id, dueDate: row.start_date, status: row.approval_status, priority: row.start_date <= new Date().toISOString().slice(0, 10) ? "high" : "medium", actionable: canDecide, actions: canDecide ? ["reject", "approve"] : [] }
+    }),
+    ...visibleHiring.map((row): InboxItem => {
+      const canDecide = Boolean(row.requested_by_email && actor && ["admin", "hr"].includes(actor.role) && String(row.recruitment_status).toLowerCase() === "requested")
+      return { id: String(row.id), type: "hiring", title: `${row.recruitment_status}: ${row.position}`, detail: `${row.department} · ${row.location} · requested by ${row.requested_by_email ?? "HR"}`, person: null, employeeId: null, dueDate: String(row.application_date), status: String(row.recruitment_status), priority: String(row.recruitment_status).toLowerCase() === "offer" ? "high" : "medium", actionable: canDecide, actions: canDecide ? ["reject", "approve"] : [] }
+    }),
+    ...visibleTraining.map((row): InboxItem => {
+      const canComplete = Boolean(row.requested_by_email && actor && (isPeopleTeam || row.work_email?.toLowerCase() === ownEmail))
+      return { id: row.id, type: "training", title: row.training_program, detail: `${row.training_hours} hours · assigned training`, person: personName(row), employeeId: row.employee_id, dueDate: workflowDate(row) ?? row.completion_date, status: row.completion_status, priority: workflowDate(row) && workflowDate(row)! < new Date().toISOString().slice(0, 10) ? "high" : "medium", actionable: canComplete, actions: canComplete ? ["complete"] : [] }
+    }),
+    ...(isPeopleTeam ? actions.items.filter((item) => item.status === "needs_approval").slice(0, 5) : []).map((item): InboxItem => ({ id: item.id, type: "review", title: item.title, detail: item.detail, person: null, employeeId: null, dueDate: null, status: item.status, priority: "medium", actionable: false, actions: [] })),
   ].sort((left, right) => ({ high: 0, medium: 1, low: 2 })[left.priority] - ({ high: 0, medium: 1, low: 2 })[right.priority])
 }
 

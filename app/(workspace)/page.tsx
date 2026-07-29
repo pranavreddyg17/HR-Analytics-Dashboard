@@ -2,6 +2,7 @@ import { HomeDashboard } from "@/components/home-dashboard"
 import type { ManagedEmployee } from "@/lib/people-types"
 import { getWorkforceAnalytics } from "@/lib/server/hr-analytics"
 import { listInboxItems, listPeople } from "@/lib/server/people"
+import { requireRequestActor } from "@/lib/server/request-user"
 
 export const dynamic = "force-dynamic"
 
@@ -17,9 +18,10 @@ function employeeFallback(employee: Awaited<ReturnType<typeof getWorkforceAnalyt
 }
 
 export default async function HomePage() {
+  const actor = await requireRequestActor()
   const [analytics, inbox, directory] = await Promise.all([
     getWorkforceAnalytics(),
-    listInboxItems().catch(() => []),
+    listInboxItems(actor).catch(() => []),
     listPeople({ limit: 200 }).catch(() => null),
   ])
 

@@ -67,4 +67,13 @@ export type InboxItem = {
   status: string
   priority: "high" | "medium" | "low"
   actionable: boolean
+  actions?: Array<"approve" | "reject" | "complete">
+}
+
+export type WorkflowActorContext = {
+  role: "admin" | "hr" | "manager" | "viewer"
+  employeeId: string | null
+  employeeName: string | null
+  canRequestHiring: boolean
+  canAssignTraining: boolean
 }

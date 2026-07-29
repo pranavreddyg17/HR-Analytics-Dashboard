@@ -147,3 +147,21 @@ export const dataImports = sqliteTable("data_imports", {
   status: text("status").notNull(),
   importedAt: text("imported_at").notNull().default(sql`CURRENT_TIMESTAMP`),
 }, (table) => [index("data_imports_domain_idx").on(table.domain)])
+
+export const workflowRequests = sqliteTable("workflow_requests", {
+  id: text("id").primaryKey(),
+  type: text("type").notNull(),
+  employeeId: text("employee_id"),
+  title: text("title").notNull(),
+  status: text("status").notNull(),
+  detailsJson: text("details_json").notNull().default("{}"),
+  requestedByEmail: text("requested_by_email").notNull(),
+  resolvedByEmail: text("resolved_by_email"),
+  resolvedAt: text("resolved_at"),
+  createdAt: text("created_at").notNull().default(sql`CURRENT_TIMESTAMP`),
+  updatedAt: text("updated_at").notNull().default(sql`CURRENT_TIMESTAMP`),
+}, (table) => [
+  index("workflow_type_status_idx").on(table.type, table.status),
+  index("workflow_employee_idx").on(table.employeeId),
+  index("workflow_requester_idx").on(table.requestedByEmail),
+])

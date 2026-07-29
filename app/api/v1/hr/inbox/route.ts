@@ -7,8 +7,8 @@ export const dynamic = "force-dynamic"
 
 export async function GET(request: NextRequest) {
   try {
-    await requireRequestActor(request)
-    return NextResponse.json({ items: await listInboxItems() })
+    const actor = await requireRequestActor(request)
+    return NextResponse.json({ items: await listInboxItems(actor) })
   } catch (error) {
     return NextResponse.json({ error: error instanceof Error ? error.message : "Inbox unavailable." }, { status: error instanceof Error && error.message === "AUTH_REQUIRED" ? 401 : 500 })
   }

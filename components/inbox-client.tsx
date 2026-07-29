@@ -22,11 +22,11 @@ import {
 import { AnimatePresence, motion } from "motion/react"
 
 import { Badge } from "@/components/ui/badge"
-import type { InboxItem } from "@/lib/people-types"
+import { WorkflowCreator } from "@/components/workflow-creator"
+import type { InboxItem, ManagedEmployee, WorkflowActorContext } from "@/lib/people-types"
 import { cn } from "@/lib/utils"
 
 type Filter = "all" | InboxItem["type"]
-type Decision = "Approved" | "Rejected"
 
 const filterOptions: Array<{ id: Filter; label: string }> = [
   { id: "all", label: "All work" },
@@ -56,7 +56,7 @@ function formatDate(value: string | null): string | null {
   return new Intl.DateTimeFormat("en", { month: "short", day: "numeric", year: parsed.getFullYear() === new Date().getFullYear() ? undefined : "numeric" }).format(parsed)
 }
 
-function ItemRow({ item, onDecision, disabled }: { item: InboxItem; onDecision: (item: InboxItem, decision: Decision) => void; disabled: boolean }) {
+function ItemRow({ item, onAction, disabled }: { item: InboxItem; onAction: (item: InboxItem, action: "approve" | "reject" | "complete") => void; disabled: boolean }) {
   const meta = groupMeta[item.type]
   const Icon = meta.icon
   const dueDate = formatDate(item.dueDate)
@@ -91,12 +91,12 @@ function ItemRow({ item, onDecision, disabled }: { item: InboxItem; onDecision: 
       </div>
 
       <div className="flex items-center gap-2 pl-[3.4rem] sm:pl-0">
-        {item.actionable && item.type === "leave" ? (
+        {item.actions?.includes("approve") ? (
           <>
             <button
               type="button"
               disabled={disabled}
-              onClick={() => onDecision(item, "Rejected")}
+              onClick={() => onAction(item, "reject")}
               className="inline-flex h-8 items-center gap-1.5 rounded-lg border border-border bg-background px-2.5 text-[11px] font-semibold text-muted-foreground transition-colors hover:border-rose-200 hover:bg-rose-50 hover:text-rose-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-50 dark:hover:border-rose-800/40 dark:hover:bg-rose-950/20 dark:hover:text-rose-300"
             >
               <X className="size-3.5" /> Decline
@@ -104,12 +104,14 @@ function ItemRow({ item, onDecision, disabled }: { item: InboxItem; onDecision: 
             <button
               type="button"
               disabled={disabled}
-              onClick={() => onDecision(item, "Approved")}
+              onClick={() => onAction(item, "approve")}
               className="inline-flex h-8 items-center gap-1.5 rounded-lg bg-foreground px-3 text-[11px] font-semibold text-background shadow-sm transition-transform hover:-translate-y-px focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-50"
             >
               <Check className="size-3.5" /> Approve
             </button>
           </>
+        ) : item.actions?.includes("complete") ? (
+          <button type="button" disabled={disabled} onClick={() => onAction(item, "complete")} className="inline-flex h-8 items-center gap-1.5 rounded-lg bg-foreground px-3 text-[11px] font-semibold text-background shadow-sm transition-transform hover:-translate-y-px disabled:opacity-50"><Check className="size-3.5" />Mark complete</button>
         ) : (
           <Link href={meta.href} aria-label={`Open ${meta.title}`} className="flex size-8 items-center justify-center rounded-lg text-muted-foreground transition-colors hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">
             <ChevronRight className="size-4" />
@@ -120,7 +122,7 @@ function ItemRow({ item, onDecision, disabled }: { item: InboxItem; onDecision: 
   )
 }
 
-export function InboxClient({ initialItems }: { initialItems: InboxItem[] }) {
+export function InboxClient({ initialItems, actor, people }: { initialItems: InboxItem[]; actor: WorkflowActorContext; people: ManagedEmployee[] }) {
   const router = useRouter()
   const searchParams = useSearchParams()
   const [items, setItems] = useState(initialItems)
@@ -143,7 +145,7 @@ export function InboxClient({ initialItems }: { initialItems: InboxItem[] }) {
     router.replace(url, { scroll: false })
   }
 
-  async function refreshInbox() {
+  async function refreshInbox(successMessage = "Inbox is up to date.") {
     setRefreshing(true)
     setError("")
     try {
@@ -151,7 +153,7 @@ export function InboxClient({ initialItems }: { initialItems: InboxItem[] }) {
       const result = await response.json() as { items?: InboxItem[]; error?: string }
       if (!response.ok || !result.items) throw new Error(result.error === "AUTH_REQUIRED" ? "Sign in is required to refresh the inbox." : result.error || "Inbox refresh failed.")
       setItems(result.items)
-      setNotice("Inbox is up to date.")
+      setNotice(successMessage)
       window.setTimeout(() => setNotice(""), 2400)
       router.refresh()
     } catch (reason) {
@@ -161,26 +163,26 @@ export function InboxClient({ initialItems }: { initialItems: InboxItem[] }) {
     }
   }
 
-  async function decide(item: InboxItem, decision: Decision) {
+  async function runAction(item: InboxItem, action: "approve" | "reject" | "complete") {
     const snapshot = items
     setBusyId(item.id)
     setError("")
     setNotice("")
     setItems((current) => current.filter((candidate) => !(candidate.type === item.type && candidate.id === item.id)))
     try {
-      const response = await fetch(`/api/v1/hr/leave/${encodeURIComponent(item.id)}/decision`, {
+      const response = await fetch("/api/v1/hr/workflows/action", {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ decision }),
+        body: JSON.stringify({ id: item.id, type: item.type, action }),
       })
-      const result = await response.json() as { error?: string }
-      if (!response.ok) throw new Error(result.error === "AUTH_REQUIRED" ? "Sign in is required to make leave decisions." : result.error || "The decision could not be saved.")
-      setNotice(`${item.person ?? "Leave request"} was ${decision.toLowerCase()}.`)
+      const result = await response.json() as { error?: string; message?: string }
+      if (!response.ok) throw new Error(result.error === "AUTH_REQUIRED" ? "Sign in is required to update this workflow." : result.error || "The action could not be saved.")
+      setNotice(result.message ?? "Workflow updated.")
       window.setTimeout(() => setNotice(""), 3200)
       router.refresh()
     } catch (reason) {
       setItems(snapshot)
-      setError(reason instanceof Error ? reason.message : "The decision could not be saved.")
+      setError(reason instanceof Error ? reason.message : "The action could not be saved.")
     } finally {
       setBusyId(null)
     }
@@ -199,12 +201,14 @@ export function InboxClient({ initialItems }: { initialItems: InboxItem[] }) {
           <div className="flex items-center gap-3">
             <div className="rounded-xl border border-border/70 bg-background/70 px-3 py-2 text-right backdrop-blur-sm"><p className="text-[10px] text-muted-foreground">Needs attention</p><p className="text-lg font-semibold tabular-nums">{items.length}</p></div>
             <div className="rounded-xl border border-border/70 bg-background/70 px-3 py-2 text-right backdrop-blur-sm"><p className="text-[10px] text-muted-foreground">High priority</p><p className="text-lg font-semibold tabular-nums">{urgentCount}</p></div>
-            <button type="button" onClick={refreshInbox} disabled={refreshing} className="flex size-10 items-center justify-center rounded-xl border border-border bg-background/80 text-muted-foreground shadow-sm transition-colors hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-50" aria-label="Refresh inbox">
+            <button type="button" onClick={() => void refreshInbox()} disabled={refreshing} className="flex size-10 items-center justify-center rounded-xl border border-border bg-background/80 text-muted-foreground shadow-sm transition-colors hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-50" aria-label="Refresh inbox">
               <RefreshCw className={cn("size-4", refreshing && "animate-spin")} />
             </button>
           </div>
         </div>
       </motion.header>
+
+      <WorkflowCreator actor={actor} people={people} onCreated={(message) => void refreshInbox(message)} />
 
       <div className="flex gap-1 overflow-x-auto rounded-2xl border border-border/70 bg-card p-1.5 shadow-sm" role="tablist" aria-label="Inbox filters">
         {filterOptions.map((option) => (
@@ -252,7 +256,7 @@ export function InboxClient({ initialItems }: { initialItems: InboxItem[] }) {
                 <Link href={meta.href} className="hidden items-center gap-1 text-[10px] font-semibold text-muted-foreground hover:text-foreground sm:inline-flex">Open workspace <ArrowRight className="size-3" /></Link>
               </div>
               <AnimatePresence initial={false} mode="popLayout">
-                {groupItems.map((item) => <ItemRow key={`${item.type}-${item.id}`} item={item} onDecision={decide} disabled={busyId !== null} />)}
+                {groupItems.map((item) => <ItemRow key={`${item.type}-${item.id}`} item={item} onAction={runAction} disabled={busyId !== null} />)}
               </AnimatePresence>
             </motion.section>
           )
@@ -270,7 +274,7 @@ export function InboxClient({ initialItems }: { initialItems: InboxItem[] }) {
 
       <div className="flex flex-col gap-2 rounded-2xl border border-border/70 bg-muted/25 px-4 py-3 text-[10px] leading-relaxed text-muted-foreground sm:flex-row sm:items-center">
         <CircleAlert className="size-3.5 shrink-0" />
-        <p className="flex-1">Leave approvals update the employee record and create an audit entry. Hiring and training items are follow-up signals until their full workflows are completed.</p>
+        <p className="flex-1">This queue contains real workflow and imported records only. Demo records are excluded. Decisions and completions update the database and employee audit history.</p>
         <Link href="/ai-agents" className="inline-flex items-center gap-1 font-semibold text-foreground hover:underline">Ask Laidback AI <ChevronRight className="size-3" /></Link>
       </div>
     </div>
