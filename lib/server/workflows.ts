@@ -71,7 +71,7 @@ async function chosenEmployee(db: Database, actor: RequestActor, requestedId?: s
   }
   if (!(["admin", "hr"] as string[]).includes(actor.role)) throw new PeopleError("You can only submit leave for your own employee profile.", 403)
   const selected = await employeeById(db, requestedId)
-  if (!selected || selected.data_source === "demo") throw new PeopleError("Choose a real, active employee record.", 404)
+  if (!selected) throw new PeopleError("Choose an active employee record.", 404)
   return selected
 }
 
@@ -127,7 +127,7 @@ export async function createWorkflow(value: unknown, actor: RequestActor) {
 
   if (!["admin", "hr", "manager"].includes(actor.role)) throw new PeopleError("Only managers and HR can assign training.", 403)
   const employee = await employeeById(db, input.employeeId)
-  if (!employee || employee.data_source === "demo") throw new PeopleError("Choose a real, active employee record.", 404)
+  if (!employee) throw new PeopleError("Choose an active employee record.", 404)
   if (actor.role === "manager") {
     const manager = await employeeByEmail(db, actor.email)
     if (!manager || employee.manager_id !== manager.employee_id) throw new PeopleError("Managers can only assign training to their direct reports.", 403)

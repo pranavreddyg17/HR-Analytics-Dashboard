@@ -115,5 +115,10 @@ function Field({ label, children }: { label: string; children: React.ReactNode }
 }
 
 function SelectEmployee({ value, people, onChange }: { value: string; people: ManagedEmployee[]; onChange: (value: string) => void }) {
-  return <Field label="Employee"><select required className={inputClass} value={value} onChange={(event) => onChange(event.target.value)}><option value="">Choose an employee</option>{people.map((person) => <option key={person.employee_id} value={person.employee_id}>{person.display_name} · {person.department}</option>)}</select></Field>
+  const sortedPeople = [...people].sort((left, right) => {
+    const sourceOrder = Number(left.data_source === "demo") - Number(right.data_source === "demo")
+    return sourceOrder || left.display_name.localeCompare(right.display_name)
+  })
+
+  return <Field label="Employee"><select required className={inputClass} value={value} onChange={(event) => onChange(event.target.value)}><option value="">Choose an employee</option>{sortedPeople.map((person) => <option key={person.employee_id} value={person.employee_id}>{person.display_name} · {person.department}{person.data_source === "demo" ? " · Dataset record" : ""}</option>)}</select></Field>
 }

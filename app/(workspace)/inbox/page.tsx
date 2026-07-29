@@ -12,5 +12,5 @@ export default async function InboxPage() {
     getWorkflowActorContext(actor),
     ["admin", "hr", "manager"].includes(actor.role) ? listPeople({ limit: 250 }) : Promise.resolve(null),
   ])
-  return <InboxClient initialItems={items} actor={context} people={(directory?.items ?? []).filter((employee) => employee.data_source !== "demo")} />
+  return <InboxClient initialItems={items} actor={context} people={directory?.items ?? []} />
 }
