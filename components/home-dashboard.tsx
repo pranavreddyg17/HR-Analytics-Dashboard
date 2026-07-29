@@ -27,7 +27,6 @@ import type { InboxItem, ManagedEmployee } from "@/lib/people-types"
 import { cn } from "@/lib/utils"
 
 type HomeDashboardProps = {
-  viewer: { displayName: string; email: string | null }
   analytics: WorkforceAnalytics
   inbox: InboxItem[]
   people: ManagedEmployee[]
@@ -38,6 +37,7 @@ type Priority = {
   detail: string
   count: number
   href: string
+  action: string
   icon: typeof Inbox
   tone: "rose" | "amber" | "blue" | "green"
 }
@@ -76,11 +76,12 @@ function Avatar({ person, size = "md" }: { person: ManagedEmployee; size?: "sm" 
   )
 }
 
-function Metric({ label, value, detail, icon: Icon, tone }: { label: string; value: string; detail: string; icon: typeof Users; tone: string }) {
+function Metric({ label, value, detail, icon: Icon, tone, href }: { label: string; value: string; detail: string; icon: typeof Users; tone: string; href: string }) {
   return (
     <motion.div whileHover={{ y: -2 }} transition={{ duration: 0.18 }}>
-      <Card className="h-full gap-3 border-0 bg-card/95 py-4 shadow-[0_1px_2px_rgba(15,23,42,0.04),0_10px_30px_rgba(15,23,42,0.04)] ring-1 ring-foreground/8">
-        <CardContent className="flex items-start gap-3 px-4">
+      <Link href={href} aria-label={`Open ${label} report`} className="group block h-full rounded-2xl focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">
+        <Card className="h-full gap-3 border-0 bg-card/95 py-4 shadow-[0_1px_2px_rgba(15,23,42,0.04),0_10px_30px_rgba(15,23,42,0.04)] ring-1 ring-foreground/8 transition-shadow group-hover:shadow-md">
+          <CardContent className="flex items-start gap-3 px-4">
           <span className={cn("flex size-10 shrink-0 items-center justify-center rounded-xl", tone)}>
             <Icon className="size-[18px]" />
           </span>
@@ -88,9 +89,11 @@ function Metric({ label, value, detail, icon: Icon, tone }: { label: string; val
             <p className="text-xs font-medium text-muted-foreground">{label}</p>
             <p className="mt-0.5 text-2xl font-semibold tracking-[-0.03em] tabular-nums">{value}</p>
             <p className="mt-1 truncate text-[11px] text-muted-foreground">{detail}</p>
+            <p className="mt-2 inline-flex items-center gap-1 text-[10px] font-semibold text-primary">View report <ChevronRight className="size-3" /></p>
           </div>
-        </CardContent>
-      </Card>
+          </CardContent>
+        </Card>
+      </Link>
     </motion.div>
   )
 }
@@ -105,7 +108,7 @@ function EmptyPeople({ message }: { message: string }) {
   )
 }
 
-export function HomeDashboard({ viewer, analytics, inbox, people }: HomeDashboardProps) {
+export function HomeDashboard({ analytics, inbox, people }: HomeDashboardProps) {
   const generatedAt = new Date(analytics.generatedAt)
   const highPriority = inbox.filter((item) => item.priority === "high").length
   const pendingLeave = inbox.filter((item) => item.type === "leave").length
@@ -133,6 +136,7 @@ export function HomeDashboard({ viewer, analytics, inbox, people }: HomeDashboar
       detail: pendingLeave ? `${pendingLeave} request${pendingLeave === 1 ? "" : "s"} waiting for you` : "No requests awaiting review",
       count: pendingLeave,
       href: "/inbox?type=leave",
+      action: pendingLeave ? "Review requests" : "Open leave queue",
       icon: CalendarCheck2,
       tone: pendingLeave ? "rose" : "green",
     },
@@ -141,6 +145,7 @@ export function HomeDashboard({ viewer, analytics, inbox, people }: HomeDashboar
       detail: incompleteTraining ? "Assignments need a follow-up" : "Your compliance queue is clear",
       count: incompleteTraining,
       href: "/inbox?type=training",
+      action: incompleteTraining ? "Review assignments" : "Open training queue",
       icon: GraduationCap,
       tone: incompleteTraining ? "amber" : "green",
     },
@@ -149,6 +154,7 @@ export function HomeDashboard({ viewer, analytics, inbox, people }: HomeDashboar
       detail: offers ? `${offers} offer${offers === 1 ? "" : "s"} ready to progress` : `${hiringItems.length} open hiring items`,
       count: hiringItems.length,
       href: "/inbox?type=hiring",
+      action: "Open hiring queue",
       icon: BriefcaseBusiness,
       tone: offers ? "blue" : "green",
     },
@@ -157,6 +163,7 @@ export function HomeDashboard({ viewer, analytics, inbox, people }: HomeDashboar
       detail: "3+ years without a recorded move",
       count: analytics.promotions.withoutPromotionOver36Months,
       href: "/insights?view=promotions",
+      action: "Review promotion report",
       icon: TrendingUp,
       tone: analytics.promotions.withoutPromotionOver36Months ? "amber" : "green",
     },
@@ -179,9 +186,8 @@ export function HomeDashboard({ viewer, analytics, inbox, people }: HomeDashboar
             <p className="mt-2 text-sm text-slate-400">Priority work, operating metrics, and team changes in one view.</p>
           </div>
           <div className="flex flex-wrap items-center gap-2">
-            <span className="mr-1 hidden text-xs text-slate-400 sm:inline">Signed in as {viewer.displayName}</span>
             <Link href="/inbox" className="inline-flex h-10 items-center gap-2 rounded-xl border border-slate-700 bg-slate-900/70 px-4 text-sm font-semibold text-slate-100 transition hover:border-slate-600 hover:bg-slate-800">
-              <Inbox className="size-4 text-[#35d6a5]" /> Inbox
+              <Inbox className="size-4 text-[#35d6a5]" /> Review inbox
               {inbox.length > 0 && <span className="rounded-full bg-[#35d6a5] px-1.5 py-0.5 text-[10px] font-bold text-[#08120f] tabular-nums">{inbox.length}</span>}
             </Link>
             <Link href="/people?new=employee" className="inline-flex h-10 items-center gap-2 rounded-xl bg-[#35d6a5] px-4 text-sm font-bold text-[#07140f] transition hover:bg-[#4de2b5]">
@@ -229,6 +235,7 @@ export function HomeDashboard({ viewer, analytics, inbox, people }: HomeDashboar
                   <div className="mt-auto pt-4">
                     <p className="flex items-center gap-2 text-sm font-semibold"><span className={cn("size-1.5 rounded-full", styles.dot)} />{item.label}</p>
                     <p className="mt-1 text-[11px] leading-relaxed text-muted-foreground">{item.detail}</p>
+                    <p className="mt-3 inline-flex items-center gap-1 text-[10px] font-semibold text-foreground">{item.action}<ChevronRight className="size-3 transition-transform group-hover:translate-x-0.5" /></p>
                   </div>
                 </Link>
               </motion.div>
@@ -243,10 +250,10 @@ export function HomeDashboard({ viewer, analytics, inbox, people }: HomeDashboar
           <h3 id="pulse-heading" className="mt-1 text-lg font-bold tracking-[-0.025em]">Core workforce metrics</h3>
         </div>
         <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-          <Metric label="Active employees" value={compactNumber.format(analytics.kpis.activeEmployees)} detail={`${analytics.employeeAnalytics.onLeave} currently on leave`} icon={Users} tone="bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-300" />
-          <Metric label="Hiring velocity" value={`${percent.format(analytics.kpis.averageTimeToHire)}d`} detail={`${analytics.kpis.hires} completed hires`} icon={Clock3} tone="bg-sky-100 text-sky-700 dark:bg-sky-900/30 dark:text-sky-300" />
-          <Metric label="Training complete" value={`${percent.format(analytics.kpis.trainingCompletionRate)}%`} detail={`${incompleteTraining} mandatory follow-ups`} icon={GraduationCap} tone="bg-violet-100 text-violet-700 dark:bg-violet-900/30 dark:text-violet-300" />
-          <Metric label="Attrition rate" value={`${percent.format(analytics.kpis.attritionRate)}%`} detail={`${analytics.attrition.totalExits} recorded exits`} icon={TrendingDown} tone="bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-300" />
+          <Metric label="Active employees" value={compactNumber.format(analytics.kpis.activeEmployees)} detail={`${analytics.employeeAnalytics.onLeave} currently on leave`} icon={Users} tone="bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-300" href="/insights?view=employees" />
+          <Metric label="Hiring velocity" value={`${percent.format(analytics.kpis.averageTimeToHire)}d`} detail={`${analytics.kpis.hires} completed hires`} icon={Clock3} tone="bg-sky-100 text-sky-700 dark:bg-sky-900/30 dark:text-sky-300" href="/insights?view=hiring" />
+          <Metric label="Training complete" value={`${percent.format(analytics.kpis.trainingCompletionRate)}%`} detail={`${incompleteTraining} mandatory follow-ups`} icon={GraduationCap} tone="bg-violet-100 text-violet-700 dark:bg-violet-900/30 dark:text-violet-300" href="/insights?view=training" />
+          <Metric label="Attrition rate" value={`${percent.format(analytics.kpis.attritionRate)}%`} detail={`${analytics.attrition.totalExits} recorded exits`} icon={TrendingDown} tone="bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-300" href="/insights?view=attrition" />
         </div>
       </section>
 
@@ -347,7 +354,7 @@ export function HomeDashboard({ viewer, analytics, inbox, people }: HomeDashboar
               </div>
             ))}
             <div className="flex flex-wrap items-center gap-2 pt-1">
-              <Link href="/ai-agents" className="inline-flex h-9 items-center gap-2 rounded-xl bg-foreground px-3.5 text-xs font-semibold text-background transition-transform hover:-translate-y-0.5"><Sparkles className="size-3.5" />Ask a follow-up</Link>
+              <Link href="/ai-agents" className="inline-flex h-9 items-center gap-2 rounded-xl bg-foreground px-3.5 text-xs font-semibold text-background transition-transform hover:-translate-y-0.5"><Sparkles className="size-3.5" />Open AI assistant</Link>
               <span className="inline-flex items-center gap-1.5 text-[10px] text-muted-foreground"><CheckCircle2 className="size-3 text-emerald-600" />Human review stays in control</span>
             </div>
           </CardContent>

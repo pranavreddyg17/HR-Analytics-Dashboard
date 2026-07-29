@@ -1,7 +1,7 @@
 "use client"
 
 import Link from "next/link"
-import { useRouter } from "next/navigation"
+import { useRouter, useSearchParams } from "next/navigation"
 import { useCallback, useEffect, useMemo, useState } from "react"
 import { motion, useReducedMotion } from "motion/react"
 import { Archive, ArrowUpRight, Building2, Database, FilterX, MapPin, Plus, Search, SlidersHorizontal, UsersRound } from "lucide-react"
@@ -27,6 +27,7 @@ const initialFilters: Filters = { department: "", location: "", status: "", empl
 
 export function PeopleDirectory() {
   const router = useRouter()
+  const searchParams = useSearchParams()
   const reduceMotion = useReducedMotion()
   const [query, setQuery] = useState("")
   const [debouncedQuery, setDebouncedQuery] = useState("")
@@ -36,7 +37,7 @@ export function PeopleDirectory() {
   const [loadedRequest, setLoadedRequest] = useState<string | null>(null)
   const [retry, setRetry] = useState(0)
   const [error, setError] = useState("")
-  const [drawerOpen, setDrawerOpen] = useState(false)
+  const [drawerOpen, setDrawerOpen] = useState(() => searchParams.get("new") === "employee")
   const [showFilters, setShowFilters] = useState(false)
 
   useEffect(() => {
@@ -89,7 +90,10 @@ export function PeopleDirectory() {
     setFilters(initialFilters)
   }
 
-  const closeDrawer = useCallback(() => setDrawerOpen(false), [])
+  const closeDrawer = useCallback(() => {
+    setDrawerOpen(false)
+    if (searchParams.get("new") === "employee") router.replace("/people", { scroll: false })
+  }, [router, searchParams])
   const openCreatedEmployee = useCallback((employee: ManagedEmployee) => router.push(`/people/${encodeURIComponent(employee.employee_id)}`), [router])
 
   return (

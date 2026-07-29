@@ -1,4 +1,3 @@
-import { auth } from "@/auth"
 import { HomeDashboard } from "@/components/home-dashboard"
 import type { ManagedEmployee } from "@/lib/people-types"
 import { getWorkforceAnalytics } from "@/lib/server/hr-analytics"
@@ -18,8 +17,7 @@ function employeeFallback(employee: Awaited<ReturnType<typeof getWorkforceAnalyt
 }
 
 export default async function HomePage() {
-  const [viewer, analytics, inbox, directory] = await Promise.all([
-    auth(),
+  const [analytics, inbox, directory] = await Promise.all([
     getWorkforceAnalytics(),
     listInboxItems().catch(() => []),
     listPeople({ limit: 200 }).catch(() => null),
@@ -27,10 +25,6 @@ export default async function HomePage() {
 
   return (
     <HomeDashboard
-      viewer={{
-        displayName: viewer?.user?.name ?? viewer?.user?.email?.split("@")[0] ?? "HR team",
-        email: viewer?.user?.email ?? null,
-      }}
       analytics={analytics}
       inbox={inbox}
       people={directory?.items ?? analytics.employees.map(employeeFallback)}
