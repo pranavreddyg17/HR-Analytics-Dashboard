@@ -174,7 +174,7 @@ function EmployeeDrawerPanel({
             role="dialog"
             aria-modal="true"
             aria-labelledby="employee-drawer-title"
-            className="absolute inset-y-0 right-0 flex w-full max-w-xl flex-col overflow-hidden border-l border-border/70 bg-background shadow-2xl"
+            className="absolute right-0 top-0 flex h-[100dvh] w-full max-w-xl flex-col overflow-hidden border-l border-border/70 bg-background shadow-2xl"
             initial={{ x: reduceMotion ? 0 : "100%" }}
             animate={{ x: 0 }}
             exit={{ x: reduceMotion ? 0 : "100%" }}
@@ -202,8 +202,8 @@ function EmployeeDrawerPanel({
               </div>
             </div>
 
-            <form onSubmit={submit} className="flex min-h-0 flex-1 flex-col">
-              <div className="flex-1 overflow-y-auto px-6 py-6">
+            <form onSubmit={submit} className="relative flex min-h-0 flex-1 flex-col overflow-hidden">
+              <div className="flex-1 overflow-y-auto px-6 pb-44 pt-6 sm:pb-28">
                 <AnimatePresence mode="wait" initial={false}>
                   <motion.div
                     key={step}
@@ -262,7 +262,7 @@ function EmployeeDrawerPanel({
                 {error && <p role="alert" aria-live="polite" className="mt-5 rounded-xl border border-destructive/20 bg-destructive/5 px-3 py-2.5 text-sm text-destructive">{error}</p>}
               </div>
 
-              <div className="flex shrink-0 flex-col gap-3 border-t border-border/70 bg-background px-5 py-4 shadow-[0_-10px_30px_rgba(15,23,42,0.06)] sm:flex-row sm:items-center sm:px-6">
+              <div className="absolute inset-x-0 bottom-0 z-10 flex flex-col gap-3 border-t border-border/70 bg-background/98 px-5 pt-4 pb-[calc(1rem+env(safe-area-inset-bottom))] shadow-[0_-10px_30px_rgba(15,23,42,0.10)] backdrop-blur sm:flex-row sm:items-center sm:px-6">
                 {step > 0 && <Button type="button" variant="ghost" size="lg" onClick={() => setStep((current) => current - 1)} disabled={saving}>Back</Button>}
                 <div className="min-w-0 flex-1">
                   <p className="text-xs font-semibold text-foreground">Step {step + 1} of 3</p>
