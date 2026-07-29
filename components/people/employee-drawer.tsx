@@ -111,6 +111,20 @@ function EmployeeDrawerPanel({
     return Boolean(form.hire_date && form.employment_type && form.employment_status)
   }
 
+  function goToStep(nextStep: number) {
+    if (nextStep <= step) {
+      setError("")
+      setStep(nextStep)
+      return
+    }
+    if (nextStep === step + 1 && stepValid(step)) {
+      setError("")
+      setStep(nextStep)
+      return
+    }
+    setError(step === 0 ? "Enter a first and last name before opening Role." : "Enter a job title, department, and location before opening Review & save.")
+  }
+
   async function handlePrimaryAction() {
     if (step < 2) {
       if (stepValid(step)) {
@@ -194,16 +208,22 @@ function EmployeeDrawerPanel({
 
               <div className="relative mt-5 grid grid-cols-3 gap-2">
                 {["Basics", "Role", "Review & save"].map((label, index) => (
-                  <button key={label} type="button" disabled={index > step} onClick={() => setStep(index)} className="group text-left disabled:cursor-not-allowed">
+                  <button key={label} type="button" onClick={() => goToStep(index)} className="group text-left">
                     <span className={cn("mb-2 block h-1 rounded-full transition-colors", index <= step ? "bg-primary" : "bg-muted")} />
-                    <span className={cn("text-xs font-medium", index === step ? "text-foreground" : "text-muted-foreground", index > step && "opacity-60")}>{label}</span>
+                    <span className={cn("text-xs font-medium", index === step ? "text-foreground" : "text-muted-foreground")}>{label}</span>
                   </button>
                 ))}
+              </div>
+              <div className="relative mt-4 flex items-center gap-2">
+                {step > 0 && <Button type="button" variant="outline" size="lg" className="rounded-xl" onClick={() => goToStep(step - 1)} disabled={saving}>Back</Button>}
+                <Button type="button" size="lg" className="h-10 flex-1 rounded-xl" disabled={saving} onClick={() => void handlePrimaryAction()}>
+                  {saving ? "Saving employee…" : step === 0 ? <>Continue to role <ChevronRight className="size-4" /></> : step === 1 ? <>Continue to review <ChevronRight className="size-4" /></> : mode === "create" ? <><Save className="size-4" />Save employee</> : <><Save className="size-4" />Save changes</>}
+                </Button>
               </div>
             </div>
 
             <form onSubmit={submit} className="relative flex min-h-0 flex-1 flex-col overflow-hidden">
-              <div className="flex-1 overflow-y-auto px-6 pb-44 pt-6 sm:pb-28">
+              <div className="flex-1 overflow-y-auto px-6 py-6">
                 <AnimatePresence mode="wait" initial={false}>
                   <motion.div
                     key={step}
@@ -262,16 +282,6 @@ function EmployeeDrawerPanel({
                 {error && <p role="alert" aria-live="polite" className="mt-5 rounded-xl border border-destructive/20 bg-destructive/5 px-3 py-2.5 text-sm text-destructive">{error}</p>}
               </div>
 
-              <div className="absolute inset-x-0 bottom-0 z-10 flex flex-col gap-3 border-t border-border/70 bg-background/98 px-5 pt-4 pb-[calc(1rem+env(safe-area-inset-bottom))] shadow-[0_-10px_30px_rgba(15,23,42,0.10)] backdrop-blur sm:flex-row sm:items-center sm:px-6">
-                {step > 0 && <Button type="button" variant="ghost" size="lg" onClick={() => setStep((current) => current - 1)} disabled={saving}>Back</Button>}
-                <div className="min-w-0 flex-1">
-                  <p className="text-xs font-semibold text-foreground">Step {step + 1} of 3</p>
-                  <p className="text-[11px] text-muted-foreground">{step < 2 ? "Complete the required fields, then continue." : mode === "create" ? "This saves the employee to your HR database." : "This updates the employee’s saved record."}</p>
-                </div>
-                <Button type="button" size="lg" className="min-w-40 rounded-xl" disabled={saving} onClick={() => void handlePrimaryAction()}>
-                  {saving ? "Saving employee…" : step === 0 ? <>Continue to role <ChevronRight className="size-4" /></> : step === 1 ? <>Continue to review <ChevronRight className="size-4" /></> : mode === "create" ? <><Save className="size-4" />Save employee</> : <><Save className="size-4" />Save changes</>}
-                </Button>
-              </div>
             </form>
           </motion.aside>
     </div>
