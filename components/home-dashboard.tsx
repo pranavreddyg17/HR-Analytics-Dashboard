@@ -52,18 +52,6 @@ const toneStyles: Record<Priority["tone"], { surface: string; icon: string; dot:
 const compactNumber = new Intl.NumberFormat("en", { notation: "compact", maximumFractionDigits: 1 })
 const percent = new Intl.NumberFormat("en", { maximumFractionDigits: 1 })
 
-function firstName(displayName: string): string {
-  if (displayName === "HR team") return displayName
-  return displayName.trim().split(/\s+/)[0] || "there"
-}
-
-function greeting(date: Date): string {
-  const hour = date.getHours()
-  if (hour < 12) return "Good morning"
-  if (hour < 17) return "Good afternoon"
-  return "Good evening"
-}
-
 function personInitials(person: ManagedEmployee): string {
   return person.initials || `${person.first_name?.[0] ?? ""}${person.last_name?.[0] ?? ""}` || "HR"
 }
@@ -177,56 +165,35 @@ export function HomeDashboard({ viewer, analytics, inbox, people }: HomeDashboar
   return (
     <div className="mx-auto flex w-full max-w-[1520px] flex-col gap-5 pb-8">
       <motion.section
-        initial={{ opacity: 0, y: 8 }}
+        initial={{ opacity: 0, y: 6 }}
         animate={{ opacity: 1, y: 0 }}
-        transition={{ duration: 0.35, ease: [0.22, 1, 0.36, 1] }}
-        className="relative isolate overflow-hidden rounded-[1.75rem] border border-primary/10 bg-gradient-to-br from-card via-card to-primary/10 px-5 py-6 shadow-[0_18px_50px_rgba(15,23,42,0.06)] sm:px-7 sm:py-7"
+        transition={{ duration: 0.28, ease: [0.22, 1, 0.36, 1] }}
+        className="overflow-hidden rounded-2xl border border-slate-800 bg-[#0d1424] text-white shadow-[0_18px_60px_rgba(15,23,42,0.14)]"
       >
-        <div className="pointer-events-none absolute -right-16 -top-24 -z-10 size-72 rounded-full bg-primary/10 blur-3xl" />
-        <div className="pointer-events-none absolute -bottom-32 right-1/3 -z-10 size-60 rounded-full bg-sky-400/10 blur-3xl" />
-        <div className="grid gap-6 xl:grid-cols-[minmax(0,1.35fr)_minmax(320px,0.65fr)] xl:items-end">
+        <div className="flex flex-col gap-6 p-5 sm:p-6 xl:flex-row xl:items-center xl:justify-between">
           <div>
-            <div className="mb-3 flex flex-wrap items-center gap-2 text-xs font-medium text-muted-foreground">
-              <span>{new Intl.DateTimeFormat("en", { weekday: "long", month: "long", day: "numeric" }).format(generatedAt)}</span>
-              <span className="size-1 rounded-full bg-border" />
-              <span className="inline-flex items-center gap-1.5"><span className="size-1.5 rounded-full bg-emerald-500" />People workspace</span>
+            <div className="mb-2 flex flex-wrap items-center gap-2 text-[11px] font-semibold uppercase tracking-[0.12em] text-slate-400">
+              <span>Workforce command center</span><span className="size-1 rounded-full bg-[#35d6a5]" /><span>{new Intl.DateTimeFormat("en", { month: "long", day: "numeric", year: "numeric" }).format(generatedAt)}</span>
             </div>
-            <h2 className="max-w-3xl font-serif text-[clamp(2rem,4vw,3.65rem)] leading-[0.98] font-semibold tracking-[-0.045em] text-foreground">
-              {greeting(generatedAt)}, {firstName(viewer.displayName)}.
-            </h2>
-            <p className="mt-3 max-w-2xl text-sm leading-relaxed text-muted-foreground sm:text-[15px]">
-              Here is what needs attention today—decisions first, context close by, and no spreadsheet hunting.
-            </p>
-            <div className="mt-5 flex flex-wrap gap-2">
-              <Link href="/people?new=employee" className="inline-flex h-10 items-center gap-2 rounded-xl bg-primary px-4 text-sm font-semibold text-primary-foreground shadow-sm transition-transform hover:-translate-y-0.5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">
-                <UserPlus className="size-4" /> Add employee
-              </Link>
-              <Link href="/inbox" className="inline-flex h-10 items-center gap-2 rounded-xl border border-border bg-background/80 px-4 text-sm font-semibold shadow-sm transition-colors hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">
-                <Inbox className="size-4" /> Review inbox
-                {inbox.length > 0 && <span className="rounded-full bg-foreground px-1.5 py-0.5 text-[10px] text-background tabular-nums">{inbox.length}</span>}
-              </Link>
-              <Link href="/ai-agents" className="inline-flex h-10 items-center gap-2 rounded-xl px-3 text-sm font-semibold text-muted-foreground transition-colors hover:bg-background/60 hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">
-                <Sparkles className="size-4 text-primary" /> Ask Laidback AI
-              </Link>
-            </div>
+            <h1 className="text-[clamp(1.9rem,3vw,2.8rem)] font-bold leading-tight tracking-[-0.05em]">Workforce overview</h1>
+            <p className="mt-2 text-sm text-slate-400">Priority work, operating metrics, and team changes in one view.</p>
           </div>
-
-          <div className="rounded-2xl border border-border/70 bg-background/70 p-4 shadow-sm backdrop-blur-sm">
-            <div className="flex items-center justify-between gap-3">
-              <div>
-                <p className="text-[11px] font-semibold tracking-[0.12em] text-muted-foreground uppercase">My day</p>
-                <p className="mt-1 text-sm font-medium">{highPriority ? `${highPriority} high-priority item${highPriority === 1 ? "" : "s"}` : "No urgent blockers"}</p>
-              </div>
-              <span className={cn("flex size-10 items-center justify-center rounded-full", highPriority ? "bg-rose-100 text-rose-700 dark:bg-rose-900/30 dark:text-rose-300" : "bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-300")}>
-                {highPriority ? <CircleAlert className="size-[18px]" /> : <CheckCircle2 className="size-[18px]" />}
-              </span>
-            </div>
-            <div className="mt-4 grid grid-cols-3 divide-x divide-border/80 border-t border-border/70 pt-4">
-              <div className="pr-3"><p className="text-xl font-semibold tracking-tight tabular-nums">{pendingLeave}</p><p className="mt-0.5 text-[10px] text-muted-foreground">Leave</p></div>
-              <div className="px-3"><p className="text-xl font-semibold tracking-tight tabular-nums">{offers}</p><p className="mt-0.5 text-[10px] text-muted-foreground">Offers</p></div>
-              <div className="pl-3"><p className="text-xl font-semibold tracking-tight tabular-nums">{incompleteTraining}</p><p className="mt-0.5 text-[10px] text-muted-foreground">Training</p></div>
-            </div>
+          <div className="flex flex-wrap items-center gap-2">
+            <span className="mr-1 hidden text-xs text-slate-400 sm:inline">Signed in as {viewer.displayName}</span>
+            <Link href="/inbox" className="inline-flex h-10 items-center gap-2 rounded-xl border border-slate-700 bg-slate-900/70 px-4 text-sm font-semibold text-slate-100 transition hover:border-slate-600 hover:bg-slate-800">
+              <Inbox className="size-4 text-[#35d6a5]" /> Inbox
+              {inbox.length > 0 && <span className="rounded-full bg-[#35d6a5] px-1.5 py-0.5 text-[10px] font-bold text-[#08120f] tabular-nums">{inbox.length}</span>}
+            </Link>
+            <Link href="/people?new=employee" className="inline-flex h-10 items-center gap-2 rounded-xl bg-[#35d6a5] px-4 text-sm font-bold text-[#07140f] transition hover:bg-[#4de2b5]">
+              <UserPlus className="size-4" /> Add employee
+            </Link>
           </div>
+        </div>
+        <div className="grid border-t border-slate-800 sm:grid-cols-4">
+          <div className="flex items-center gap-3 border-b border-slate-800 px-5 py-4 sm:border-b-0 sm:border-r"><span className={cn("size-2 rounded-full", highPriority ? "bg-rose-400" : "bg-[#35d6a5]")} /><div><p className="text-lg font-bold tabular-nums">{highPriority}</p><p className="text-[10px] uppercase tracking-wider text-slate-500">High priority</p></div></div>
+          <div className="border-b border-slate-800 px-5 py-4 sm:border-b-0 sm:border-r"><p className="text-lg font-bold tabular-nums">{pendingLeave}</p><p className="text-[10px] uppercase tracking-wider text-slate-500">Leave requests</p></div>
+          <div className="border-b border-slate-800 px-5 py-4 sm:border-b-0 sm:border-r"><p className="text-lg font-bold tabular-nums">{offers}</p><p className="text-[10px] uppercase tracking-wider text-slate-500">Offers active</p></div>
+          <div className="px-5 py-4"><p className="text-lg font-bold tabular-nums">{incompleteTraining}</p><p className="text-[10px] uppercase tracking-wider text-slate-500">Training gaps</p></div>
         </div>
       </motion.section>
 
@@ -244,7 +211,7 @@ export function HomeDashboard({ viewer, analytics, inbox, people }: HomeDashboar
         <div className="mb-3 flex items-end justify-between gap-3 px-0.5">
           <div>
             <p className="text-[11px] font-semibold tracking-[0.12em] text-primary uppercase">Today</p>
-            <h3 id="priorities-heading" className="mt-1 text-lg font-semibold tracking-tight">What needs your attention</h3>
+            <h3 id="priorities-heading" className="mt-1 text-lg font-bold tracking-[-0.025em]">Priority work</h3>
           </div>
           <Link href="/inbox" className="hidden items-center gap-1 text-xs font-semibold text-muted-foreground hover:text-foreground sm:inline-flex">View all work <ChevronRight className="size-3.5" /></Link>
         </div>
@@ -273,7 +240,7 @@ export function HomeDashboard({ viewer, analytics, inbox, people }: HomeDashboar
       <section aria-labelledby="pulse-heading">
         <div className="mb-3 px-0.5">
           <p className="text-[11px] font-semibold tracking-[0.12em] text-primary uppercase">Workforce pulse</p>
-          <h3 id="pulse-heading" className="mt-1 text-lg font-semibold tracking-tight">A clear read on your people</h3>
+          <h3 id="pulse-heading" className="mt-1 text-lg font-bold tracking-[-0.025em]">Core workforce metrics</h3>
         </div>
         <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
           <Metric label="Active employees" value={compactNumber.format(analytics.kpis.activeEmployees)} detail={`${analytics.employeeAnalytics.onLeave} currently on leave`} icon={Users} tone="bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-300" />

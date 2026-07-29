@@ -193,7 +193,7 @@ export function InboxClient({ initialItems }: { initialItems: InboxItem[] }) {
         <div className="relative flex flex-col gap-5 sm:flex-row sm:items-end sm:justify-between">
           <div>
             <div className="mb-2 inline-flex items-center gap-2 text-[11px] font-semibold tracking-[0.12em] text-primary uppercase"><Inbox className="size-3.5" />Work queue</div>
-            <h2 className="font-serif text-3xl font-semibold tracking-[-0.04em] sm:text-4xl">Inbox</h2>
+            <h2 className="text-3xl font-bold tracking-[-0.045em] sm:text-4xl">Inbox</h2>
             <p className="mt-2 max-w-xl text-sm leading-relaxed text-muted-foreground">Decisions, follow-ups, and people work that should not get lost in email.</p>
           </div>
           <div className="flex items-center gap-3">
@@ -262,7 +262,7 @@ export function InboxClient({ initialItems }: { initialItems: InboxItem[] }) {
       {!visibleGroups.length && (
         <motion.div initial={{ opacity: 0, scale: 0.98 }} animate={{ opacity: 1, scale: 1 }} className="flex min-h-[340px] flex-col items-center justify-center rounded-[1.75rem] border border-dashed border-border bg-card/60 px-6 text-center">
           <span className="flex size-14 items-center justify-center rounded-full bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-300"><CheckCircle2 className="size-6" /></span>
-          <h3 className="mt-4 font-serif text-xl font-semibold">You are all caught up</h3>
+          <h3 className="mt-4 text-xl font-bold tracking-tight">You are all caught up</h3>
           <p className="mt-2 max-w-sm text-sm leading-relaxed text-muted-foreground">There is nothing waiting in {filter === "all" ? "your inbox" : `the ${filter} queue`}. New requests and follow-ups will appear here.</p>
           {filter !== "all" && <button type="button" onClick={() => chooseFilter("all")} className="mt-4 text-xs font-semibold text-primary hover:underline">View all work</button>}
         </motion.div>

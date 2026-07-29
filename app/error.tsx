@@ -10,7 +10,7 @@ export default function ErrorPage({ error, reset }: { error: Error & { digest?: 
     <div className="flex min-h-[60vh] items-center justify-center px-4">
       <div className="max-w-lg rounded-[28px] bg-card p-8 text-center shadow-[0_18px_50px_rgba(24,36,30,0.08)] ring-1 ring-foreground/8">
         <span className="mx-auto flex size-12 items-center justify-center rounded-2xl bg-amber-100 text-amber-700"><CircleAlert className="size-5" /></span>
-        <h2 className="mt-5 font-serif text-2xl font-semibold tracking-tight">This workspace hit a snag</h2>
+        <h2 className="mt-5 text-2xl font-bold tracking-[-0.035em]">This workspace hit a snag</h2>
         <p className="mt-2 text-sm leading-relaxed text-muted-foreground">Your data was not changed. Try the page again; if the problem continues, check Data Hub for connection status.</p>
         <button type="button" onClick={reset} className="mt-5 inline-flex h-10 items-center gap-2 rounded-xl bg-primary px-4 text-sm font-semibold text-primary-foreground shadow-sm transition-transform hover:-translate-y-px">
           <RotateCcw className="size-4" /> Try again

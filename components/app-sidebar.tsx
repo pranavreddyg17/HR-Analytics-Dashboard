@@ -39,19 +39,19 @@ export type NavigationItem = {
 
 export const navigationGroups: Array<{ label: string; items: NavigationItem[] }> = [
   {
-    label: "Workspace",
+    label: "Core",
     items: [
-      { href: "/", label: "Home", icon: House },
+      { href: "/", label: "Overview", icon: House },
       { href: "/people", label: "People", icon: Users },
       { href: "/inbox", label: "Inbox", icon: Inbox },
     ],
   },
   {
-    label: "Manage",
+    label: "Workflows",
     items: [
       { href: "/insights?view=hiring", label: "Hiring", icon: BriefcaseBusiness, view: "hiring" },
       { href: "/insights?view=leave", label: "Time off", icon: Umbrella, view: "leave" },
-      { href: "/insights?view=training", label: "Growth", icon: GraduationCap, view: "training" },
+      { href: "/insights?view=training", label: "Learning", icon: GraduationCap, view: "training" },
     ],
   },
   {
@@ -63,7 +63,7 @@ export const navigationGroups: Array<{ label: string; items: NavigationItem[] }>
     ],
   },
   {
-    label: "Admin",
+    label: "System",
     items: [
       { href: "/data", label: "Data hub", icon: Database },
       { href: "/access", label: "Access", icon: KeyRound },
@@ -111,10 +111,10 @@ export function AppSidebar({
       <aside
         className={cn(
           "sticky top-0 z-30 hidden h-dvh shrink-0 flex-col border-r border-sidebar-border bg-sidebar transition-[width] duration-300 ease-out md:flex",
-          collapsed ? "w-[84px]" : "w-[272px]",
+          collapsed ? "w-[80px]" : "w-[252px]",
         )}
       >
-        <div className={cn("flex h-[76px] items-center border-b border-sidebar-border", collapsed ? "justify-center px-3" : "px-5")}>
+        <div className={cn("flex h-[72px] items-center border-b border-sidebar-border", collapsed ? "justify-center px-3" : "px-5")}>
           <Link href="/" className="min-w-0" aria-label="LaidbackHR.AI home">
             <BrandLogo compact={collapsed} />
           </Link>
@@ -168,7 +168,7 @@ export function AppSidebar({
                 <span className="block truncate text-sm font-semibold text-sidebar-foreground">{user.displayName}</span>
                 <span className="mt-0.5 flex items-center gap-1.5 truncate text-[11px] text-muted-foreground">
                   <span className="size-1.5 shrink-0 rounded-full bg-success" />
-                  {user.authenticated ? "Secure workspace" : "Local workspace"}
+                  <span className="capitalize">{user.role ?? "member"}</span> · Google
                 </span>
               </span>
             )}
@@ -182,7 +182,7 @@ export function AppSidebar({
 
       <nav className="mobile-dock" aria-label="Mobile navigation">
         {[
-          { href: "/", label: "Home", icon: House },
+          { href: "/", label: "Overview", icon: House },
           { href: "/people", label: "People", icon: Users },
           { href: "/inbox", label: "Inbox", icon: Inbox },
         ].map((item) => {

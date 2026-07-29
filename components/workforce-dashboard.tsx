@@ -14,7 +14,7 @@ import {
   XAxis,
   YAxis,
 } from "recharts"
-import { AlertTriangle, ArrowRight, Bot, Building2, CalendarDays, Download, FilterX, GraduationCap, MapPin, TrendingDown, UserPlus, Users } from "lucide-react"
+import { AlertTriangle, ArrowRight, Bot, Building2, CalendarDays, Download, FilterX, GraduationCap, MapPin, SlidersHorizontal, TrendingDown, UserPlus, Users } from "lucide-react"
 
 import type { BreakdownPoint, TimePoint, WorkforceAnalytics } from "@/lib/hr-types"
 import { apiBaseUrl } from "@/lib/api"
@@ -190,20 +190,20 @@ export function WorkforceDashboard({ initialView = "executive" }: { initialView?
   return <div className="flex flex-col gap-5">
     {demoDomains.length > 0 && <div className="flex flex-col gap-3 rounded-xl border border-warning/25 bg-warning/5 p-4 sm:flex-row sm:items-center"><AlertTriangle className="size-5 shrink-0 text-warning"/><div className="flex-1"><p className="text-sm font-medium">Demo operational data is active</p><p className="text-xs text-muted-foreground">{demoDomains.map((item)=>item.domain).join(", ")} use clearly labelled sample records. The validated attrition model remains based on the original 1,470-row dataset.</p></div><Button nativeButton={false} variant="outline" size="sm" render={<Link href="/data"/>}>Import HR data <ArrowRight className="size-3.5"/></Button></div>}
 
-    <Card className="gap-4 p-4">
-      <div className="flex flex-wrap items-end gap-3">
+    <Card className="gap-4 p-4 sm:p-5">
+      <div className="flex items-center justify-between gap-3 border-b border-border/70 pb-3"><div className="flex items-center gap-2"><span className="flex size-8 items-center justify-center rounded-lg bg-primary/10 text-primary"><SlidersHorizontal className="size-4" /></span><div><p className="text-sm font-semibold">Dashboard filters</p><p className="text-[11px] text-muted-foreground">Applied to charts, records, and exports</p></div></div><Button variant="ghost" size="sm" onClick={()=>setFilters(initialFilters)}><FilterX className="size-4"/>Reset</Button></div>
+      <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-6">
         <label className="min-w-36 flex-1 text-xs text-muted-foreground">From<input type="date" value={filters.from} onChange={(event)=>setFilters({...filters,from:event.target.value})} className="mt-1 h-9 w-full rounded-md border border-input bg-background px-2.5 text-sm text-foreground"/></label>
         <label className="min-w-36 flex-1 text-xs text-muted-foreground">To<input type="date" value={filters.to} onChange={(event)=>setFilters({...filters,to:event.target.value})} className="mt-1 h-9 w-full rounded-md border border-input bg-background px-2.5 text-sm text-foreground"/></label>
         <label className="min-w-40 flex-1 text-xs text-muted-foreground">Department<select value={filters.department} onChange={(event)=>setFilters({...filters,department:event.target.value})} className="mt-1 h-9 w-full rounded-md border border-input bg-background px-2.5 text-sm text-foreground"><option value="">All departments</option>{data.dimensions.departments.map((item)=><option key={item}>{item}</option>)}</select></label>
         <label className="min-w-40 flex-1 text-xs text-muted-foreground">Job title<select value={filters.jobTitle} onChange={(event)=>setFilters({...filters,jobTitle:event.target.value})} className="mt-1 h-9 w-full rounded-md border border-input bg-background px-2.5 text-sm text-foreground"><option value="">All job titles</option>{data.dimensions.jobTitles.map((item)=><option key={item}>{item}</option>)}</select></label>
         <label className="min-w-36 flex-1 text-xs text-muted-foreground">Location<select value={filters.location} onChange={(event)=>setFilters({...filters,location:event.target.value})} className="mt-1 h-9 w-full rounded-md border border-input bg-background px-2.5 text-sm text-foreground"><option value="">All locations</option>{data.dimensions.locations.map((item)=><option key={item}>{item}</option>)}</select></label>
         <label className="min-w-28 text-xs text-muted-foreground">Trend<select value={filters.period} onChange={(event)=>setFilters({...filters,period:event.target.value as Filters["period"]})} className="mt-1 h-9 w-full rounded-md border border-input bg-background px-2.5 text-sm text-foreground"><option value="month">Monthly</option><option value="quarter">Quarterly</option><option value="year">Yearly</option></select></label>
-        <Button variant="ghost" size="sm" onClick={()=>setFilters(initialFilters)}><FilterX className="size-4"/>Clear</Button>
       </div>
     </Card>
 
     <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
-      <div className="flex flex-1 gap-1 overflow-x-auto rounded-xl border border-border bg-card p-1">{views.map((item)=><button key={item.id} onClick={()=>{ setView(item.id); router.replace(`/insights?view=${item.id}`, { scroll: false }) }} className={cn("whitespace-nowrap rounded-lg px-3 py-2 text-xs font-medium transition-colors",view===item.id?"bg-primary text-primary-foreground":"text-muted-foreground hover:bg-muted hover:text-foreground")}>{item.label}</button>)}</div>
+      <div className="flex flex-1 gap-1 overflow-x-auto rounded-xl border border-border bg-card p-1.5 shadow-sm">{views.map((item)=><button key={item.id} onClick={()=>{ setView(item.id); router.replace(`/insights?view=${item.id}`, { scroll: false }) }} className={cn("whitespace-nowrap rounded-lg px-3 py-2 text-xs font-semibold transition-colors",view===item.id?"bg-[#101827] text-white shadow-sm":"text-muted-foreground hover:bg-muted hover:text-foreground")}>{item.label}</button>)}</div>
       <div className="flex gap-2"><a href={`${apiBaseUrl}/api/v1/reports?format=pdf&${query}`} className="inline-flex h-9 items-center gap-1.5 rounded-lg border border-border bg-card px-3 text-xs font-medium hover:bg-muted"><Download className="size-3.5"/>PDF</a><a href={`${apiBaseUrl}/api/v1/reports?format=xlsx&${query}`} className="inline-flex h-9 items-center gap-1.5 rounded-lg border border-border bg-card px-3 text-xs font-medium hover:bg-muted"><Download className="size-3.5"/>Excel</a></div>
     </div>
 

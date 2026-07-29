@@ -40,11 +40,11 @@ function matchesNavigation(item: NavigationItem, query: string): boolean {
   return text.includes(query.toLowerCase())
 }
 
-function MobileMore({ open, onClose }: { open: boolean; onClose: () => void }) {
+function MobileMore({ open, onClose, user }: { open: boolean; onClose: () => void; user: ShellUser }) {
   const pathname = usePathname()
   const currentView = useSearchParams().get("view")
   if (!open) return null
-  const secondary = navigationGroups.flatMap((group) => group.items).filter((item) => !["/", "/people", "/inbox"].includes(item.href))
+  const secondary = navigationGroups.flatMap((group) => group.items).filter((item) => !["/", "/people", "/inbox"].includes(item.href) && (item.href !== "/access" || user.role === "admin"))
   return (
     <div className="mobile-sheet-layer md:hidden" role="dialog" aria-modal="true" aria-label="More navigation">
       <button type="button" className="mobile-sheet-backdrop" aria-label="Close navigation" onClick={onClose} />
@@ -72,7 +72,7 @@ function MobileMore({ open, onClose }: { open: boolean; onClose: () => void }) {
   )
 }
 
-function CommandPalette({ onClose }: { onClose: () => void }) {
+function CommandPalette({ onClose, user }: { onClose: () => void; user: ShellUser }) {
   const router = useRouter()
   const [query, setQuery] = useState("")
   const [people, setPeople] = useState<PersonResult[]>([])
@@ -103,6 +103,7 @@ function CommandPalette({ onClose }: { onClose: () => void }) {
   const items = useMemo<PaletteItem[]>(() => {
     const normalized = query.trim()
     const pages = commandNavigation
+      .filter((item) => item.href !== "/access" || user.role === "admin")
       .filter((item) => !normalized || matchesNavigation(item, normalized))
       .slice(0, normalized ? 5 : 8)
       .map((item) => ({ id: `page-${item.href}`, href: item.href, label: item.label, detail: "Go to page", kind: "page" as const, icon: item.icon }))
@@ -115,7 +116,7 @@ function CommandPalette({ onClose }: { onClose: () => void }) {
       initials: person.initials,
     }))
     return [...pages, ...employees]
-  }, [people, query])
+  }, [people, query, user.role])
 
   function select(item: PaletteItem) {
     onClose()
@@ -147,7 +148,7 @@ function CommandPalette({ onClose }: { onClose: () => void }) {
               if (event.key === "Enter" && items[activeIndex]) { event.preventDefault(); select(items[activeIndex]) }
               if (event.key === "Escape") onClose()
             }}
-            placeholder="Search people, pages, or actions…"
+            placeholder="Search people and workspace pages"
             aria-label="Search"
           />
           {loading ? <Loader2 className="size-4 animate-spin text-muted-foreground" /> : <kbd>ESC</kbd>}
@@ -182,14 +183,14 @@ function CommandPalette({ onClose }: { onClose: () => void }) {
           {!loading && query && items.length === 0 && (
             <div className="command-empty">
               <Search className="size-5" />
-              <p>No people or pages match “{query}”.</p>
+              <p>No results for {query}.</p>
             </div>
           )}
         </div>
         <footer className="command-footer">
           <span><kbd>↑</kbd><kbd>↓</kbd> navigate</span>
           <span><kbd>↵</kbd> open</span>
-          <span className="ml-auto">Private workspace search</span>
+          <span className="ml-auto">Workspace search</span>
         </footer>
       </section>
     </div>
@@ -229,8 +230,8 @@ export function AppShell({ user, children }: { user: ShellUser; children: React.
         <Topbar user={user} onOpenPalette={() => setPaletteOpen(true)} />
         <main key={pathname} className="app-content">{children}</main>
       </div>
-      {paletteOpen && <CommandPalette onClose={() => setPaletteOpen(false)} />}
-      <MobileMore open={mobileMoreOpen} onClose={() => setMobileMoreOpen(false)} />
+      {paletteOpen && <CommandPalette user={user} onClose={() => setPaletteOpen(false)} />}
+      <MobileMore user={user} open={mobileMoreOpen} onClose={() => setMobileMoreOpen(false)} />
     </div>
   )
 }

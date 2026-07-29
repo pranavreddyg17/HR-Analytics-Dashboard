@@ -9,11 +9,11 @@ import { BrandLogo } from "@/components/brand-logo"
 import type { ShellUser } from "@/components/app-sidebar"
 
 const pageMeta: Record<string, { title: string; subtitle: string }> = {
-  "/": { title: "Home", subtitle: "Your people operations, in one calm place" },
+  "/": { title: "Overview", subtitle: "Workforce status and priority actions" },
   "/people": { title: "People", subtitle: "Directory, profiles, and employee records" },
   "/inbox": { title: "Inbox", subtitle: "Approvals and work that needs your attention" },
-  "/attrition": { title: "Attrition risk", subtitle: "Explainable signals for responsible human review" },
-  "/ai-agents": { title: "AI assistant", subtitle: "Ask questions across your workforce data" },
+  "/attrition": { title: "Attrition risk", subtitle: "Review explainable workforce signals" },
+  "/ai-agents": { title: "AI copilot", subtitle: "Grounded analysis across workforce data" },
   "/data": { title: "Data hub", subtitle: "Imports, integrations, and data readiness" },
   "/access": { title: "Access", subtitle: "Google sign-in, roles, and workspace membership" },
   "/learning": { title: "Data & model", subtitle: "Model provenance, quality, and limitations" },
@@ -36,8 +36,8 @@ export function Topbar({ user, onOpenPalette }: { user: ShellUser; onOpenPalette
       : view === "leave"
         ? { title: "Time off", subtitle: "Leave patterns, balances, and approvals" }
         : view === "training"
-          ? { title: "Growth", subtitle: "Learning, compliance, and career mobility" }
-          : { title: "Insights", subtitle: "Explore every workforce signal in context" }
+          ? { title: "Learning", subtitle: "Training, compliance, and career mobility" }
+          : { title: "Insights", subtitle: "Connected workforce analytics" }
   } else if (pathname.startsWith("/people/")) {
     meta = { title: "Employee profile", subtitle: "People record and activity" }
   }
@@ -49,13 +49,13 @@ export function Topbar({ user, onOpenPalette }: { user: ShellUser; onOpenPalette
       </Link>
 
       <div className="hidden min-w-0 flex-col md:flex">
-        <p className="truncate text-[15px] font-semibold tracking-[-0.01em] text-foreground">{meta.title}</p>
-        <p className="truncate text-xs text-muted-foreground">{meta.subtitle}</p>
+        <p className="truncate text-[15px] font-bold tracking-[-0.025em] text-foreground">{meta.title}</p>
+        <p className="truncate text-[11px] text-muted-foreground">{meta.subtitle}</p>
       </div>
 
       <button type="button" onClick={onOpenPalette} className="topbar-search" aria-label="Search people and navigate">
         <Search className="size-4" strokeWidth={1.8} />
-        <span className="truncate">Search people, pages, or actions</span>
+        <span className="truncate">Search workspace</span>
         <kbd>⌘K</kbd>
       </button>
 

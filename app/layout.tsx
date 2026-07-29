@@ -1,7 +1,6 @@
 import type { Metadata, Viewport } from "next"
 import { headers } from "next/headers"
 import "@fontsource-variable/manrope"
-import "@fontsource-variable/newsreader"
 import "./globals.css"
 
 
@@ -11,7 +10,7 @@ const baseMetadata: Metadata = {
     template: "%s · LaidbackHR.AI",
   },
   description:
-    "A calm people operations workspace for employee records, hiring, time off, growth, workforce insights, and responsible AI assistance.",
+    "A connected people operations workspace for employee records, hiring, time off, learning, workforce insights, and responsible AI assistance.",
   applicationName: "LaidbackHR.AI",
   generator: "LaidbackHR.AI",
 }
@@ -24,20 +23,20 @@ export async function generateMetadata(): Promise<Metadata> {
   const protocol = forwardedProtocol === "http" || forwardedProtocol === "https"
     ? forwardedProtocol
     : host.startsWith("localhost") ? "http" : "https"
-  const imageUrl = `${protocol}://${host}/og-v2.png`
+  const imageUrl = `${protocol}://${host}/og-v3.png`
 
   return {
     ...baseMetadata,
     openGraph: {
       title: "LaidbackHR.AI — People Operations",
-      description: "Employee management and workforce intelligence in one calm workspace.",
+      description: "People operations and workforce intelligence, clearly connected.",
       type: "website",
-      images: [{ url: imageUrl, width: 1672, height: 941, alt: "LaidbackHR.AI — calm people operations, powered by grounded intelligence" }],
+      images: [{ url: imageUrl, width: 1672, height: 941, alt: "LaidbackHR.AI — people operations, clearly connected" }],
     },
     twitter: {
       card: "summary_large_image",
       title: "LaidbackHR.AI — People Operations",
-      description: "Employee management and workforce intelligence in one calm workspace.",
+      description: "People operations and workforce intelligence, clearly connected.",
       images: [imageUrl],
     },
   }
@@ -45,7 +44,7 @@ export async function generateMetadata(): Promise<Metadata> {
 
 export const viewport: Viewport = {
   colorScheme: "light",
-  themeColor: "#f6f7f2",
+  themeColor: "#0b1020",
 }
 
 export default async function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {

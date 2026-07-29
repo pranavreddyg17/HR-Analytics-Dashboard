@@ -17,9 +17,9 @@ export default async function InsightsPage({ searchParams }: { searchParams: Pro
   return (
     <div className="space-y-6">
       <div>
-        <p className="eyebrow">Workforce intelligence</p>
-        <h1 className="page-title">Insights that lead to action</h1>
-        <p className="page-description">Explore every people domain, cross-filter the underlying records, and take the next step from the same workspace.</p>
+        <p className="eyebrow">Analytics</p>
+        <h1 className="page-title">Workforce insights</h1>
+        <p className="page-description">Filter company-wide metrics, compare operating trends, and drill into the underlying records.</p>
       </div>
       <WorkforceDashboard key={view} initialView={view} />
     </div>

@@ -1,4 +1,4 @@
-import { Bot, Zap, Clock, CheckCircle2, Database, Wrench } from "lucide-react"
+import { Bot, Clock, CheckCircle2, Database, Wrench } from "lucide-react"
 
 import { Card, CardHeader, CardTitle, CardContent, CardDescription } from "@/components/ui/card"
 import { AgentCopilot } from "@/components/agent-copilot"
@@ -18,11 +18,9 @@ export default async function AiAgentsPage() {
 
   return (
     <div className="flex flex-col gap-5">
-      <div className="flex items-start gap-2 rounded-xl border border-primary/20 bg-primary/5 p-3 text-sm text-muted-foreground">
+      <div className="flex items-start gap-3 rounded-xl border border-slate-800 bg-[#0d1424] p-4 text-sm text-slate-300 shadow-sm">
         <Database className="mt-0.5 size-4 shrink-0 text-primary" />
-        <p>
-          LangChain loads nine read-only tools from LaidbackHR.AI&apos;s MCP server. Every answer shows its tool trace, stays grounded in the filtered D1 warehouse, and keeps employee-level decisions under human control.
-        </p>
+        <div><p className="font-semibold text-white">Grounded analytics mode</p><p className="mt-1 text-xs leading-5 text-slate-400">Nine read-only MCP tools query the active HR dataset. Every answer includes its tool trace and requires human review for employee decisions.</p></div>
       </div>
 
       <div className="grid grid-cols-1 gap-5 xl:grid-cols-[1fr_400px]">
