@@ -111,11 +111,14 @@ function EmployeeDrawerPanel({
     return Boolean(form.hire_date && form.employment_type && form.employment_status)
   }
 
-  async function submit(event: React.FormEvent) {
-    event.preventDefault()
+  async function handlePrimaryAction() {
     if (step < 2) {
-      if (stepValid(step)) setStep((current) => current + 1)
-      else setError("Complete the required fields before continuing.")
+      if (stepValid(step)) {
+        setError("")
+        setStep((current) => current + 1)
+      } else {
+        setError(step === 0 ? "Enter a first and last name to continue." : "Enter a job title, department, and location to continue.")
+      }
       return
     }
     setSaving(true)
@@ -145,6 +148,11 @@ function EmployeeDrawerPanel({
     } finally {
       setSaving(false)
     }
+  }
+
+  function submit(event: React.FormEvent) {
+    event.preventDefault()
+    void handlePrimaryAction()
   }
 
   const previewName = `${form.preferred_name || form.first_name || "New"} ${form.last_name || "employee"}`
@@ -260,7 +268,7 @@ function EmployeeDrawerPanel({
                   <p className="text-xs font-semibold text-foreground">Step {step + 1} of 3</p>
                   <p className="text-[11px] text-muted-foreground">{step < 2 ? "Complete the required fields, then continue." : mode === "create" ? "This saves the employee to your HR database." : "This updates the employee’s saved record."}</p>
                 </div>
-                <Button type="submit" size="lg" className="min-w-40 rounded-xl" disabled={saving}>
+                <Button type="button" size="lg" className="min-w-40 rounded-xl" disabled={saving} onClick={() => void handlePrimaryAction()}>
                   {saving ? "Saving employee…" : step === 0 ? <>Continue to role <ChevronRight className="size-4" /></> : step === 1 ? <>Continue to review <ChevronRight className="size-4" /></> : mode === "create" ? <><Save className="size-4" />Save employee</> : <><Save className="size-4" />Save changes</>}
                 </Button>
               </div>
