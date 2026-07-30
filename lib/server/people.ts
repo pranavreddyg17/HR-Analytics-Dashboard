@@ -261,6 +261,7 @@ export async function decideLeave(leaveId: string, decision: "Approved" | "Rejec
   const leave = await database.prepare("SELECT l.*, e.work_email, e.manager_id FROM leave_records l LEFT JOIN employees e ON e.employee_id=l.employee_id WHERE l.id = ?")
     .bind(leaveId).first<LeaveRecord & { work_email: string | null; manager_id: string | null }>()
   if (!leave) throw new PeopleError("Leave request not found.", 404)
+  if (leave.data_source === "demo") throw new PeopleError("Presentation sample records are read-only.", 403)
   if (leave.approval_status.toLowerCase() !== "pending") throw new PeopleError("This leave request has already been decided.", 409)
   if (leave.work_email?.toLowerCase() === actor.email.toLowerCase()) throw new PeopleError("You cannot decide your own leave request.", 403)
   if (actor.role === "manager") {
