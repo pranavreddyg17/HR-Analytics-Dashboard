@@ -1,7 +1,7 @@
 "use client"
 
 import { useMemo, useState } from "react"
-import { Brain, Loader2, ShieldAlert } from "lucide-react"
+import { Loader2, RotateCcw, ShieldAlert } from "lucide-react"
 
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
@@ -59,15 +59,21 @@ export function AttritionPredictor({ schema }: { schema: PredictionSchema }) {
     }
   }
 
+  function reset() {
+    setForm(initial)
+    setResult(null)
+    setError(null)
+  }
+
   const fieldClass = "h-9 w-full rounded-md border border-input bg-background px-3 text-sm outline-none focus:ring-2 focus:ring-ring/40"
 
   return (
     <div className="grid grid-cols-1 gap-4 xl:grid-cols-[1.15fr_0.85fr]">
-      <Card>
+      <Card className="rounded-lg shadow-none">
         <CardHeader>
-          <CardTitle>Score an employee profile</CardTitle>
+          <CardTitle className="text-base">Profile inputs</CardTitle>
           <CardDescription>
-            Submit the ten non-sensitive model fields to the production prediction endpoint.
+            Enter the ten fields used by the historical model. No protected demographic fields are included.
           </CardDescription>
         </CardHeader>
         <CardContent>
@@ -97,8 +103,11 @@ export function AttritionPredictor({ schema }: { schema: PredictionSchema }) {
 
             <div className="sm:col-span-2 flex flex-wrap items-center gap-3">
               <Button type="submit" disabled={loading} className="gap-2">
-                {loading ? <Loader2 className="size-4 animate-spin" /> : <Brain className="size-4" />}
-                Run prediction
+                {loading && <Loader2 className="size-4 animate-spin" />}
+                Calculate risk score
+              </Button>
+              <Button type="button" variant="outline" onClick={reset} disabled={loading} className="gap-2">
+                <RotateCcw className="size-3.5" /> Reset
               </Button>
               <span className="text-xs text-muted-foreground">
                 Review threshold: {(schema.threshold * 100).toFixed(0)}%
@@ -109,23 +118,23 @@ export function AttritionPredictor({ schema }: { schema: PredictionSchema }) {
         </CardContent>
       </Card>
 
-      <Card>
+      <Card className="rounded-lg shadow-none">
         <CardHeader>
-          <CardTitle>Prediction result</CardTitle>
-          <CardDescription>Probability, model drivers, and a human-review recommendation</CardDescription>
+          <CardTitle className="text-base">Assessment result</CardTitle>
+          <CardDescription>Probability, contributing signals, and an appropriate HR review.</CardDescription>
         </CardHeader>
         <CardContent>
           {!result ? (
-            <div className="flex min-h-72 flex-col items-center justify-center gap-3 rounded-xl bg-muted/30 p-6 text-center">
-              <Brain className="size-8 text-primary" />
-              <p className="text-sm text-muted-foreground">Complete the form and run the deployed model.</p>
+            <div className="flex min-h-72 flex-col items-center justify-center gap-2 rounded-lg border border-dashed border-border p-6 text-center">
+              <p className="text-sm font-medium">No assessment calculated</p>
+              <p className="max-w-sm text-xs leading-relaxed text-muted-foreground">Review the profile inputs, then calculate a score to see the model estimate and its strongest contributing signals.</p>
             </div>
           ) : (
             <div className="flex flex-col gap-4">
-              <div className="flex items-center justify-between rounded-xl bg-muted/40 p-4">
+              <div className="flex items-center justify-between rounded-lg border border-border p-4">
                 <div>
                   <p className="text-xs text-muted-foreground">Predicted attrition probability</p>
-                  <p className="font-mono text-4xl font-semibold tabular-nums">{result.riskScore.toFixed(1)}%</p>
+                  <p className="text-3xl font-semibold tracking-tight tabular-nums">{result.riskScore.toFixed(1)}%</p>
                 </div>
                 <RiskBadge level={result.riskLevel} />
               </div>
@@ -133,15 +142,15 @@ export function AttritionPredictor({ schema }: { schema: PredictionSchema }) {
               <div className="flex flex-col gap-2">
                 <p className="text-xs font-medium text-muted-foreground">Top model contributions</p>
                 {result.topDrivers.map((driver) => (
-                  <div key={driver.feature} className="rounded-lg bg-muted/30 p-3">
+                  <div key={driver.feature} className="rounded-lg border border-border p-3">
                     <p className="text-sm font-medium">{driver.label}</p>
                     <p className="text-xs text-muted-foreground">{driver.explanation}</p>
                   </div>
                 ))}
               </div>
 
-              <div className="rounded-lg border border-primary/20 bg-primary/5 p-3">
-                <p className="text-xs font-medium text-primary">Human-review recommendation</p>
+              <div className="rounded-lg border border-border bg-muted/25 p-3">
+                <p className="text-xs font-medium">Recommended HR review</p>
                 <p className="mt-1 text-sm">{result.recommendation}</p>
               </div>
 
