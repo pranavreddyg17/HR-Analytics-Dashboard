@@ -125,13 +125,16 @@ export async function getWorkforceAnalytics(filters: HrFilters = {}): Promise<Wo
   const hiringIds = new Set([...requisitions, ...completedHires].map((record) => record.id))
   const hiring = hiringByDimensions.filter((record) => hiringIds.has(record.id))
   const attrition = allAttrition.filter((record) => inRange(record.exit_date, normalizedFilters) && matchesEmployee(employeeMap.get(record.employee_id), normalizedFilters) && (!normalizedFilters.department || record.department === normalizedFilters.department))
-  const leave = allLeave.filter((record) => inRange(record.start_date, normalizedFilters) && matchesEmployee(employeeMap.get(record.employee_id), normalizedFilters) && (!normalizedFilters.department || record.department === normalizedFilters.department))
+  const leave = allLeave.filter((record) => inRange(record.start_date, normalizedFilters) && matchesEmployee(employeeMap.get(record.employee_id), normalizedFilters) && (!normalizedFilters.department || record.department === normalizedFilters.department) && (!normalizedFilters.leaveType || record.leave_type === normalizedFilters.leaveType))
   const training = allTraining.filter((record) => (!record.completion_date || inRange(record.completion_date, normalizedFilters)) && matchesEmployee(employeeMap.get(record.employee_id), normalizedFilters) && (!normalizedFilters.department || record.department === normalizedFilters.department))
   const promotions = allPromotions.filter((record) => inRange(record.promotion_date, normalizedFilters) && matchesEmployee(employeeMap.get(record.employee_id), normalizedFilters) && (!normalizedFilters.department || record.department === normalizedFilters.department))
 
   const hired = completedHires
   const activeHiring = requisitions.filter((record) => ["requested", "open", "offer"].includes(record.recruitment_status.toLowerCase()))
   const approvedLeave = leave.filter((record) => record.approval_status.toLowerCase() === "approved")
+  const today = new Date().toISOString().slice(0, 10)
+  const currentlyAway = approvedLeave.filter((record) => record.start_date <= today && record.end_date >= today)
+  const upcomingLeave = leave.filter((record) => ["approved", "pending"].includes(record.approval_status.toLowerCase()) && record.start_date > today).sort((left, right) => left.start_date.localeCompare(right.start_date))
   const completedTraining = training.filter((record) => record.completion_status.toLowerCase() === "completed")
   const activeEmployees = employees.filter((employee) => employee.employment_status.toLowerCase() !== "terminated")
   const attritionRate = percent(attrition.length, activeEmployees.length + attrition.length)
@@ -179,6 +182,7 @@ export async function getWorkforceAnalytics(filters: HrFilters = {}): Promise<Wo
       departments: unique([...allEmployees.map((record) => record.department), ...allHiring.map((record) => record.department)]),
       jobTitles: unique([...allEmployees.map((record) => record.job_title), ...allHiring.map((record) => record.position)]),
       locations: unique([...allEmployees.map((record) => record.location), ...allHiring.map((record) => record.location)]),
+      leaveTypes: unique(allLeave.map((record) => record.leave_type)),
     },
     status,
     kpis: {
@@ -235,13 +239,18 @@ export async function getWorkforceAnalytics(filters: HrFilters = {}): Promise<Wo
       rows: attrition.slice(0, 250),
     },
     leave: {
+      totalRequests: leave.length,
       totalDays: Number(approvedLeave.reduce((sum, record) => sum + record.leave_days, 0).toFixed(1)),
       averageDaysPerEmployee: Number((approvedLeave.reduce((sum, record) => sum + record.leave_days, 0) / Math.max(1, new Set(approvedLeave.map((record) => record.employee_id)).size)).toFixed(1)),
       pending: leave.filter((record) => record.approval_status.toLowerCase() === "pending").length,
       approved: approvedLeave.length,
+      rejected: leave.filter((record) => record.approval_status.toLowerCase() === "rejected").length,
+      currentlyAway: currentlyAway.slice(0, 100),
+      upcoming: upcomingLeave.slice(0, 100),
       trend: trend(approvedLeave, (record) => record.start_date, normalizedFilters.period, (record) => record.leave_days),
       byType: groupBy(approvedLeave, (record) => record.leave_type, (record) => record.leave_days),
       byDepartment: leaveByDepartment,
+      statuses: groupBy(leave, (record) => record.approval_status),
       rows: leave.slice(0, 250),
     },
     training: {
@@ -277,6 +286,7 @@ export function filtersFromSearchParams(params: URLSearchParams): HrFilters {
     department: params.get("department") || undefined,
     jobTitle: params.get("jobTitle") || undefined,
     location: params.get("location") || undefined,
+    leaveType: params.get("leaveType") || undefined,
     period: period === "quarter" || period === "year" ? period : "month",
   }
 }

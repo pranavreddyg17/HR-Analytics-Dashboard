@@ -13,6 +13,7 @@ const pageMeta: Record<string, { title: string; subtitle: string }> = {
   "/people": { title: "People", subtitle: "Directory, profiles, and employee records" },
   "/inbox": { title: "Inbox", subtitle: "Approvals and work that needs your attention" },
   "/hiring": { title: "Hiring", subtitle: "Requisitions, pipeline, velocity, and source performance" },
+  "/time-off": { title: "Time off", subtitle: "Requests, approvals, coverage, and leave patterns" },
   "/attrition": { title: "Attrition risk", subtitle: "Review explainable workforce signals" },
   "/ai-agents": { title: "AI copilot", subtitle: "Grounded analysis across workforce data" },
   "/data": { title: "Data hub", subtitle: "Imports, integrations, and data readiness" },

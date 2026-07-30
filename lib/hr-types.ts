@@ -9,6 +9,7 @@ export type HrFilters = {
   department?: string
   jobTitle?: string
   location?: string
+  leaveType?: string
   period?: TrendPeriod
 }
 
@@ -107,7 +108,7 @@ export type DomainStatus = {
 export type WorkforceAnalytics = {
   generatedAt: string
   filters: Required<Pick<HrFilters, "period">> & Omit<HrFilters, "period">
-  dimensions: { departments: string[]; jobTitles: string[]; locations: string[] }
+  dimensions: { departments: string[]; jobTitles: string[]; locations: string[]; leaveTypes: string[] }
   status: DomainStatus[]
   kpis: {
     totalEmployees: number
@@ -163,13 +164,18 @@ export type WorkforceAnalytics = {
     rows: AttritionRecord[]
   }
   leave: {
+    totalRequests: number
     totalDays: number
     averageDaysPerEmployee: number
     pending: number
     approved: number
+    rejected: number
+    currentlyAway: LeaveRecord[]
+    upcoming: LeaveRecord[]
     trend: TimePoint[]
     byType: BreakdownPoint[]
     byDepartment: BreakdownPoint[]
+    statuses: BreakdownPoint[]
     rows: LeaveRecord[]
   }
   training: {

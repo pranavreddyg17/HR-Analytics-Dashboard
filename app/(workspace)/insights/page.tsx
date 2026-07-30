@@ -13,6 +13,7 @@ const validViews = new Set<AnalyticsView>(["executive", "employees", "hiring", "
 export default async function InsightsPage({ searchParams }: { searchParams: Promise<{ view?: string }> }) {
   const params = await searchParams
   if (params.view === "hiring") redirect("/hiring")
+  if (params.view === "leave") redirect("/time-off")
   const requested = params.view as AnalyticsView | undefined
   const view = requested && validViews.has(requested) ? requested : "executive"
 

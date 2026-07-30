@@ -1,0 +1,143 @@
+"use client"
+
+import { useEffect, useMemo, useState } from "react"
+import Link from "next/link"
+import {
+  Area,
+  AreaChart,
+  Bar,
+  BarChart,
+  CartesianGrid,
+  ResponsiveContainer,
+  Tooltip,
+  XAxis,
+  YAxis,
+} from "recharts"
+import {
+  ArrowRight,
+  CalendarCheck2,
+  CalendarClock,
+  Database,
+  FilterX,
+  Plus,
+  Search,
+  Umbrella,
+  Users,
+} from "lucide-react"
+
+import { apiBaseUrl } from "@/lib/api"
+import type { BreakdownPoint, LeaveRecord, TimePoint, WorkforceAnalytics } from "@/lib/hr-types"
+import { Button } from "@/components/ui/button"
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
+import { cn } from "@/lib/utils"
+
+type Filters = { from: string; to: string; department: string; location: string; leaveType: string; period: "month" | "quarter" | "year" }
+const emptyFilters: Filters = { from: "", to: "", department: "", location: "", leaveType: "", period: "month" }
+
+function queryFor(filters: Filters): string {
+  const params = new URLSearchParams()
+  Object.entries(filters).forEach(([key, value]) => { if (value) params.set(key, value) })
+  return params.toString()
+}
+
+function dateLabel(value: string): string {
+  const date = new Date(`${value}T00:00:00`)
+  return Number.isFinite(date.getTime()) ? new Intl.DateTimeFormat("en", { month: "short", day: "numeric", year: "numeric" }).format(date) : value
+}
+
+function statusTone(status: string): string {
+  const normalized = status.toLowerCase()
+  if (normalized === "approved") return "bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-300"
+  if (normalized === "pending") return "bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-300"
+  if (normalized === "rejected") return "bg-rose-100 text-rose-700 dark:bg-rose-900/30 dark:text-rose-300"
+  return "bg-muted text-muted-foreground"
+}
+
+function Metric({ label, value, detail, icon: Icon, tone }: { label: string; value: string; detail: string; icon: typeof Umbrella; tone: string }) {
+  return <Card className="gap-3 border-0 p-4 shadow-[0_1px_2px_rgba(15,23,42,0.04),0_12px_32px_rgba(15,23,42,0.04)] ring-1 ring-foreground/8"><div className="flex items-start justify-between gap-3"><p className="text-xs font-semibold text-muted-foreground">{label}</p><span className={cn("flex size-9 items-center justify-center rounded-xl", tone)}><Icon className="size-4"/></span></div><div><p className="text-2xl font-bold tracking-[-0.04em] tabular-nums">{value}</p><p className="mt-1 text-[11px] text-muted-foreground">{detail}</p></div></Card>
+}
+
+function LeaveTooltip({ active, payload, label }: { active?: boolean; payload?: Array<{ name?: string; value?: number }>; label?: string }) {
+  if (!active || !payload?.length) return null
+  return <div className="rounded-xl border border-border bg-popover px-3 py-2 text-xs shadow-xl"><p className="font-semibold">{label}</p>{payload.map((item) => <p key={item.name} className="mt-1 text-muted-foreground"><span className="text-primary">{item.value}</span> {item.name?.toLowerCase()}</p>)}</div>
+}
+
+function TrendChart({ data }: { data: TimePoint[] }) {
+  if (!data.length) return <EmptyChart />
+  return <div className="h-64 w-full"><ResponsiveContainer width="100%" height="100%"><AreaChart data={data} margin={{ left: -20, right: 8, top: 8, bottom: 2 }}><defs><linearGradient id="leaveDaysFill" x1="0" y1="0" x2="0" y2="1"><stop offset="5%" stopColor="var(--chart-1)" stopOpacity={0.3}/><stop offset="95%" stopColor="var(--chart-1)" stopOpacity={0}/></linearGradient></defs><CartesianGrid strokeDasharray="3 3" vertical={false} stroke="var(--border)"/><XAxis dataKey="period" axisLine={false} tickLine={false} tick={{ fontSize: 10, fill: "var(--muted-foreground)" }}/><YAxis axisLine={false} tickLine={false} tick={{ fontSize: 10, fill: "var(--muted-foreground)" }}/><Tooltip content={<LeaveTooltip/>}/><Area type="monotone" dataKey="value" name="Days" stroke="var(--chart-1)" strokeWidth={2.5} fill="url(#leaveDaysFill)"/></AreaChart></ResponsiveContainer></div>
+}
+
+function BreakdownChart({ data, name, onSelect }: { data: BreakdownPoint[]; name: string; onSelect?: (label: string) => void }) {
+  if (!data.length) return <EmptyChart />
+  return <div className="h-64 w-full"><ResponsiveContainer width="100%" height="100%"><BarChart data={data.slice(0, 8)} layout="vertical" margin={{ left: 30, right: 14, top: 4, bottom: 2 }}><CartesianGrid strokeDasharray="3 3" horizontal={false} stroke="var(--border)"/><XAxis type="number" axisLine={false} tickLine={false} tick={{ fontSize: 10, fill: "var(--muted-foreground)" }}/><YAxis type="category" dataKey="label" width={112} axisLine={false} tickLine={false} tick={{ fontSize: 10, fill: "var(--muted-foreground)" }}/><Tooltip content={<LeaveTooltip/>}/><Bar dataKey="value" name={name} fill="var(--chart-1)" radius={[0,6,6,0]} cursor={onSelect ? "pointer" : "default"} onClick={(entry) => { const row = entry as unknown as { label?: string; payload?: { label?: string } }; const label = row.label ?? row.payload?.label; if (label && onSelect) onSelect(label) }}/></BarChart></ResponsiveContainer></div>
+}
+
+function EmptyChart() {
+  return <div className="flex h-64 items-center justify-center rounded-xl border border-dashed border-border text-sm text-muted-foreground">No database records match these filters.</div>
+}
+
+function RequestStatus({ data }: { data: BreakdownPoint[] }) {
+  const total = data.reduce((sum, item) => sum + item.value, 0)
+  return <div className="grid gap-3 sm:grid-cols-3">{data.map((item) => <div key={item.label} className="rounded-xl border border-border/70 bg-muted/25 p-3"><div className="flex items-center justify-between gap-2"><span className={cn("rounded-full px-2 py-1 text-[9px] font-bold uppercase tracking-wide", statusTone(item.label))}>{item.label}</span><span className="text-xl font-bold tabular-nums">{item.value}</span></div><div className="mt-3 h-1.5 overflow-hidden rounded-full bg-muted"><div className="h-full rounded-full bg-primary" style={{ width: `${total ? Math.max(5, (item.value / total) * 100) : 0}%` }}/></div></div>)}</div>
+}
+
+function LeaveSchedule({ title, description, rows, people }: { title: string; description: string; rows: LeaveRecord[]; people: Map<string, string> }) {
+  return <Card className="border-0 shadow-sm ring-1 ring-foreground/8"><CardHeader><CardTitle>{title}</CardTitle><CardDescription>{description}</CardDescription></CardHeader><CardContent className="space-y-2">{rows.length ? rows.slice(0, 7).map((row) => <div key={row.id} className="flex items-center gap-3 rounded-xl border border-border/70 p-3"><span className="flex size-9 shrink-0 items-center justify-center rounded-xl bg-rose-100 text-rose-700 dark:bg-rose-900/30 dark:text-rose-300"><Umbrella className="size-4"/></span><div className="min-w-0 flex-1"><p className="truncate text-sm font-semibold">{people.get(row.employee_id) ?? row.employee_id}</p><p className="mt-0.5 truncate text-[10px] text-muted-foreground">{row.leave_type} · {row.department}</p></div><div className="text-right"><p className="text-xs font-semibold whitespace-nowrap">{dateLabel(row.start_date)}</p><p className="mt-0.5 text-[9px] text-muted-foreground">{row.leave_days} day{row.leave_days === 1 ? "" : "s"}</p></div></div>) : <div className="flex min-h-44 items-center justify-center rounded-xl border border-dashed border-border px-6 text-center text-xs text-muted-foreground">Nothing scheduled for this view.</div>}</CardContent></Card>
+}
+
+function LeaveTable({ rows, people }: { rows: LeaveRecord[]; people: Map<string, string> }) {
+  const [query, setQuery] = useState("")
+  const [status, setStatus] = useState("")
+  const statuses = useMemo(() => [...new Set(rows.map((row) => row.approval_status))].sort(), [rows])
+  const visible = useMemo(() => { const normalized = query.trim().toLowerCase(); return rows.filter((row) => (!status || row.approval_status === status) && (!normalized || [row.employee_id, people.get(row.employee_id) ?? "", row.leave_type, row.department].some((value) => value.toLowerCase().includes(normalized)))) }, [people, query, rows, status])
+  return <Card className="gap-0 overflow-hidden border-0 py-0 shadow-[0_1px_2px_rgba(15,23,42,0.04),0_14px_36px_rgba(15,23,42,0.05)] ring-1 ring-foreground/8"><CardHeader className="gap-4 border-b border-border/70 px-5 py-5 lg:flex-row lg:items-center lg:justify-between"><div><CardTitle>Leave request register</CardTitle><CardDescription>Requests read directly from the workspace leave table</CardDescription></div><div className="flex flex-col gap-2 sm:flex-row"><label className="relative"><Search className="pointer-events-none absolute left-3 top-1/2 size-3.5 -translate-y-1/2 text-muted-foreground"/><input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search employee or leave type…" className="h-9 w-full rounded-xl border border-border bg-background pl-9 pr-3 text-xs outline-none focus:ring-2 focus:ring-ring/30 sm:w-64"/></label><select value={status} onChange={(event) => setStatus(event.target.value)} className="h-9 rounded-xl border border-border bg-background px-3 text-xs outline-none"><option value="">All statuses</option>{statuses.map((item) => <option key={item}>{item}</option>)}</select></div></CardHeader><CardContent className="px-0 pb-0"><div className="max-h-[480px] overflow-auto"><table className="w-full min-w-[920px] text-left text-xs"><thead className="sticky top-0 z-10 bg-muted/95 backdrop-blur"><tr>{["Employee", "Leave type", "Dates", "Days", "Department", "Status", "Data"].map((heading) => <th key={heading} className="px-4 py-3 font-semibold text-muted-foreground">{heading}</th>)}</tr></thead><tbody>{visible.map((row) => <tr key={row.id} className="border-t border-border/60 transition hover:bg-muted/25"><td className="px-4 py-3"><p className="font-semibold">{people.get(row.employee_id) ?? row.employee_id}</p><p className="mt-0.5 text-[10px] text-muted-foreground">{row.employee_id}</p></td><td className="px-4 py-3">{row.leave_type}</td><td className="px-4 py-3 whitespace-nowrap">{dateLabel(row.start_date)} — {dateLabel(row.end_date)}</td><td className="px-4 py-3 font-semibold tabular-nums">{row.leave_days}</td><td className="px-4 py-3">{row.department}</td><td className="px-4 py-3"><span className={cn("rounded-full px-2 py-1 text-[9px] font-bold uppercase tracking-wide", statusTone(row.approval_status))}>{row.approval_status}</span></td><td className="px-4 py-3"><span className="rounded-full border border-border px-2 py-1 text-[9px] font-semibold capitalize text-muted-foreground">{row.data_source === "demo" ? "sample" : row.data_source}</span></td></tr>)}</tbody></table>{!visible.length && <div className="p-10 text-center text-sm text-muted-foreground">No leave requests match your search.</div>}</div><div className="border-t border-border bg-muted/20 px-4 py-2.5 text-[10px] text-muted-foreground">Showing {visible.length} of {rows.length} filtered database records</div></CardContent></Card>
+}
+
+export function TimeOffWorkspace({ canRequestLeave, canReviewLeave }: { canRequestLeave: boolean; canReviewLeave: boolean }) {
+  const [filters, setFilters] = useState<Filters>(emptyFilters)
+  const [data, setData] = useState<WorkforceAnalytics | null>(null)
+  const [loadedQuery, setLoadedQuery] = useState<string | null>(null)
+  const [error, setError] = useState("")
+  const query = useMemo(() => queryFor(filters), [filters])
+  const loading = query !== loadedQuery
+
+  useEffect(() => {
+    const controller = new AbortController()
+    fetch(`${apiBaseUrl}/api/v1/workforce?${query}`, { cache: "no-store", signal: controller.signal })
+      .then(async (response) => { if (!response.ok) throw new Error("Time-off data could not be loaded."); return response.json() as Promise<WorkforceAnalytics> })
+      .then((result) => { setData(result); setError(""); setLoadedQuery(query) })
+      .catch((reason: unknown) => { if ((reason as { name?: string })?.name !== "AbortError") { setError(reason instanceof Error ? reason.message : "Time-off data could not be loaded."); setLoadedQuery(query) } })
+    return () => controller.abort()
+  }, [query])
+
+  if (!data && loading) return <div className="space-y-4"><div className="h-40 animate-pulse rounded-2xl bg-muted"/><div className="grid gap-3 md:grid-cols-4">{Array.from({ length: 4 }, (_, index) => <div key={index} className="h-32 animate-pulse rounded-2xl bg-muted"/>)}</div></div>
+  if (!data) return <Card><CardContent className="p-6 text-sm text-destructive">{error || "Time-off data could not be loaded."}</CardContent></Card>
+
+  const leaveStatus = data.status.find((item) => item.domain === "leave")
+  const dataLabel = leaveStatus?.mode === "demo" ? "Sample leave dataset" : leaveStatus?.mode === "mixed" ? "Live requests + sample records" : leaveStatus?.mode === "empty" ? "No leave records" : "Live workspace data"
+  const people = new Map(data.employees.map((employee) => [employee.employee_id, `${employee.preferred_name || employee.first_name} ${employee.last_name}`.trim()]))
+
+  return <div className="mx-auto flex w-full max-w-[1520px] flex-col gap-5 pb-10">
+    <section className="relative overflow-hidden rounded-[1.75rem] border border-slate-800 bg-[#0d1424] px-5 py-6 text-white shadow-[0_18px_60px_rgba(15,23,42,0.14)] sm:px-7"><div className="pointer-events-none absolute -right-20 -top-28 size-72 rounded-full bg-rose-400/10 blur-3xl"/><div className="relative flex flex-col gap-5 lg:flex-row lg:items-end lg:justify-between"><div><p className="flex items-center gap-2 text-[10px] font-semibold uppercase tracking-[0.14em] text-rose-300"><Umbrella className="size-3.5"/>Time-off workspace</p><h1 className="mt-2 text-3xl font-bold tracking-[-0.05em] sm:text-4xl">Time away, with the team covered.</h1><p className="mt-2 max-w-2xl text-sm leading-relaxed text-slate-400">Request leave, make decisions, and understand upcoming coverage from one reliable leave register.</p></div><div className="flex flex-wrap gap-2">{canReviewLeave && <Button nativeButton={false} variant="outline" className="border-slate-700 bg-slate-900 text-white hover:bg-slate-800 hover:text-white" render={<Link href="/inbox?type=leave"/>}>Review requests <ArrowRight className="size-4"/></Button>}{canRequestLeave && <Button nativeButton={false} className="bg-rose-300 text-slate-950 hover:bg-rose-200" render={<Link href="/inbox?new=leave"/>}><Plus className="size-4"/>Request leave</Button>}</div></div><div className="relative mt-6 flex flex-wrap items-center gap-x-5 gap-y-2 border-t border-slate-800 pt-4 text-[10px] text-slate-400"><span className="inline-flex items-center gap-1.5"><Database className="size-3.5 text-rose-300"/>{dataLabel}</span><span>{leaveStatus?.count ?? 0} database records</span><span>Updated {new Date(data.generatedAt).toLocaleString()}</span></div></section>
+
+    <Card className="gap-4 border-0 p-4 shadow-sm ring-1 ring-foreground/8 sm:p-5"><div className="flex items-center justify-between gap-3"><div><p className="text-sm font-semibold">Schedule filters</p><p className="text-[11px] text-muted-foreground">Applied to every metric, chart, schedule, and row</p></div><Button size="sm" variant="ghost" onClick={() => setFilters(emptyFilters)}><FilterX className="size-4"/>Reset</Button></div><div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-6"><Filter label="From"><input type="date" value={filters.from} onChange={(event) => setFilters({ ...filters, from: event.target.value })}/></Filter><Filter label="To"><input type="date" value={filters.to} onChange={(event) => setFilters({ ...filters, to: event.target.value })}/></Filter><Filter label="Department"><select value={filters.department} onChange={(event) => setFilters({ ...filters, department: event.target.value })}><option value="">All departments</option>{data.dimensions.departments.map((item) => <option key={item}>{item}</option>)}</select></Filter><Filter label="Location"><select value={filters.location} onChange={(event) => setFilters({ ...filters, location: event.target.value })}><option value="">All locations</option>{data.dimensions.locations.map((item) => <option key={item}>{item}</option>)}</select></Filter><Filter label="Leave type"><select value={filters.leaveType} onChange={(event) => setFilters({ ...filters, leaveType: event.target.value })}><option value="">All leave types</option>{data.dimensions.leaveTypes.map((item) => <option key={item}>{item}</option>)}</select></Filter><Filter label="Group trend"><select value={filters.period} onChange={(event) => setFilters({ ...filters, period: event.target.value as Filters["period"] })}><option value="month">Monthly</option><option value="quarter">Quarterly</option><option value="year">Yearly</option></select></Filter></div>{loading && <div className="h-1 overflow-hidden rounded-full bg-muted"><div className="h-full w-2/3 animate-pulse rounded-full bg-rose-400"/></div>}{error && <p className="text-xs text-destructive">{error}</p>}</Card>
+
+    <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4"><Metric label="Away today" value={new Set(data.leave.currentlyAway.map((row) => row.employee_id)).size.toLocaleString()} detail="Employees with approved leave today" icon={Umbrella} tone="bg-rose-100 text-rose-700 dark:bg-rose-900/30 dark:text-rose-300"/><Metric label="Pending decisions" value={data.leave.pending.toLocaleString()} detail={`${data.leave.totalRequests} requests in this view`} icon={CalendarClock} tone="bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-300"/><Metric label="Approved leave" value={`${data.leave.totalDays.toLocaleString()}d`} detail={`${data.leave.approved} approved requests`} icon={CalendarCheck2} tone="bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-300"/><Metric label="Average approved leave" value={`${data.leave.averageDaysPerEmployee.toLocaleString()}d`} detail="Per employee taking approved leave" icon={Users} tone="bg-violet-100 text-violet-700 dark:bg-violet-900/30 dark:text-violet-300"/></div>
+
+    <div className="grid gap-4 xl:grid-cols-2"><LeaveSchedule title="Away today" description="Approved leave overlapping today" rows={data.leave.currentlyAway} people={people}/><LeaveSchedule title="Coming up" description="Next approved and pending absences" rows={data.leave.upcoming} people={people}/></div>
+
+    <Card className="gap-4 border-0 shadow-sm ring-1 ring-foreground/8"><CardHeader><CardTitle>Request decisions</CardTitle><CardDescription>Current distribution across the filtered leave register</CardDescription></CardHeader><CardContent><RequestStatus data={data.leave.statuses}/></CardContent></Card>
+
+    <div className="grid gap-4 xl:grid-cols-2"><Card className="border-0 shadow-sm ring-1 ring-foreground/8"><CardHeader><CardTitle>Approved leave trend</CardTitle><CardDescription>Approved days grouped {data.filters.period} from persisted start dates</CardDescription></CardHeader><CardContent><TrendChart data={data.leave.trend}/></CardContent></Card><Card className="border-0 shadow-sm ring-1 ring-foreground/8"><CardHeader><CardTitle>Approved leave by type</CardTitle><CardDescription>Days taken—not an employee performance signal</CardDescription></CardHeader><CardContent><BreakdownChart data={data.leave.byType} name="Days"/></CardContent></Card></div>
+
+    <Card className="border-0 shadow-sm ring-1 ring-foreground/8"><CardHeader><CardTitle>Coverage by department</CardTitle><CardDescription>Approved leave days; click a department to filter this workspace</CardDescription></CardHeader><CardContent><BreakdownChart data={data.leave.byDepartment} name="Days" onSelect={(department) => setFilters({ ...filters, department })}/></CardContent></Card>
+
+    <LeaveTable rows={data.leave.rows} people={people}/>
+
+    <div className="flex flex-col gap-3 rounded-2xl border border-border/70 bg-muted/25 p-4 text-xs text-muted-foreground sm:flex-row sm:items-center"><Database className="size-4 shrink-0 text-primary"/><p className="flex-1">All metrics, schedules, charts, and request rows are generated from persisted leave records. Sample rows remain clearly labelled when they are still present.</p><Link href="/data" className="inline-flex items-center gap-1 font-semibold text-foreground hover:text-primary">Manage leave data <ArrowRight className="size-3.5"/></Link></div>
+  </div>
+}
+
+function Filter({ label, children }: { label: string; children: React.ReactNode }) {
+  return <label className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">{label}<span className="mt-1 block [&_input]:h-9 [&_input]:w-full [&_input]:rounded-xl [&_input]:border [&_input]:border-border [&_input]:bg-background [&_input]:px-3 [&_input]:text-xs [&_input]:font-normal [&_input]:normal-case [&_input]:tracking-normal [&_select]:h-9 [&_select]:w-full [&_select]:rounded-xl [&_select]:border [&_select]:border-border [&_select]:bg-background [&_select]:px-3 [&_select]:text-xs [&_select]:font-normal [&_select]:normal-case [&_select]:tracking-normal">{children}</span></label>
+}
