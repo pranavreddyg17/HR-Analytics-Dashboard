@@ -1,7 +1,7 @@
 "use client"
 
 import { useMemo, useState } from "react"
-import { BriefcaseBusiness, CalendarPlus, GraduationCap, LoaderCircle, X } from "lucide-react"
+import { BriefcaseBusiness, CalendarPlus, Check, ChevronsUpDown, GraduationCap, LoaderCircle, Search, X } from "lucide-react"
 
 import { Button } from "@/components/ui/button"
 import type { ManagedEmployee, WorkflowActorContext } from "@/lib/people-types"
@@ -115,10 +115,71 @@ function Field({ label, children }: { label: string; children: React.ReactNode }
 }
 
 function SelectEmployee({ value, people, onChange }: { value: string; people: ManagedEmployee[]; onChange: (value: string) => void }) {
-  const sortedPeople = [...people].sort((left, right) => {
-    const sourceOrder = Number(left.data_source === "demo") - Number(right.data_source === "demo")
-    return sourceOrder || left.display_name.localeCompare(right.display_name)
-  })
+  const [open, setOpen] = useState(false)
+  const [query, setQuery] = useState("")
+  const selected = people.find((person) => person.employee_id === value)
+  const filteredPeople = useMemo(() => {
+    const normalizedQuery = query.trim().toLowerCase()
+    return [...people]
+      .sort((left, right) => {
+        const sourceOrder = Number(left.data_source === "demo") - Number(right.data_source === "demo")
+        return sourceOrder || left.display_name.localeCompare(right.display_name)
+      })
+      .filter((person) => !normalizedQuery || [person.display_name, person.employee_id, person.department, person.job_title, person.location]
+        .some((field) => field?.toLowerCase().includes(normalizedQuery)))
+  }, [people, query])
 
-  return <Field label="Employee"><select required className={inputClass} value={value} onChange={(event) => onChange(event.target.value)}><option value="">Choose an employee</option>{sortedPeople.map((person) => <option key={person.employee_id} value={person.employee_id}>{person.display_name} · {person.department}{person.data_source === "demo" ? " · Dataset record" : ""}</option>)}</select></Field>
+  return (
+    <div className="relative">
+      <span className="mb-1.5 block text-xs font-semibold">Employee</span>
+      <button
+        type="button"
+        aria-haspopup="listbox"
+        aria-expanded={open}
+        onClick={() => { setOpen((current) => !current); setQuery("") }}
+        className={`${inputClass} flex items-center justify-between gap-3 text-left`}
+      >
+        <span className={selected ? "min-w-0 truncate" : "text-muted-foreground"}>
+          {selected ? `${selected.display_name} · ${selected.department}` : "Choose an employee"}
+        </span>
+        <ChevronsUpDown className="size-4 shrink-0 text-muted-foreground" />
+      </button>
+      {open && (
+        <div className="mt-2 overflow-hidden rounded-2xl border border-border bg-card shadow-lg">
+          <div className="relative border-b border-border">
+            <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
+            <input
+              autoFocus
+              type="search"
+              value={query}
+              onChange={(event) => setQuery(event.target.value)}
+              onKeyDown={(event) => { if (event.key === "Escape") setOpen(false) }}
+              placeholder="Search name, ID, department, or role…"
+              aria-label="Search employees"
+              className="h-11 w-full bg-transparent pl-10 pr-3 text-sm outline-none placeholder:text-muted-foreground"
+            />
+          </div>
+          <div role="listbox" aria-label="Employees" className="max-h-56 overflow-y-auto p-1.5">
+            {filteredPeople.length ? filteredPeople.map((person) => (
+              <button
+                key={person.employee_id}
+                type="button"
+                role="option"
+                aria-selected={person.employee_id === value}
+                onClick={() => { onChange(person.employee_id); setOpen(false); setQuery("") }}
+                className="flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-left transition hover:bg-muted focus-visible:bg-muted focus-visible:outline-none"
+              >
+                <span className="flex size-8 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-[11px] font-bold text-primary">{person.initials}</span>
+                <span className="min-w-0 flex-1">
+                  <span className="flex items-center gap-2"><span className="truncate text-sm font-medium">{person.display_name}</span>{person.data_source === "demo" && <span className="shrink-0 rounded-full bg-muted px-2 py-0.5 text-[9px] font-semibold uppercase tracking-wide text-muted-foreground">Dataset</span>}</span>
+                  <span className="block truncate text-[11px] text-muted-foreground">{person.employee_id} · {person.job_title} · {person.department}</span>
+                </span>
+                {person.employee_id === value && <Check className="size-4 shrink-0 text-primary" />}
+              </button>
+            )) : <p className="px-3 py-6 text-center text-xs text-muted-foreground">No employees match “{query}”.</p>}
+          </div>
+        </div>
+      )}
+    </div>
+  )
 }
