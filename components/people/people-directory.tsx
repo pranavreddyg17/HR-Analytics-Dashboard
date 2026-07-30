@@ -20,10 +20,22 @@ type Filters = {
   location: string
   status: string
   employmentType: string
+  tenure: string
   includeArchived: boolean
 }
 
-const initialFilters: Filters = { department: "", location: "", status: "", employmentType: "", includeArchived: false }
+const initialFilters: Filters = { department: "", location: "", status: "", employmentType: "", tenure: "", includeArchived: false }
+const tenureOptions = [
+  { value: "under1", label: "Under 1 year" },
+  { value: "1to2", label: "1–2 years" },
+  { value: "3to4", label: "3–4 years" },
+  { value: "5plus", label: "5+ years" },
+  { value: "mobility", label: "Mobility review: 3+ years, no promotion" },
+]
+
+function validTenure(value: string | null): string {
+  return tenureOptions.some((option) => option.value === value) ? value ?? "" : ""
+}
 
 export function PeopleDirectory() {
   const router = useRouter()
@@ -31,14 +43,14 @@ export function PeopleDirectory() {
   const reduceMotion = useReducedMotion()
   const [query, setQuery] = useState("")
   const [debouncedQuery, setDebouncedQuery] = useState("")
-  const [filters, setFilters] = useState<Filters>(initialFilters)
+  const [filters, setFilters] = useState<Filters>(() => ({ ...initialFilters, tenure: validTenure(searchParams.get("tenure")) }))
   const [data, setData] = useState<EmployeeDirectoryResponse | null>(null)
   const [managerPool, setManagerPool] = useState<ManagedEmployee[]>([])
   const [loadedRequest, setLoadedRequest] = useState<string | null>(null)
   const [retry, setRetry] = useState(0)
   const [error, setError] = useState("")
   const [drawerOpen, setDrawerOpen] = useState(() => searchParams.get("new") === "employee")
-  const [showFilters, setShowFilters] = useState(false)
+  const [showFilters, setShowFilters] = useState(() => Boolean(validTenure(searchParams.get("tenure"))))
 
   useEffect(() => {
     const timer = window.setTimeout(() => setDebouncedQuery(query.trim()), 220)
@@ -52,6 +64,7 @@ export function PeopleDirectory() {
     if (filters.location) params.set("location", filters.location)
     if (filters.status) params.set("status", filters.status)
     if (filters.employmentType) params.set("employmentType", filters.employmentType)
+    if (filters.tenure) params.set("tenure", filters.tenure)
     if (filters.includeArchived) params.set("includeArchived", "true")
     return params.toString()
   }, [debouncedQuery, filters])
@@ -88,6 +101,17 @@ export function PeopleDirectory() {
   function clearFilters() {
     setQuery("")
     setFilters(initialFilters)
+    const params = new URLSearchParams(searchParams.toString())
+    params.delete("tenure")
+    router.replace(`/people${params.size ? `?${params.toString()}` : ""}`, { scroll: false })
+  }
+
+  function updateTenure(tenure: string) {
+    setFilters((current) => ({ ...current, tenure }))
+    const params = new URLSearchParams(searchParams.toString())
+    if (tenure) params.set("tenure", tenure)
+    else params.delete("tenure")
+    router.replace(`/people${params.size ? `?${params.toString()}` : ""}`, { scroll: false })
   }
 
   const closeDrawer = useCallback(() => {
@@ -138,11 +162,12 @@ export function PeopleDirectory() {
           </div>
 
           <motion.div initial={false} animate={{ height: showFilters ? "auto" : 0, opacity: showFilters ? 1 : 0 }} transition={{ duration: reduceMotion ? 0 : 0.2 }} className="overflow-hidden">
-            <div className="grid gap-3 pt-4 sm:grid-cols-2 xl:grid-cols-[1fr_1fr_1fr_1fr_auto]">
+            <div className="grid gap-3 pt-4 sm:grid-cols-2 xl:grid-cols-[1fr_1fr_1fr_1fr_1.35fr_auto]">
               <FilterSelect label="Department" value={filters.department} options={dimensions?.departments ?? []} allLabel="All departments" onChange={(department) => setFilters((current) => ({ ...current, department }))} />
               <FilterSelect label="Location" value={filters.location} options={dimensions?.locations ?? []} allLabel="All locations" onChange={(location) => setFilters((current) => ({ ...current, location }))} />
               <FilterSelect label="Status" value={filters.status} options={dimensions?.statuses ?? []} allLabel="All statuses" onChange={(status) => setFilters((current) => ({ ...current, status }))} />
               <FilterSelect label="Employment" value={filters.employmentType} options={dimensions?.employmentTypes ?? []} allLabel="All types" onChange={(employmentType) => setFilters((current) => ({ ...current, employmentType }))} />
+              <FilterSelect label="Tenure" value={filters.tenure} options={tenureOptions} allLabel="All tenure ranges" onChange={updateTenure} />
               <div className="flex items-end gap-2">
                 <button type="button" onClick={() => setFilters((current) => ({ ...current, includeArchived: !current.includeArchived }))} className={cn("flex h-10 items-center gap-2 rounded-xl border px-3 text-xs font-medium transition", filters.includeArchived ? "border-primary/30 bg-primary/10 text-primary" : "border-border bg-background text-muted-foreground hover:text-foreground")}><Archive className="size-3.5" />Archived</button>
                 {activeFilterCount > 0 && <Button type="button" variant="ghost" size="icon-lg" aria-label="Clear filters" onClick={clearFilters}><FilterX className="size-4" /></Button>}
@@ -156,8 +181,8 @@ export function PeopleDirectory() {
           {(debouncedQuery || activeFilterCount > 0) && <button type="button" onClick={clearFilters} className="text-xs font-semibold text-primary hover:underline">Reset view</button>}
         </div>
 
-        <div className="hidden grid-cols-[minmax(280px,1.5fr)_minmax(190px,1fr)_minmax(150px,.7fr)_130px_36px] gap-4 border-b border-border/60 px-5 py-2.5 text-[10px] font-semibold uppercase tracking-[0.14em] text-muted-foreground md:grid">
-          <span>Employee</span><span>Team</span><span>Location</span><span>Status</span><span />
+        <div className="hidden grid-cols-[minmax(250px,1.4fr)_minmax(170px,1fr)_minmax(130px,.7fr)_90px_120px_36px] gap-4 border-b border-border/60 px-5 py-2.5 text-[10px] font-semibold uppercase tracking-[0.14em] text-muted-foreground md:grid">
+          <span>Employee</span><span>Team</span><span>Location</span><span>Tenure</span><span>Status</span><span />
         </div>
 
         <div className="relative min-h-48">
@@ -192,14 +217,14 @@ function MiniStat({ value, label }: { value: number; label: string }) {
   return <div><p className="text-xl font-semibold tracking-tight tabular-nums">{value.toLocaleString()}</p><p className="text-[10px] font-semibold uppercase tracking-[0.13em] text-muted-foreground">{label}</p></div>
 }
 
-function FilterSelect({ label, value, options, allLabel, onChange }: { label: string; value: string; options: string[]; allLabel: string; onChange: (value: string) => void }) {
-  return <label className="block"><span className="mb-1.5 block text-[11px] font-semibold text-muted-foreground">{label}</span><select value={value} onChange={(event) => onChange(event.target.value)} className="h-10 w-full rounded-xl border border-border bg-background px-3 text-sm text-foreground outline-none transition focus:border-ring focus:ring-2 focus:ring-ring/20"><option value="">{allLabel}</option>{options.map((option) => <option key={option}>{option}</option>)}</select></label>
+function FilterSelect({ label, value, options, allLabel, onChange }: { label: string; value: string; options: Array<string | { value: string; label: string }>; allLabel: string; onChange: (value: string) => void }) {
+  return <label className="block"><span className="mb-1.5 block text-[11px] font-semibold text-muted-foreground">{label}</span><select value={value} onChange={(event) => onChange(event.target.value)} className="h-10 w-full rounded-xl border border-border bg-background px-3 text-sm text-foreground outline-none transition focus:border-ring focus:ring-2 focus:ring-ring/20"><option value="">{allLabel}</option>{options.map((option) => { const item = typeof option === "string" ? { value: option, label: option } : option; return <option key={item.value} value={item.value}>{item.label}</option> })}</select></label>
 }
 
 function PersonRow({ employee }: { employee: ManagedEmployee }) {
   return (
     <motion.div variants={{ hidden: { opacity: 0, y: 7 }, shown: { opacity: 1, y: 0 } }} transition={{ duration: 0.22 }}>
-      <Link href={`/people/${encodeURIComponent(employee.employee_id)}`} className={cn("group grid gap-3 border-b border-border/55 px-4 py-4 transition-colors last:border-b-0 hover:bg-primary/[0.035] sm:px-5 md:grid-cols-[minmax(280px,1.5fr)_minmax(190px,1fr)_minmax(150px,.7fr)_130px_36px] md:items-center md:gap-4", employee.archived_at && "opacity-65")}>
+      <Link href={`/people/${encodeURIComponent(employee.employee_id)}`} className={cn("group grid gap-3 border-b border-border/55 px-4 py-4 transition-colors last:border-b-0 hover:bg-primary/[0.035] sm:px-5 md:grid-cols-[minmax(250px,1.4fr)_minmax(170px,1fr)_minmax(130px,.7fr)_90px_120px_36px] md:items-center md:gap-4", employee.archived_at && "opacity-65")}>
         <div className="flex min-w-0 items-center gap-3.5">
           <PersonAvatar employeeId={employee.employee_id} initials={employee.initials} size="lg" />
           <div className="min-w-0 flex-1">
@@ -209,6 +234,7 @@ function PersonRow({ employee }: { employee: ManagedEmployee }) {
         </div>
         <div className="flex min-w-0 items-center gap-2 text-sm"><span className="flex size-7 shrink-0 items-center justify-center rounded-lg bg-muted text-muted-foreground"><Building2 className="size-3.5" /></span><span className="truncate">{employee.department}</span></div>
         <div className="flex min-w-0 items-center gap-2 text-sm text-muted-foreground"><MapPin className="size-3.5 shrink-0" /><span className="truncate">{employee.location}</span></div>
+        <span className="text-sm tabular-nums text-muted-foreground">{employee.tenure_years.toFixed(1)} yrs</span>
         <div className="flex items-center gap-2"><StatusPill status={employee.employment_status} />{employee.archived_at && <Archive className="size-3.5 text-muted-foreground" />}</div>
         <span className="hidden size-8 items-center justify-center rounded-lg text-muted-foreground transition-all group-hover:translate-x-0.5 group-hover:bg-primary/10 group-hover:text-primary md:flex"><ArrowUpRight className="size-4" /></span>
       </Link>

@@ -24,6 +24,7 @@ export async function GET(request: NextRequest) {
       location: params.get("location") ?? "",
       status: params.get("status") ?? "",
       employmentType: params.get("employmentType") ?? "",
+      tenure: params.get("tenure") ?? "",
       includeArchived: params.get("includeArchived") === "true",
       limit: Number(params.get("limit") ?? 100),
       offset: Number(params.get("offset") ?? 0),

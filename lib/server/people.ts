@@ -94,6 +94,7 @@ export async function listPeople({
   location = "",
   status = "",
   employmentType = "",
+  tenure = "",
   includeArchived = false,
   limit = 100,
   offset = 0,
@@ -103,6 +104,7 @@ export async function listPeople({
   location?: string
   status?: string
   employmentType?: string
+  tenure?: string
   includeArchived?: boolean
   limit?: number
   offset?: number
@@ -119,6 +121,11 @@ export async function listPeople({
   if (location) { where.push("e.location = ?"); bindings.push(location) }
   if (status) { where.push("e.employment_status = ?"); bindings.push(status) }
   if (employmentType) { where.push("e.employment_type = ?"); bindings.push(employmentType) }
+  if (tenure === "under1") where.push("e.tenure_years < 1")
+  if (tenure === "1to2") where.push("e.tenure_years >= 1 AND e.tenure_years < 3")
+  if (tenure === "3to4") where.push("e.tenure_years >= 3 AND e.tenure_years < 5")
+  if (tenure === "5plus") where.push("e.tenure_years >= 5")
+  if (tenure === "mobility") where.push("e.tenure_years >= 3 AND LOWER(e.employment_status) != 'terminated' AND NOT EXISTS (SELECT 1 FROM promotion_records p WHERE p.employee_id = e.employee_id)")
   const clause = where.length ? ` WHERE ${where.join(" AND ")}` : ""
   const safeLimit = Math.max(1, Math.min(250, limit))
   const safeOffset = Math.max(0, offset)
