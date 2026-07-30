@@ -151,8 +151,8 @@ export function TimeOffWorkspace({ canRequestLeave, reviewer }: { canRequestLeav
   if (!data) return <Card><CardContent className="p-6 text-sm text-destructive">{error || "Time-off data could not be loaded."}</CardContent></Card>
 
   const dataLabel = "Live records only"
-  const employees = new Map(data.employees.map((employee) => [employee.employee_id, employee]))
-  const people = new Map(data.employees.map((employee) => [employee.employee_id, `${employee.preferred_name || employee.first_name} ${employee.last_name}`.trim()]))
+  const employees = new Map(data.directoryEmployees.map((employee) => [employee.employee_id, employee]))
+  const people = new Map(data.directoryEmployees.map((employee) => [employee.employee_id, `${employee.preferred_name || employee.first_name} ${employee.last_name}`.trim()]))
   const pendingForReview = data.leave.rows.filter((row) => canSeePending(row, reviewer, employees))
   const canReviewLeave = ["admin", "hr", "manager"].includes(reviewer.role)
 

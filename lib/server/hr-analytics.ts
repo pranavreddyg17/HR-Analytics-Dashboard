@@ -118,9 +118,13 @@ export async function getWorkforceAnalytics(filters: HrFilters = {}): Promise<Wo
   const allTraining = trainingRows as unknown as TrainingRecord[]
   const allPromotions = promotionRows as unknown as PromotionRecord[]
   const employeeMap = new Map(allEmployees.map((employee) => [employee.employee_id, employee]))
+  const liveOnly = normalizedFilters.dataMode === "live"
+  const isIncluded = (record: { data_source: string }) => !liveOnly || record.data_source !== "demo"
 
-  const employees = allEmployees.filter((employee) => matchesEmployee(employee, normalizedFilters))
+  const directoryEmployees = allEmployees.filter((employee) => matchesEmployee(employee, normalizedFilters))
+  const employees = directoryEmployees.filter(isIncluded)
   const hiringByDimensions = allHiring.filter((record) => {
+    if (!isIncluded(record)) return false
     if (normalizedFilters.department && record.department !== normalizedFilters.department) return false
     if (normalizedFilters.jobTitle && record.position !== normalizedFilters.jobTitle) return false
     if (normalizedFilters.location && record.location !== normalizedFilters.location) return false
@@ -130,10 +134,10 @@ export async function getWorkforceAnalytics(filters: HrFilters = {}): Promise<Wo
   const completedHires = hiringByDimensions.filter((record) => record.recruitment_status.toLowerCase() === "hired" && record.hiring_date && inRange(record.hiring_date, normalizedFilters))
   const hiringIds = new Set([...requisitions, ...completedHires].map((record) => record.id))
   const hiring = hiringByDimensions.filter((record) => hiringIds.has(record.id))
-  const attrition = allAttrition.filter((record) => inRange(record.exit_date, normalizedFilters) && matchesEmployee(employeeMap.get(record.employee_id), normalizedFilters) && (!normalizedFilters.department || record.department === normalizedFilters.department))
-  const leave = allLeave.filter((record) => inRange(record.start_date, normalizedFilters) && matchesEmployee(employeeMap.get(record.employee_id), normalizedFilters) && (!normalizedFilters.department || record.department === normalizedFilters.department) && (!normalizedFilters.leaveType || record.leave_type === normalizedFilters.leaveType) && (normalizedFilters.dataMode !== "live" || record.data_source !== "demo"))
-  const training = allTraining.filter((record) => (!record.completion_date || inRange(record.completion_date, normalizedFilters)) && matchesEmployee(employeeMap.get(record.employee_id), normalizedFilters) && (!normalizedFilters.department || record.department === normalizedFilters.department) && (normalizedFilters.dataMode !== "live" || record.data_source !== "demo"))
-  const promotions = allPromotions.filter((record) => inRange(record.promotion_date, normalizedFilters) && matchesEmployee(employeeMap.get(record.employee_id), normalizedFilters) && (!normalizedFilters.department || record.department === normalizedFilters.department))
+  const attrition = allAttrition.filter((record) => isIncluded(record) && inRange(record.exit_date, normalizedFilters) && matchesEmployee(employeeMap.get(record.employee_id), normalizedFilters) && (!normalizedFilters.department || record.department === normalizedFilters.department))
+  const leave = allLeave.filter((record) => isIncluded(record) && inRange(record.start_date, normalizedFilters) && matchesEmployee(employeeMap.get(record.employee_id), normalizedFilters) && (!normalizedFilters.department || record.department === normalizedFilters.department) && (!normalizedFilters.leaveType || record.leave_type === normalizedFilters.leaveType))
+  const training = allTraining.filter((record) => isIncluded(record) && (!record.completion_date || inRange(record.completion_date, normalizedFilters)) && matchesEmployee(employeeMap.get(record.employee_id), normalizedFilters) && (!normalizedFilters.department || record.department === normalizedFilters.department))
+  const promotions = allPromotions.filter((record) => isIncluded(record) && inRange(record.promotion_date, normalizedFilters) && matchesEmployee(employeeMap.get(record.employee_id), normalizedFilters) && (!normalizedFilters.department || record.department === normalizedFilters.department))
 
   const hired = completedHires
   const activeHiring = requisitions.filter((record) => ["requested", "open", "offer"].includes(record.recruitment_status.toLowerCase()))
@@ -208,6 +212,7 @@ export async function getWorkforceAnalytics(filters: HrFilters = {}): Promise<Wo
       preboarding: employees.filter((record) => record.employment_status.toLowerCase() === "preboarding").length,
       terminated: employees.filter((record) => record.employment_status.toLowerCase() === "terminated").length,
       byDepartment: employeeByDepartment,
+      activeByDepartment: groupBy(activeEmployees, (record) => record.department),
       byJobTitle: groupBy(employees, (record) => record.job_title),
       byLocation: groupBy(employees, (record) => record.location),
       byStatus: groupBy(employees, (record) => record.employment_status),
@@ -280,6 +285,7 @@ export async function getWorkforceAnalytics(filters: HrFilters = {}): Promise<Wo
       rows: promotions.slice(0, 250),
     },
     employees: employees.slice(0, 500),
+    directoryEmployees: directoryEmployees.slice(0, 500),
     executiveInsights: insights.slice(0, 5),
   }
 }

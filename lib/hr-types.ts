@@ -131,6 +131,7 @@ export type WorkforceAnalytics = {
     preboarding: number
     terminated: number
     byDepartment: BreakdownPoint[]
+    activeByDepartment: BreakdownPoint[]
     byJobTitle: BreakdownPoint[]
     byLocation: BreakdownPoint[]
     byStatus: BreakdownPoint[]
@@ -203,6 +204,7 @@ export type WorkforceAnalytics = {
     rows: PromotionRecord[]
   }
   employees: EmployeeRecord[]
+  directoryEmployees: EmployeeRecord[]
   executiveInsights: string[]
 }
 
