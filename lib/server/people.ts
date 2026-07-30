@@ -258,10 +258,19 @@ export async function listInboxItems(actor?: RequestActor): Promise<InboxItem[]>
 
 export async function decideLeave(leaveId: string, decision: "Approved" | "Rejected", actor: RequestActor): Promise<void> {
   const database = await databaseOrThrow()
-  const leave = await database.prepare("SELECT * FROM leave_records WHERE id = ?").bind(leaveId).first<LeaveRecord>()
+  const leave = await database.prepare("SELECT l.*, e.work_email, e.manager_id FROM leave_records l LEFT JOIN employees e ON e.employee_id=l.employee_id WHERE l.id = ?")
+    .bind(leaveId).first<LeaveRecord & { work_email: string | null; manager_id: string | null }>()
   if (!leave) throw new PeopleError("Leave request not found.", 404)
+  if (leave.approval_status.toLowerCase() !== "pending") throw new PeopleError("This leave request has already been decided.", 409)
+  if (leave.work_email?.toLowerCase() === actor.email.toLowerCase()) throw new PeopleError("You cannot decide your own leave request.", 403)
+  if (actor.role === "manager") {
+    const manager = await database.prepare("SELECT employee_id FROM employees WHERE LOWER(work_email)=LOWER(?) AND archived_at IS NULL")
+      .bind(actor.email).first<{ employee_id: string }>()
+    if (!manager || leave.manager_id !== manager.employee_id) throw new PeopleError("Managers can only decide leave for their direct reports.", 403)
+  }
   await database.batch([
     database.prepare("UPDATE leave_records SET approval_status=?, updated_at=CURRENT_TIMESTAMP WHERE id=?").bind(decision, leaveId),
+    database.prepare("UPDATE workflow_requests SET status=?, resolved_by_email=?, resolved_at=CURRENT_TIMESTAMP, updated_at=CURRENT_TIMESTAMP WHERE id=? AND type='leave'").bind(decision, actor.email, leaveId),
     database.prepare("INSERT INTO employee_activity(id, employee_id, event_type, summary, changes_json, actor_email, created_at) VALUES (?, ?, 'leave_decision', ?, ?, ?, CURRENT_TIMESTAMP)")
       .bind(crypto.randomUUID(), leave.employee_id, `${actor.displayName} ${decision.toLowerCase()} a ${leave.leave_type} leave request`, JSON.stringify({ leaveId, from: leave.approval_status, to: decision }), actor.email),
   ])

@@ -12,5 +12,5 @@ export const metadata: Metadata = {
 export default async function TimeOffPage() {
   const actor = await requireRequestActor()
   const context = await getWorkflowActorContext(actor)
-  return <TimeOffWorkspace canRequestLeave={Boolean(context.employeeId || ["admin", "hr"].includes(actor.role))} canReviewLeave={["admin", "hr", "manager"].includes(actor.role)} />
+  return <TimeOffWorkspace canRequestLeave={Boolean(context.employeeId || ["admin", "hr"].includes(actor.role))} reviewer={{ role: actor.role, email: actor.email, employeeId: context.employeeId }} />
 }
