@@ -310,6 +310,52 @@ async function seedLeaveWorkflowExamplesOnce(database: Database): Promise<void> 
   await database.prepare("INSERT INTO workspace_settings(key, value, updated_at) VALUES ('leave_workflow_examples_v1', 'true', CURRENT_TIMESTAMP) ON CONFLICT(key) DO UPDATE SET value='true', updated_at=CURRENT_TIMESTAMP").run()
 }
 
+async function seedTrainingWorkflowExamplesOnce(database: Database): Promise<void> {
+  const initialized = await database.prepare("SELECT value FROM workspace_settings WHERE key = 'training_workflow_examples_v1'").first<{ value: string }>()
+  if (initialized) return
+
+  const result = await database.prepare("SELECT employee_id, department FROM employees WHERE archived_at IS NULL AND LOWER(employment_status) <> 'terminated' ORDER BY CASE WHEN LOWER(data_source) = 'demo' THEN 1 ELSE 0 END, employee_id LIMIT 18").all<LeaveExampleEmployee>()
+  const employees = result.results ?? []
+  if (!employees.length) return
+
+  const examples = [
+    { program: "Security awareness", due: -150, hours: 2, status: "Completed", completed: -146, score: 92 },
+    { program: "Data privacy essentials", due: -120, hours: 2, status: "Completed", completed: -122, score: 88 },
+    { program: "Inclusive leadership", due: -90, hours: 4, status: "Completed", completed: -92, score: 95 },
+    { program: "Manager essentials", due: -60, hours: 6, status: "Completed", completed: -64, score: 84 },
+    { program: "Workplace safety", due: -30, hours: 3, status: "Completed", completed: -31, score: 90 },
+    { program: "Data literacy", due: -14, hours: 5, status: "Completed", completed: -16, score: 87 },
+    { program: "Security & privacy essentials", due: -5, hours: 2, status: "Incomplete", completed: null, score: null },
+    { program: "Workplace safety refresher", due: 2, hours: 2, status: "Incomplete", completed: null, score: null },
+    { program: "Manager essentials", due: 10, hours: 5, status: "Incomplete", completed: null, score: null },
+    { program: "Inclusive leadership", due: 0, hours: 4, status: "Completed", completed: 0, score: 94 },
+    { program: "Data literacy", due: 21, hours: 6, status: "Incomplete", completed: null, score: null },
+    { program: "Phishing awareness", due: 7, hours: 1, status: "Incomplete", completed: null, score: null },
+  ] as const
+  const statements: Statement[] = []
+
+  examples.forEach((example, index) => {
+    const employee = employees[index % employees.length]
+    const id = `TRN-WORKFLOW-EXAMPLE-${String(index + 1).padStart(3, "0")}`
+    const dueDate = dateFromToday(example.due)
+    const completionDate = example.completed === null ? null : dateFromToday(example.completed)
+    const details = JSON.stringify({ program: example.program, dueDate, hours: example.hours, note: "", origin: "workspace_example" })
+    const completed = example.status === "Completed"
+
+    statements.push(
+      database.prepare("INSERT OR IGNORE INTO training_records(id, training_program, employee_id, completion_status, completion_date, training_hours, assessment_score, department, data_source, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'workflow', CURRENT_TIMESTAMP)")
+        .bind(id, example.program, employee.employee_id, example.status, completionDate, example.hours, example.score, employee.department),
+      database.prepare("INSERT OR IGNORE INTO workflow_requests(id, type, employee_id, title, status, details_json, requested_by_email, resolved_by_email, resolved_at, created_at, updated_at) VALUES (?, 'training', ?, ?, ?, ?, 'people-ops@laidbackhr.cloud', ?, ?, ?, CURRENT_TIMESTAMP)")
+        .bind(id, employee.employee_id, `${example.program} assignment`, completed ? "Completed" : "Assigned", details, completed ? "people-ops@laidbackhr.cloud" : null, completionDate, dateFromToday(example.due - 21)),
+      database.prepare("INSERT OR IGNORE INTO employee_activity(id, employee_id, event_type, summary, changes_json, actor_email, created_at) VALUES (?, ?, ?, ?, ?, 'people-ops@laidbackhr.cloud', ?)")
+        .bind(`ACT-${id}`, employee.employee_id, completed ? "training_completed" : "training_assigned", completed ? `Completed ${example.program}` : `Assigned ${example.program}`, details, completionDate ?? dateFromToday(example.due - 21)),
+    )
+  })
+
+  for (let index = 0; index < statements.length; index += 80) await database.batch(statements.slice(index, index + 80))
+  await database.prepare("INSERT INTO workspace_settings(key, value, updated_at) VALUES ('training_workflow_examples_v1', 'true', CURRENT_TIMESTAMP) ON CONFLICT(key) DO UPDATE SET value='true', updated_at=CURRENT_TIMESTAMP").run()
+}
+
 export async function ensureHrDatabase(): Promise<Database | null> {
   const database = getHrDatabase()
   if (!database) return null
@@ -324,6 +370,7 @@ export async function ensureHrDatabase(): Promise<Database | null> {
     await seedDemoOnce(database)
     await backfillDemoProfiles(database)
     await seedLeaveWorkflowExamplesOnce(database)
+    await seedTrainingWorkflowExamplesOnce(database)
     await database.prepare("INSERT OR IGNORE INTO app_users(email, display_name, role, status, invited_by) VALUES ('pranavreddyg17@gmail.com', 'Pranav Reddy', 'admin', 'active', 'system')").run()
   })()
   try {
@@ -415,6 +462,10 @@ export async function importHrData({
 export async function readDomainRows(domain: HrDomain): Promise<Array<Record<string, unknown>>> {
   const database = await ensureHrDatabase()
   if (!database) return generateDemoDataset()[domain]
+  if (domain === "training") {
+    const result = await database.prepare("SELECT t.*, json_extract(w.details_json, '$.dueDate') AS due_date, w.requested_by_email, w.created_at AS assigned_at FROM training_records t LEFT JOIN workflow_requests w ON w.id=t.id AND w.type='training' ORDER BY t.updated_at DESC LIMIT 10000").all<Record<string, unknown>>()
+    return result.results ?? []
+  }
   const result = await database.prepare(`SELECT * FROM ${tableByDomain[domain]} ORDER BY updated_at DESC LIMIT 10000`).all<Record<string, unknown>>()
   return result.results ?? []
 }

@@ -114,7 +114,7 @@ function Field({ label, children }: { label: string; children: React.ReactNode }
   return <label className="block"><span className="mb-1.5 block text-xs font-semibold">{label}</span>{children}</label>
 }
 
-function SelectEmployee({ value, people, onChange }: { value: string; people: ManagedEmployee[]; onChange: (value: string) => void }) {
+export function SelectEmployee({ value, people, onChange }: { value: string; people: ManagedEmployee[]; onChange: (value: string) => void }) {
   const [open, setOpen] = useState(false)
   const [query, setQuery] = useState("")
   const selected = people.find((person) => person.employee_id === value)

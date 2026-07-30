@@ -14,6 +14,7 @@ export default async function InsightsPage({ searchParams }: { searchParams: Pro
   const params = await searchParams
   if (params.view === "hiring") redirect("/hiring")
   if (params.view === "leave") redirect("/time-off")
+  if (params.view === "training") redirect("/learning")
   const requested = params.view as AnalyticsView | undefined
   const view = requested && validViews.has(requested) ? requested : "executive"
 

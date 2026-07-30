@@ -18,7 +18,7 @@ const pageMeta: Record<string, { title: string; subtitle: string }> = {
   "/ai-agents": { title: "AI copilot", subtitle: "Grounded analysis across workforce data" },
   "/data": { title: "Data hub", subtitle: "Imports, integrations, and data readiness" },
   "/access": { title: "Access", subtitle: "Google sign-in, roles, and workspace membership" },
-  "/learning": { title: "Data & model", subtitle: "Model provenance, quality, and limitations" },
+  "/learning": { title: "Learning", subtitle: "Assignments, compliance, progress, and development" },
   "/employees": { title: "People", subtitle: "Directory, profiles, and employee records" },
   "/risk-review": { title: "Model review", subtitle: "Historical scored records for responsible audit" },
 }

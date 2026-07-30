@@ -86,6 +86,9 @@ export type TrainingRecord = {
   assessment_score: number | null
   department: string
   data_source: string
+  due_date?: string | null
+  requested_by_email?: string | null
+  assigned_at?: string | null
 }
 
 export type PromotionRecord = {
