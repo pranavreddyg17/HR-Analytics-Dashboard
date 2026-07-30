@@ -40,7 +40,7 @@ const groupOrder: InboxItem["type"][] = ["leave", "hiring", "training", "review"
 
 const groupMeta: Record<InboxItem["type"], { title: string; description: string; icon: typeof Inbox; iconClass: string; href: string }> = {
   leave: { title: "Leave requests", description: "Review upcoming time away", icon: CalendarCheck2, iconClass: "bg-rose-100 text-rose-700 dark:bg-rose-900/30 dark:text-rose-300", href: "/insights?view=leave" },
-  hiring: { title: "Hiring follow-ups", description: "Open roles and offers in motion", icon: BriefcaseBusiness, iconClass: "bg-sky-100 text-sky-700 dark:bg-sky-900/30 dark:text-sky-300", href: "/insights?view=hiring" },
+  hiring: { title: "Hiring follow-ups", description: "Open roles and offers in motion", icon: BriefcaseBusiness, iconClass: "bg-sky-100 text-sky-700 dark:bg-sky-900/30 dark:text-sky-300", href: "/hiring" },
   training: { title: "Training & compliance", description: "Mandatory assignments needing attention", icon: GraduationCap, iconClass: "bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-300", href: "/insights?view=training" },
   review: { title: "Human review", description: "AI work waiting for a decision", icon: Sparkles, iconClass: "bg-violet-100 text-violet-700 dark:bg-violet-900/30 dark:text-violet-300", href: "/ai-agents" },
 }
@@ -208,7 +208,7 @@ export function InboxClient({ initialItems, actor, people }: { initialItems: Inb
         </div>
       </motion.header>
 
-      <WorkflowCreator actor={actor} people={people} onCreated={(message) => void refreshInbox(message)} />
+      <WorkflowCreator actor={actor} people={people} initialType={searchParams.get("new") === "hiring" ? "hiring" : undefined} onCreated={(message) => void refreshInbox(message)} />
 
       <div className="flex gap-1 overflow-x-auto rounded-2xl border border-border/70 bg-card p-1.5 shadow-sm" role="tablist" aria-label="Inbox filters">
         {filterOptions.map((option) => (

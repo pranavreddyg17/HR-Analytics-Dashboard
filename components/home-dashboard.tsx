@@ -251,7 +251,7 @@ export function HomeDashboard({ analytics, inbox, people }: HomeDashboardProps) 
         </div>
         <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
           <Metric label="Active employees" value={compactNumber.format(analytics.kpis.activeEmployees)} detail={`${analytics.employeeAnalytics.onLeave} currently on leave`} icon={Users} tone="bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-300" href="/insights?view=employees" />
-          <Metric label="Hiring velocity" value={`${percent.format(analytics.kpis.averageTimeToHire)}d`} detail={`${analytics.kpis.hires} completed hires`} icon={Clock3} tone="bg-sky-100 text-sky-700 dark:bg-sky-900/30 dark:text-sky-300" href="/insights?view=hiring" />
+          <Metric label="Hiring velocity" value={`${percent.format(analytics.kpis.averageTimeToHire)}d`} detail={`${analytics.kpis.hires} completed hires`} icon={Clock3} tone="bg-sky-100 text-sky-700 dark:bg-sky-900/30 dark:text-sky-300" href="/hiring" />
           <Metric label="Training complete" value={`${percent.format(analytics.kpis.trainingCompletionRate)}%`} detail={`${incompleteTraining} mandatory follow-ups`} icon={GraduationCap} tone="bg-violet-100 text-violet-700 dark:bg-violet-900/30 dark:text-violet-300" href="/insights?view=training" />
           <Metric label="Attrition rate" value={`${percent.format(analytics.kpis.attritionRate)}%`} detail={`${analytics.attrition.totalExits} recorded exits`} icon={TrendingDown} tone="bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-300" href="/insights?view=attrition" />
         </div>

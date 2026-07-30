@@ -49,7 +49,7 @@ export const navigationGroups: Array<{ label: string; items: NavigationItem[] }>
   {
     label: "Workflows",
     items: [
-      { href: "/insights?view=hiring", label: "Hiring", icon: BriefcaseBusiness, view: "hiring" },
+      { href: "/hiring", label: "Hiring", icon: BriefcaseBusiness },
       { href: "/insights?view=leave", label: "Time off", icon: Umbrella, view: "leave" },
       { href: "/insights?view=training", label: "Learning", icon: GraduationCap, view: "training" },
     ],

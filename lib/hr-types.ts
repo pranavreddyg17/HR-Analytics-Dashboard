@@ -136,11 +136,17 @@ export type WorkforceAnalytics = {
   }
   hiring: {
     totalHired: number
+    activeRequisitions: number
+    offers: number
     averageTimeToHire: number
     trend: TimePoint[]
+    requisitionTrend: TimePoint[]
     byDepartment: BreakdownPoint[]
+    pipelineByDepartment: BreakdownPoint[]
     byRole: BreakdownPoint[]
     bySource: BreakdownPoint[]
+    byLocation: BreakdownPoint[]
+    sourceStats: Array<{ label: string; hires: number; averageDays: number }>
     statuses: BreakdownPoint[]
     rows: HiringRecord[]
   }

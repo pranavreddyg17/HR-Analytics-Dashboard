@@ -87,7 +87,9 @@ async function getDomainStatus(rowsByDomain: Record<HrDomain, Array<Record<strin
   return hrDomains.map((domain) => {
     const rows = rowsByDomain[domain]
     const sources = new Set(rows.map((row) => String(row.data_source ?? "demo")))
-    const mode = rows.length === 0 ? "empty" : sources.size > 1 ? "mixed" : sources.has("imported") ? "imported" : "demo"
+    const hasDemo = sources.has("demo")
+    const hasLive = [...sources].some((source) => source !== "demo")
+    const mode = rows.length === 0 ? "empty" : hasDemo && hasLive ? "mixed" : hasLive ? "imported" : "demo"
     return { domain, count: rows.length, mode, lastImport: latest.get(domain) ?? null }
   })
 }
@@ -112,19 +114,23 @@ export async function getWorkforceAnalytics(filters: HrFilters = {}): Promise<Wo
   const employeeMap = new Map(allEmployees.map((employee) => [employee.employee_id, employee]))
 
   const employees = allEmployees.filter((employee) => matchesEmployee(employee, normalizedFilters))
-  const hiring = allHiring.filter((record) => {
-    if (!inRange(record.hiring_date ?? record.application_date, normalizedFilters)) return false
+  const hiringByDimensions = allHiring.filter((record) => {
     if (normalizedFilters.department && record.department !== normalizedFilters.department) return false
     if (normalizedFilters.jobTitle && record.position !== normalizedFilters.jobTitle) return false
     if (normalizedFilters.location && record.location !== normalizedFilters.location) return false
     return true
   })
+  const requisitions = hiringByDimensions.filter((record) => inRange(record.application_date, normalizedFilters))
+  const completedHires = hiringByDimensions.filter((record) => record.recruitment_status.toLowerCase() === "hired" && record.hiring_date && inRange(record.hiring_date, normalizedFilters))
+  const hiringIds = new Set([...requisitions, ...completedHires].map((record) => record.id))
+  const hiring = hiringByDimensions.filter((record) => hiringIds.has(record.id))
   const attrition = allAttrition.filter((record) => inRange(record.exit_date, normalizedFilters) && matchesEmployee(employeeMap.get(record.employee_id), normalizedFilters) && (!normalizedFilters.department || record.department === normalizedFilters.department))
   const leave = allLeave.filter((record) => inRange(record.start_date, normalizedFilters) && matchesEmployee(employeeMap.get(record.employee_id), normalizedFilters) && (!normalizedFilters.department || record.department === normalizedFilters.department))
   const training = allTraining.filter((record) => (!record.completion_date || inRange(record.completion_date, normalizedFilters)) && matchesEmployee(employeeMap.get(record.employee_id), normalizedFilters) && (!normalizedFilters.department || record.department === normalizedFilters.department))
   const promotions = allPromotions.filter((record) => inRange(record.promotion_date, normalizedFilters) && matchesEmployee(employeeMap.get(record.employee_id), normalizedFilters) && (!normalizedFilters.department || record.department === normalizedFilters.department))
 
-  const hired = hiring.filter((record) => record.recruitment_status.toLowerCase() === "hired" && record.hiring_date)
+  const hired = completedHires
+  const activeHiring = requisitions.filter((record) => ["requested", "open", "offer"].includes(record.recruitment_status.toLowerCase()))
   const approvedLeave = leave.filter((record) => record.approval_status.toLowerCase() === "approved")
   const completedTraining = training.filter((record) => record.completion_status.toLowerCase() === "completed")
   const activeEmployees = employees.filter((employee) => employee.employment_status.toLowerCase() !== "terminated")
@@ -138,6 +144,10 @@ export async function getWorkforceAnalytics(filters: HrFilters = {}): Promise<Wo
     .map((employee) => ({ id: employee.id, department: employee.department, role: employee.role, riskScore: employee.riskScore, topDriver: employee.topDriver }))
 
   const hiringBySource = groupBy(hired, (record) => record.hiring_source)
+  const sourceStats = hiringBySource.map((source) => {
+    const sourceHires = hired.filter((record) => record.hiring_source === source.label)
+    return { label: source.label, hires: sourceHires.length, averageDays: average(sourceHires.map((record) => record.time_to_hire_days)) }
+  })
   const attritionByDepartment = groupBy(attrition, (record) => record.department)
   const leaveByDepartment = groupBy(approvedLeave, (record) => record.department, (record) => record.leave_days)
   const trainingByDepartment = groupBy(training, (record) => record.department, (record) => record.training_hours)
@@ -198,11 +208,17 @@ export async function getWorkforceAnalytics(filters: HrFilters = {}): Promise<Wo
     },
     hiring: {
       totalHired: hired.length,
+      activeRequisitions: activeHiring.length,
+      offers: activeHiring.filter((record) => record.recruitment_status.toLowerCase() === "offer").length,
       averageTimeToHire: average(hired.map((record) => record.time_to_hire_days)),
       trend: trend(hired, (record) => record.hiring_date, normalizedFilters.period),
+      requisitionTrend: trend(requisitions, (record) => record.application_date, normalizedFilters.period),
       byDepartment: groupBy(hired, (record) => record.department),
+      pipelineByDepartment: groupBy(activeHiring, (record) => record.department),
       byRole: groupBy(hired, (record) => record.position),
       bySource: hiringBySource,
+      byLocation: groupBy(hiring, (record) => record.location),
+      sourceStats,
       statuses: groupBy(hiring, (record) => record.recruitment_status),
       rows: hiring.slice(0, 250),
     },

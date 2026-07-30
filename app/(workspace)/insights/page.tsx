@@ -1,4 +1,5 @@
 import type { Metadata } from "next"
+import { redirect } from "next/navigation"
 
 import { type AnalyticsView, WorkforceDashboard } from "@/components/workforce-dashboard"
 
@@ -11,6 +12,7 @@ const validViews = new Set<AnalyticsView>(["executive", "employees", "hiring", "
 
 export default async function InsightsPage({ searchParams }: { searchParams: Promise<{ view?: string }> }) {
   const params = await searchParams
+  if (params.view === "hiring") redirect("/hiring")
   const requested = params.view as AnalyticsView | undefined
   const view = requested && validViews.has(requested) ? requested : "executive"
 

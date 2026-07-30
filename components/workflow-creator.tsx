@@ -12,8 +12,8 @@ const inputClass = "h-10 w-full rounded-xl border border-border bg-background px
 const textareaClass = "min-h-24 w-full resize-y rounded-xl border border-border bg-background px-3 py-2.5 text-sm outline-none focus:border-ring focus:ring-2 focus:ring-ring/20"
 const today = () => new Date().toISOString().slice(0, 10)
 
-export function WorkflowCreator({ actor, people, onCreated }: { actor: WorkflowActorContext; people: ManagedEmployee[]; onCreated: (message: string) => void }) {
-  const [type, setType] = useState<WorkflowType | null>(null)
+export function WorkflowCreator({ actor, people, initialType, onCreated }: { actor: WorkflowActorContext; people: ManagedEmployee[]; initialType?: WorkflowType; onCreated: (message: string) => void }) {
+  const [type, setType] = useState<WorkflowType | null>(initialType ?? null)
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState("")
   const [leave, setLeave] = useState({ employeeId: actor.employeeId ?? people[0]?.employee_id ?? "", leaveType: "Annual", startDate: today(), endDate: today(), note: "" })
