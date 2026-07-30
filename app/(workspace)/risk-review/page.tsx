@@ -4,7 +4,7 @@ import { getEmployees } from "@/lib/server/runtime"
 export const dynamic = "force-dynamic"
 
 export default function RiskReviewPage() {
-  const response = getEmployees({ limit: 100 })
+  const response = getEmployees({ limit: 2000 })
   return <div className="space-y-6">
     <div>
       <p className="eyebrow">Historical model governance</p>

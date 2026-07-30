@@ -1,13 +1,12 @@
 "use client"
 
 import { useMemo, useState } from "react"
-import { Search, ShieldCheck, ChevronDown, DollarSign, Database, Loader2 } from "lucide-react"
+import { Search, ShieldCheck, ChevronDown, DollarSign, Database } from "lucide-react"
 
 import { Card, CardHeader, CardTitle, CardContent, CardDescription } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { RiskBadge } from "@/components/risk-badge"
-import { apiBaseUrl } from "@/lib/api"
 import { cn } from "@/lib/utils"
 import type { Employee, RiskLevel } from "@/lib/types"
 
@@ -22,16 +21,22 @@ function riskBarColor(level: RiskLevel) {
   return level === "high" ? "var(--chart-3)" : level === "medium" ? "var(--chart-2)" : "var(--chart-1)"
 }
 
+const pageSize = 50
+
 export function EmployeesClient({ employees, total }: { employees: Employee[]; total: number }) {
-  const [records, setRecords] = useState(employees)
   const [query, setQuery] = useState("")
   const [filter, setFilter] = useState<RiskLevel | "all">("all")
-  const [openId, setOpenId] = useState<string | null>(employees[0]?.id ?? null)
-  const [loadingMore, setLoadingMore] = useState(false)
-  const [loadError, setLoadError] = useState<string | null>(null)
+  const [openId, setOpenId] = useState<string | null>(null)
+  const [page, setPage] = useState(1)
 
-  const rows = useMemo(() => {
-    return records
+  const counts = useMemo(() => employees.reduce<Record<RiskLevel | "all", number>>((result, employee) => {
+    result.all += 1
+    result[employee.riskLevel] += 1
+    return result
+  }, { all: 0, high: 0, medium: 0, low: 0 }), [employees])
+
+  const filteredRows = useMemo(() => {
+    return employees
       .filter((employee) => (filter === "all" ? true : employee.riskLevel === filter))
       .filter((employee) =>
         query
@@ -39,22 +44,13 @@ export function EmployeesClient({ employees, total }: { employees: Employee[]; t
           : true,
       )
       .sort((a, b) => b.riskScore - a.riskScore)
-  }, [records, query, filter])
+  }, [employees, query, filter])
 
-  async function loadMore() {
-    setLoadingMore(true)
-    setLoadError(null)
-    try {
-      const response = await fetch(`${apiBaseUrl}/api/v1/employees?limit=250&offset=${records.length}`)
-      if (!response.ok) throw new Error(`Could not load records (${response.status})`)
-      const body = await response.json() as { items: Employee[] }
-      setRecords((current) => [...current, ...body.items])
-    } catch (caught) {
-      setLoadError(caught instanceof Error ? caught.message : "Could not load more records.")
-    } finally {
-      setLoadingMore(false)
-    }
-  }
+  const totalPages = Math.max(1, Math.ceil(filteredRows.length / pageSize))
+  const currentPage = Math.min(page, totalPages)
+  const rows = filteredRows.slice((currentPage - 1) * pageSize, currentPage * pageSize)
+  const firstVisible = filteredRows.length ? (currentPage - 1) * pageSize + 1 : 0
+  const lastVisible = Math.min(currentPage * pageSize, filteredRows.length)
 
   return (
     <div className="flex flex-col gap-5">
@@ -70,7 +66,7 @@ export function EmployeesClient({ employees, total }: { employees: Employee[]; t
           <div>
             <CardTitle>Model-scored records</CardTitle>
             <CardDescription>
-              {rows.length.toLocaleString()} matching · {records.length.toLocaleString()} of {total.toLocaleString()} records loaded
+              {filteredRows.length.toLocaleString()} matching · all {total.toLocaleString()} scored records available
             </CardDescription>
           </div>
           <div className="flex flex-1 flex-col gap-2 sm:flex-row sm:items-center sm:justify-end">
@@ -78,8 +74,8 @@ export function EmployeesClient({ employees, total }: { employees: Employee[]; t
               <Search className="absolute left-2.5 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
               <Input
                 value={query}
-                onChange={(event) => setQuery(event.target.value)}
-                placeholder="Search ID or department..."
+                onChange={(event) => { setQuery(event.target.value); setPage(1); setOpenId(null) }}
+                placeholder="Search ID, role, or department..."
                 className="h-9 bg-background pl-8 sm:w-64"
               />
             </div>
@@ -87,7 +83,7 @@ export function EmployeesClient({ employees, total }: { employees: Employee[]; t
               {filters.map((item) => (
                 <button
                   key={item.key}
-                  onClick={() => setFilter(item.key)}
+                  onClick={() => { setFilter(item.key); setPage(1); setOpenId(null) }}
                   className={cn(
                     "rounded-md px-2.5 py-1 text-xs font-medium transition-colors",
                     filter === item.key
@@ -95,7 +91,7 @@ export function EmployeesClient({ employees, total }: { employees: Employee[]; t
                       : "text-muted-foreground hover:text-foreground",
                   )}
                 >
-                  {item.label}
+                  {item.label} <span className="ml-1 tabular-nums opacity-70">{counts[item.key].toLocaleString()}</span>
                 </button>
               ))}
             </div>
@@ -179,13 +175,20 @@ export function EmployeesClient({ employees, total }: { employees: Employee[]; t
           {rows.length === 0 && (
             <p className="py-10 text-center text-sm text-muted-foreground">No records match your filters.</p>
           )}
-          {records.length < total && (
-            <div className="flex flex-col items-center gap-2 pt-2">
-              <Button variant="outline" disabled={loadingMore} onClick={() => void loadMore()}>
-                {loadingMore && <Loader2 className="size-4 animate-spin" />}
-                Load more records
-              </Button>
-              {loadError && <p role="alert" className="text-sm text-destructive">{loadError}</p>}
+          {filteredRows.length > 0 && (
+            <div className="flex flex-col gap-3 border-t border-border pt-4 sm:flex-row sm:items-center sm:justify-between">
+              <p className="text-xs text-muted-foreground">
+                Showing {firstVisible.toLocaleString()}–{lastVisible.toLocaleString()} of {filteredRows.length.toLocaleString()} matching records
+              </p>
+              <div className="flex items-center gap-2">
+                <Button variant="outline" size="sm" disabled={currentPage === 1} onClick={() => { setPage((value) => Math.max(1, value - 1)); setOpenId(null) }}>
+                  Previous
+                </Button>
+                <span className="min-w-20 text-center text-xs tabular-nums text-muted-foreground">Page {currentPage} of {totalPages}</span>
+                <Button variant="outline" size="sm" disabled={currentPage === totalPages} onClick={() => { setPage((value) => Math.min(totalPages, value + 1)); setOpenId(null) }}>
+                  Next
+                </Button>
+              </div>
             </div>
           )}
         </CardContent>
