@@ -23,7 +23,6 @@ import {
   LoaderCircle,
   Plus,
   Search,
-  Sparkles,
   Umbrella,
   Users,
   X,
@@ -98,42 +97,6 @@ function canDecide(row: LeaveRecord, reviewer: Reviewer, employees: Map<string, 
   if (employee?.work_email?.toLowerCase() === reviewer.email.toLowerCase()) return false
   if (["admin", "hr"].includes(reviewer.role)) return true
   return reviewer.role === "manager" && Boolean(reviewer.employeeId && employee?.manager_id === reviewer.employeeId)
-}
-
-const presentationTrend: TimePoint[] = [
-  { period: "Jul", value: 18 }, { period: "Aug", value: 27 }, { period: "Sep", value: 21 },
-  { period: "Oct", value: 31 }, { period: "Nov", value: 24 }, { period: "Dec", value: 36 },
-]
-
-const presentationTypes: BreakdownPoint[] = [
-  { label: "Annual", value: 52 }, { label: "Sick", value: 24 }, { label: "Personal", value: 18 }, { label: "Caregiver", value: 12 },
-]
-
-type PresentationPerson = { name: string; detail: string; timing: string }
-
-const presentationAway: PresentationPerson[] = [
-  { name: "Maya Patel", detail: "Annual leave · Product", timing: "Returns Jul 31" },
-  { name: "Noah Williams", detail: "Personal leave · Sales", timing: "Returns Aug 1" },
-]
-
-const presentationUpcoming: PresentationPerson[] = [
-  { name: "Elena Garcia", detail: "Annual leave · Engineering", timing: "Aug 3–7" },
-  { name: "Theo Martin", detail: "Caregiver leave · Finance", timing: "Aug 6–8" },
-  { name: "Priya Singh", detail: "Annual leave · People", timing: "Aug 10–14" },
-]
-
-function PresentationList({ rows }: { rows: PresentationPerson[] }) {
-  return <div className="space-y-2">{rows.map((row) => <div key={row.name} className="flex items-center gap-3 rounded-xl border border-amber-200/60 bg-background/80 p-3 dark:border-amber-900/40"><span className="flex size-9 shrink-0 items-center justify-center rounded-xl bg-amber-100 text-[10px] font-bold text-amber-700 dark:bg-amber-900/40 dark:text-amber-300">DEMO</span><div className="min-w-0 flex-1"><p className="truncate text-sm font-semibold">{row.name}</p><p className="truncate text-[10px] text-muted-foreground">{row.detail}</p></div><span className="text-[10px] font-medium text-muted-foreground">{row.timing}</span></div>)}</div>
-}
-
-function PresentationPreview() {
-  return (
-    <section className="overflow-hidden rounded-2xl border border-amber-300/70 bg-amber-50/60 shadow-sm dark:border-amber-900/50 dark:bg-amber-950/10" aria-labelledby="presentation-preview-title">
-      <div className="flex flex-col gap-3 border-b border-amber-200/70 px-5 py-4 dark:border-amber-900/40 sm:flex-row sm:items-center"><span className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-300"><Sparkles className="size-4"/></span><div className="flex-1"><div className="flex flex-wrap items-center gap-2"><h2 id="presentation-preview-title" className="text-sm font-bold">Presentation preview</h2><span className="rounded-full bg-amber-200/70 px-2 py-0.5 text-[9px] font-bold uppercase tracking-wide text-amber-800 dark:bg-amber-900/50 dark:text-amber-200">Sample only</span></div><p className="mt-0.5 text-xs text-muted-foreground">Read-only examples for product demonstrations. They are not stored in D1 and never enter approvals, KPIs, exports, or employee history.</p></div>
-      </div>
-      <div className="grid gap-4 p-4 xl:grid-cols-2"><Card className="border-amber-200/60 bg-background/80 dark:border-amber-900/40"><CardHeader><CardTitle>Who’s away</CardTitle><CardDescription>Example team coverage for today</CardDescription></CardHeader><CardContent><PresentationList rows={presentationAway}/></CardContent></Card><Card className="border-amber-200/60 bg-background/80 dark:border-amber-900/40"><CardHeader><CardTitle>Coming up</CardTitle><CardDescription>Example upcoming absences</CardDescription></CardHeader><CardContent><PresentationList rows={presentationUpcoming}/></CardContent></Card><Card className="border-amber-200/60 bg-background/80 dark:border-amber-900/40"><CardHeader><CardTitle>Example leave trend</CardTitle><CardDescription>Illustrative monthly days—not company data</CardDescription></CardHeader><CardContent><TrendChart data={presentationTrend}/></CardContent></Card><Card className="border-amber-200/60 bg-background/80 dark:border-amber-900/40"><CardHeader><CardTitle>Example leave mix</CardTitle><CardDescription>Illustrative categories—not company data</CardDescription></CardHeader><CardContent><BreakdownChart data={presentationTypes} name="Days"/></CardContent></Card></div>
-    </section>
-  )
 }
 
 function canSeePending(row: LeaveRecord, reviewer: Reviewer, employees: Map<string, EmployeeRecord>): boolean {
@@ -222,10 +185,6 @@ export function TimeOffWorkspace({ canRequestLeave, reviewer }: { canRequestLeav
 
     {canReviewLeave && <ReviewQueue rows={pendingForReview} people={people} reviewer={reviewer} employees={employees} busyId={busyId} onDecision={(row, decision) => void decide(row, decision)}/>}
 
-    <PresentationPreview />
-
-    <div className="px-0.5"><p className="text-[10px] font-bold uppercase tracking-[0.14em] text-primary">Live workspace</p><h2 className="mt-1 text-lg font-bold tracking-[-0.025em]">Actual schedules and analytics</h2><p className="mt-1 text-xs text-muted-foreground">Everything below is generated only from imported records and real workflows.</p></div>
-
     <div className="grid gap-4 xl:grid-cols-2"><LeaveSchedule title="Away today" description="Approved leave overlapping today" emptyMessage="No employees are on approved leave today." rows={data.leave.currentlyAway} people={people}/><LeaveSchedule title="Coming up" description="Approved and pending leave starting today or later" emptyMessage="No upcoming leave has been recorded yet." rows={data.leave.upcoming} people={people}/></div>
 
     <Card className="gap-4 border-0 shadow-sm ring-1 ring-foreground/8"><CardHeader><CardTitle>Request decisions</CardTitle><CardDescription>Current distribution across the filtered leave register</CardDescription></CardHeader><CardContent><RequestStatus data={data.leave.statuses}/></CardContent></Card>
@@ -236,7 +195,7 @@ export function TimeOffWorkspace({ canRequestLeave, reviewer }: { canRequestLeav
 
     <LeaveTable rows={data.leave.rows} people={people} reviewer={reviewer} employees={employees} busyId={busyId} onDecision={(row, decision) => void decide(row, decision)}/>
 
-    <div className="flex flex-col gap-3 rounded-2xl border border-border/70 bg-muted/25 p-4 text-xs text-muted-foreground sm:flex-row sm:items-center"><Database className="size-4 shrink-0 text-primary"/><p className="flex-1">Operational metrics always exclude presentation samples. The preview above is static, read-only, and isolated from D1 and workflow actions.</p><Link href="/data" className="inline-flex items-center gap-1 font-semibold text-foreground hover:text-primary">Manage leave data <ArrowRight className="size-3.5"/></Link></div>
+    <div className="flex flex-col gap-3 rounded-2xl border border-border/70 bg-muted/25 p-4 text-xs text-muted-foreground sm:flex-row sm:items-center"><Database className="size-4 shrink-0 text-primary"/><p className="flex-1">Schedules, decisions, charts, and totals are calculated from the same persisted leave records. New requests and approval decisions update this workspace automatically.</p><Link href="/data" className="inline-flex items-center gap-1 font-semibold text-foreground hover:text-primary">Manage leave data <ArrowRight className="size-3.5"/></Link></div>
   </div>
 }
 

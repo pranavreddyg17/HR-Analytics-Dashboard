@@ -96,7 +96,7 @@ export async function createWorkflow(value: unknown, actor: RequestActor) {
   if (input.type === "leave") {
     const employee = await chosenEmployee(db, actor, input.employeeId)
     const days = inclusiveDays(input.startDate, input.endDate)
-    const overlap = await db.prepare("SELECT id FROM leave_records WHERE employee_id=? AND LOWER(approval_status) IN ('pending','approved') AND start_date <= ? AND end_date >= ?")
+    const overlap = await db.prepare("SELECT id FROM leave_records WHERE employee_id=? AND LOWER(data_source) <> 'demo' AND LOWER(approval_status) IN ('pending','approved') AND start_date <= ? AND end_date >= ?")
       .bind(employee.employee_id, input.endDate, input.startDate).first<{ id: string }>()
     if (overlap) throw new PeopleError("This employee already has a pending or approved leave request for those dates.", 409)
     const title = `${input.leaveType} leave request`

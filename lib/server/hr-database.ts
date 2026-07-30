@@ -252,6 +252,64 @@ async function backfillDemoProfiles(database: Database): Promise<void> {
   for (let index = 0; index < statements.length; index += 80) await database.batch(statements.slice(index, index + 80))
 }
 
+type LeaveExampleEmployee = { employee_id: string; department: string }
+
+function dateFromToday(offsetDays: number): string {
+  const date = new Date()
+  date.setUTCHours(12, 0, 0, 0)
+  date.setUTCDate(date.getUTCDate() + offsetDays)
+  return date.toISOString().slice(0, 10)
+}
+
+async function seedLeaveWorkflowExamplesOnce(database: Database): Promise<void> {
+  const initialized = await database.prepare("SELECT value FROM workspace_settings WHERE key = 'leave_workflow_examples_v1'").first<{ value: string }>()
+  if (initialized) return
+
+  const result = await database.prepare("SELECT employee_id, department FROM employees WHERE archived_at IS NULL AND LOWER(employment_status) <> 'terminated' ORDER BY CASE WHEN LOWER(data_source) = 'demo' THEN 1 ELSE 0 END, employee_id LIMIT 18").all<LeaveExampleEmployee>()
+  const employees = result.results ?? []
+  if (!employees.length) return
+
+  const examples = [
+    { type: "Annual", start: -150, days: 3, status: "Approved" },
+    { type: "Sick", start: -120, days: 2, status: "Approved" },
+    { type: "Personal", start: -90, days: 1, status: "Approved" },
+    { type: "Annual", start: -60, days: 5, status: "Approved" },
+    { type: "Caregiver", start: -30, days: 3, status: "Approved" },
+    { type: "Sick", start: -14, days: 2, status: "Approved" },
+    { type: "Annual", start: -1, days: 4, status: "Approved" },
+    { type: "Personal", start: 0, days: 1, status: "Approved" },
+    { type: "Annual", start: 7, days: 5, status: "Approved" },
+    { type: "Caregiver", start: 15, days: 3, status: "Pending" },
+    { type: "Annual", start: 24, days: 4, status: "Pending" },
+    { type: "Sick", start: 35, days: 2, status: "Pending" },
+    { type: "Parental", start: 45, days: 10, status: "Approved" },
+    { type: "Annual", start: 60, days: 5, status: "Pending" },
+  ] as const
+  const statements: Statement[] = []
+
+  examples.forEach((example, index) => {
+    const employee = employees[index % employees.length]
+    const id = `LEV-WORKFLOW-EXAMPLE-${String(index + 1).padStart(3, "0")}`
+    const startDate = dateFromToday(example.start)
+    const endDate = dateFromToday(example.start + example.days - 1)
+    const title = `${example.type} leave request`
+    const details = JSON.stringify({ leaveType: example.type, startDate, endDate, days: example.days, note: "", origin: "workspace_example" })
+    const resolved = example.status === "Approved"
+
+    statements.push(
+      database.prepare("INSERT OR IGNORE INTO leave_records(id, employee_id, leave_type, start_date, end_date, leave_days, approval_status, department, data_source, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'workflow', CURRENT_TIMESTAMP)")
+        .bind(id, employee.employee_id, example.type, startDate, endDate, example.days, example.status, employee.department),
+      database.prepare("INSERT OR IGNORE INTO workflow_requests(id, type, employee_id, title, status, details_json, requested_by_email, resolved_by_email, resolved_at, created_at, updated_at) VALUES (?, 'leave', ?, ?, ?, ?, 'people-ops@laidbackhr.cloud', ?, ?, ?, CURRENT_TIMESTAMP)")
+        .bind(id, employee.employee_id, title, example.status, details, resolved ? "people-ops@laidbackhr.cloud" : null, resolved ? dateFromToday(Math.min(0, example.start - 3)) : null, dateFromToday(example.start - 7)),
+      database.prepare("INSERT OR IGNORE INTO employee_activity(id, employee_id, event_type, summary, changes_json, actor_email, created_at) VALUES (?, ?, ?, ?, ?, 'people-ops@laidbackhr.cloud', ?)")
+        .bind(`ACT-${id}`, employee.employee_id, resolved ? "leave_decision" : "leave_requested", resolved ? `People Ops approved a ${example.type.toLowerCase()} leave request` : `People Ops submitted a ${example.type.toLowerCase()} leave request`, details, dateFromToday(resolved ? Math.min(0, example.start - 3) : example.start - 7)),
+    )
+  })
+
+  for (let index = 0; index < statements.length; index += 80) await database.batch(statements.slice(index, index + 80))
+  await database.prepare("INSERT INTO workspace_settings(key, value, updated_at) VALUES ('leave_workflow_examples_v1', 'true', CURRENT_TIMESTAMP) ON CONFLICT(key) DO UPDATE SET value='true', updated_at=CURRENT_TIMESTAMP").run()
+}
+
 export async function ensureHrDatabase(): Promise<Database | null> {
   const database = getHrDatabase()
   if (!database) return null
@@ -265,6 +323,7 @@ export async function ensureHrDatabase(): Promise<Database | null> {
     await ensureEmployeeProfileColumns(database)
     await seedDemoOnce(database)
     await backfillDemoProfiles(database)
+    await seedLeaveWorkflowExamplesOnce(database)
     await database.prepare("INSERT OR IGNORE INTO app_users(email, display_name, role, status, invited_by) VALUES ('pranavreddyg17@gmail.com', 'Pranav Reddy', 'admin', 'active', 'system')").run()
   })()
   try {
