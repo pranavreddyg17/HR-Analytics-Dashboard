@@ -69,6 +69,12 @@ function unique(values: string[]): string[] {
   return [...new Set(values.filter(Boolean))].sort((left, right) => left.localeCompare(right))
 }
 
+function dateInTimeZone(timeZone: string): string {
+  const parts = new Intl.DateTimeFormat("en-US", { timeZone, year: "numeric", month: "2-digit", day: "2-digit" }).formatToParts(new Date())
+  const values = Object.fromEntries(parts.map((part) => [part.type, part.value]))
+  return `${values.year}-${values.month}-${values.day}`
+}
+
 function matchesEmployee(employee: EmployeeRecord | undefined, filters: HrFilters): boolean {
   if (!employee) return !filters.jobTitle && !filters.location
   if (filters.department && employee.department !== filters.department) return false
@@ -125,16 +131,16 @@ export async function getWorkforceAnalytics(filters: HrFilters = {}): Promise<Wo
   const hiringIds = new Set([...requisitions, ...completedHires].map((record) => record.id))
   const hiring = hiringByDimensions.filter((record) => hiringIds.has(record.id))
   const attrition = allAttrition.filter((record) => inRange(record.exit_date, normalizedFilters) && matchesEmployee(employeeMap.get(record.employee_id), normalizedFilters) && (!normalizedFilters.department || record.department === normalizedFilters.department))
-  const leave = allLeave.filter((record) => inRange(record.start_date, normalizedFilters) && matchesEmployee(employeeMap.get(record.employee_id), normalizedFilters) && (!normalizedFilters.department || record.department === normalizedFilters.department) && (!normalizedFilters.leaveType || record.leave_type === normalizedFilters.leaveType))
+  const leave = allLeave.filter((record) => inRange(record.start_date, normalizedFilters) && matchesEmployee(employeeMap.get(record.employee_id), normalizedFilters) && (!normalizedFilters.department || record.department === normalizedFilters.department) && (!normalizedFilters.leaveType || record.leave_type === normalizedFilters.leaveType) && (normalizedFilters.dataMode !== "live" || record.data_source !== "demo"))
   const training = allTraining.filter((record) => (!record.completion_date || inRange(record.completion_date, normalizedFilters)) && matchesEmployee(employeeMap.get(record.employee_id), normalizedFilters) && (!normalizedFilters.department || record.department === normalizedFilters.department))
   const promotions = allPromotions.filter((record) => inRange(record.promotion_date, normalizedFilters) && matchesEmployee(employeeMap.get(record.employee_id), normalizedFilters) && (!normalizedFilters.department || record.department === normalizedFilters.department))
 
   const hired = completedHires
   const activeHiring = requisitions.filter((record) => ["requested", "open", "offer"].includes(record.recruitment_status.toLowerCase()))
   const approvedLeave = leave.filter((record) => record.approval_status.toLowerCase() === "approved")
-  const today = new Date().toISOString().slice(0, 10)
+  const today = dateInTimeZone("America/Los_Angeles")
   const currentlyAway = approvedLeave.filter((record) => record.start_date <= today && record.end_date >= today)
-  const upcomingLeave = leave.filter((record) => ["approved", "pending"].includes(record.approval_status.toLowerCase()) && record.start_date > today).sort((left, right) => left.start_date.localeCompare(right.start_date))
+  const upcomingLeave = leave.filter((record) => ["approved", "pending"].includes(record.approval_status.toLowerCase()) && record.start_date >= today).sort((left, right) => left.start_date.localeCompare(right.start_date))
   const completedTraining = training.filter((record) => record.completion_status.toLowerCase() === "completed")
   const activeEmployees = employees.filter((employee) => employee.employment_status.toLowerCase() !== "terminated")
   const attritionRate = percent(attrition.length, activeEmployees.length + attrition.length)
@@ -287,6 +293,7 @@ export function filtersFromSearchParams(params: URLSearchParams): HrFilters {
     jobTitle: params.get("jobTitle") || undefined,
     location: params.get("location") || undefined,
     leaveType: params.get("leaveType") || undefined,
+    dataMode: params.get("dataMode") === "live" ? "live" : "all",
     period: period === "quarter" || period === "year" ? period : "month",
   }
 }

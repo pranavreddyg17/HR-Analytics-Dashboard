@@ -10,6 +10,7 @@ export type HrFilters = {
   jobTitle?: string
   location?: string
   leaveType?: string
+  dataMode?: "live" | "all"
   period?: TrendPeriod
 }
 
