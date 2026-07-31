@@ -29,6 +29,16 @@ type GoogleToken = {
   googleAccessToken?: string
   googleRefreshToken?: string
   googleAccessTokenExpiresAt?: number
+  googleCalendarAccessToken?: string
+  googleCalendarRefreshToken?: string
+  googleCalendarAccessTokenExpiresAt?: number
+  googleCalendarScope?: string
+}
+
+type GoogleApiError = {
+  message?: string
+  status?: string
+  errors?: Array<{ reason?: string; message?: string }>
 }
 
 async function refreshAccessToken(refreshToken: string): Promise<string> {
@@ -48,12 +58,12 @@ async function refreshAccessToken(refreshToken: string): Promise<string> {
   })
   const body = await response.json() as { access_token?: string; error?: string }
   if (!response.ok || !body.access_token) {
-    throw new GoogleCalendarError("Reconnect your Google account to authorize Calendar events.", 409, "GOOGLE_CALENDAR_REAUTHORIZE")
+    throw new GoogleCalendarError("Connect Google Calendar again to renew access.", 409, "GOOGLE_CALENDAR_CONNECT_REQUIRED")
   }
   return body.access_token
 }
 
-async function googleAccessToken(request: Request): Promise<string> {
+async function readGoogleToken(request: Request): Promise<GoogleToken | null> {
   // Auth.js can choose its cookie prefix from the public request URL. Behind a
   // reverse proxy/custom domain that can differ from the URL seen while the
   // cookie is issued, so resolve the supported Auth.js cookie names explicitly.
@@ -71,22 +81,42 @@ async function googleAccessToken(request: Request): Promise<string> {
       cookieName,
       secureCookie: cookieName.startsWith("__Secure-"),
     }) as GoogleToken | null
-    if (candidate?.googleAccessToken) {
+    if (candidate?.googleCalendarAccessToken || candidate?.googleAccessToken) {
       token = candidate
       break
     }
     if (!token && candidate) token = candidate
   }
+  return token
+}
 
-  if (!token?.googleAccessToken) {
-    throw new GoogleCalendarError("Reconnect your Google account to authorize Calendar events.", 409, "GOOGLE_CALENDAR_REAUTHORIZE")
+export async function getGoogleCalendarConnection(request: Request) {
+  const token = await readGoogleToken(request)
+  const accessToken = token?.googleCalendarAccessToken ?? token?.googleAccessToken
+  const refreshToken = token?.googleCalendarRefreshToken ?? token?.googleRefreshToken
+  const expiresAt = token?.googleCalendarAccessTokenExpiresAt ?? token?.googleAccessTokenExpiresAt
+  return {
+    connected: Boolean(accessToken || refreshToken),
+    expiresAt: expiresAt ? new Date(expiresAt * 1000).toISOString() : null,
+    canRefresh: Boolean(refreshToken),
   }
-  const expiresAt = Number(token.googleAccessTokenExpiresAt ?? 0) * 1000
-  if (!expiresAt || expiresAt > Date.now() + 60_000) return token.googleAccessToken
-  if (!token.googleRefreshToken) {
-    throw new GoogleCalendarError("Reconnect your Google account to renew Calendar access.", 409, "GOOGLE_CALENDAR_REAUTHORIZE")
+}
+
+async function googleAccessToken(request: Request): Promise<string> {
+  const token = await readGoogleToken(request)
+  const accessToken = token?.googleCalendarAccessToken ?? token?.googleAccessToken
+  const refreshToken = token?.googleCalendarRefreshToken ?? token?.googleRefreshToken
+  const tokenExpiresAt = token?.googleCalendarAccessTokenExpiresAt ?? token?.googleAccessTokenExpiresAt
+
+  if (!accessToken) {
+    throw new GoogleCalendarError("Connect Google Calendar before creating an event.", 409, "GOOGLE_CALENDAR_CONNECT_REQUIRED")
   }
-  return refreshAccessToken(token.googleRefreshToken)
+  const expiresAt = Number(tokenExpiresAt ?? 0) * 1000
+  if (!expiresAt || expiresAt > Date.now() + 60_000) return accessToken
+  if (!refreshToken) {
+    throw new GoogleCalendarError("Connect Google Calendar again to renew access.", 409, "GOOGLE_CALENDAR_CONNECT_REQUIRED")
+  }
+  return refreshAccessToken(refreshToken)
 }
 
 export async function createGoogleCalendarEvent(request: Request, input: CalendarEventInput) {
@@ -109,13 +139,23 @@ export async function createGoogleCalendarEvent(request: Request, input: Calenda
       guestsCanSeeOtherGuests: true,
     }),
   })
-  const body = await response.json() as { id?: string; htmlLink?: string; status?: string; error?: { message?: string; status?: string } }
+  const body = await response.json() as { id?: string; htmlLink?: string; status?: string; error?: GoogleApiError }
   if (!response.ok || !body.id) {
-    const needsAuth = response.status === 401 || response.status === 403
+    const reasons = new Set((body.error?.errors ?? []).map((error) => error.reason ?? ""))
+    const message = body.error?.message ?? ""
+    const apiDisabled = response.status === 403 && (/has not been used|is disabled|accessnotconfigured/i.test(message) || reasons.has("accessNotConfigured"))
+    const needsAuth = response.status === 401 || reasons.has("authError") || reasons.has("insufficientPermissions")
+    if (apiDisabled) {
+      throw new GoogleCalendarError(
+        "Google Calendar API is disabled for the OAuth project. Enable it in Google Cloud, then retry.",
+        409,
+        "GOOGLE_CALENDAR_API_DISABLED",
+      )
+    }
     throw new GoogleCalendarError(
-      needsAuth ? "Reconnect your Google account to authorize Calendar events." : body.error?.message ?? "Google Calendar could not create the event.",
+      needsAuth ? "Connect Google Calendar again to authorize event creation." : message || "Google Calendar could not create the event.",
       needsAuth ? 409 : 502,
-      needsAuth ? "GOOGLE_CALENDAR_REAUTHORIZE" : "GOOGLE_CALENDAR_CREATE_FAILED",
+      needsAuth ? "GOOGLE_CALENDAR_CONNECT_REQUIRED" : "GOOGLE_CALENDAR_CREATE_FAILED",
     )
   }
   return { eventId: body.id, eventUrl: body.htmlLink ?? null, status: body.status ?? "confirmed" }

@@ -10,8 +10,13 @@ const googleScopes = [
   "openid",
   "email",
   "profile",
-  "https://www.googleapis.com/auth/calendar.events",
 ].join(" ")
+
+const calendarScopes = new Set([
+  "https://www.googleapis.com/auth/calendar.events.owned",
+  "https://www.googleapis.com/auth/calendar.events",
+  "https://www.googleapis.com/auth/calendar",
+])
 
 export const { handlers, auth, signIn, signOut } = NextAuth({
   providers: [Google({
@@ -20,8 +25,6 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
     authorization: {
       params: {
         scope: googleScopes,
-        access_type: "offline",
-        prompt: "consent",
       },
     },
   })],
@@ -40,9 +43,13 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
     },
     async jwt({ token, account }) {
       if (account?.provider === "google") {
-        token.googleAccessToken = account.access_token
-        token.googleRefreshToken = account.refresh_token ?? token.googleRefreshToken
-        token.googleAccessTokenExpiresAt = account.expires_at
+        const grantedScopes = new Set((account.scope ?? "").split(/\s+/).filter(Boolean))
+        if ([...calendarScopes].some((scope) => grantedScopes.has(scope))) {
+          token.googleCalendarAccessToken = account.access_token
+          token.googleCalendarRefreshToken = account.refresh_token ?? token.googleCalendarRefreshToken
+          token.googleCalendarAccessTokenExpiresAt = account.expires_at
+          token.googleCalendarScope = account.scope
+        }
       }
       if (token.email) {
         const access = await findAccessUser(token.email)

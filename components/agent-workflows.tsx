@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { useEffect, useState } from "react"
 import { CalendarDays, Check, ExternalLink, LoaderCircle, UserRound } from "lucide-react"
 import { signIn } from "next-auth/react"
 
@@ -46,6 +46,7 @@ function dateTimeLabel(value: string): string {
 }
 
 export function AgentWorkflows({ canPrepare }: { canPrepare: boolean }) {
+  const [calendarConnection, setCalendarConnection] = useState<"loading" | "connected" | "disconnected">("loading")
   const [prompt, setPrompt] = useState("")
   const [plan, setPlan] = useState<CalendarPlan | null>(null)
   const [draftId, setDraftId] = useState("")
@@ -55,6 +56,27 @@ export function AgentWorkflows({ canPrepare }: { canPrepare: boolean }) {
   const [errorCode, setErrorCode] = useState("")
   const [notice, setNotice] = useState("")
   const [eventUrl, setEventUrl] = useState("")
+
+  useEffect(() => {
+    let active = true
+    fetch("/api/v1/ai/integrations/google-calendar")
+      .then(async (response) => {
+        const body = await response.json() as { connected?: boolean }
+        if (!response.ok) throw new Error("Connection status unavailable")
+        if (active) setCalendarConnection(body.connected ? "connected" : "disconnected")
+      })
+      .catch(() => { if (active) setCalendarConnection("disconnected") })
+    return () => { active = false }
+  }, [])
+
+  function connectGoogleCalendar() {
+    void signIn("google", { callbackUrl: "/ai-agents" }, {
+      scope: "openid email profile https://www.googleapis.com/auth/calendar.events.owned",
+      access_type: "offline",
+      prompt: "consent",
+      include_granted_scopes: "true",
+    })
+  }
 
   async function createPlan(text = prompt) {
     const request = text.trim()
@@ -116,6 +138,7 @@ export function AgentWorkflows({ canPrepare }: { canPrepare: boolean }) {
       const body = await response.json() as { message?: string; eventUrl?: string | null; error?: string; code?: string }
       if (!response.ok) {
         setErrorCode(body.code ?? "")
+        if (body.code === "GOOGLE_CALENDAR_CONNECT_REQUIRED") setCalendarConnection("disconnected")
         throw new Error(body.error ?? "Google Calendar could not create the event.")
       }
       setNotice(body.message ?? "Calendar event created and invitations sent.")
@@ -136,6 +159,16 @@ export function AgentWorkflows({ canPrepare }: { canPrepare: boolean }) {
             <h3 className="text-sm font-semibold">Scheduling agent</h3>
           </div>
           <p className="mt-2 text-xs leading-5 text-muted-foreground">Describe the participants and timing. The agent resolves employees from operational records and prepares a review before any invitation is sent.</p>
+
+          <div className="mt-4 flex items-center justify-between rounded-md border border-border bg-background px-3 py-2.5">
+            <div>
+              <p className="text-xs font-medium">Google Calendar</p>
+              <p className="mt-0.5 text-[10px] text-muted-foreground">
+                {calendarConnection === "loading" ? "Checking connection" : calendarConnection === "connected" ? "Connected for event creation" : "Not connected"}
+              </p>
+            </div>
+            {calendarConnection === "disconnected" && canPrepare && <Button type="button" size="sm" variant="outline" onClick={connectGoogleCalendar}>Connect</Button>}
+          </div>
 
           <form onSubmit={(event) => { event.preventDefault(); void createPlan() }} className="mt-5">
             <label className="text-xs font-medium text-foreground" htmlFor="calendar-agent-request">Request</label>
@@ -213,14 +246,17 @@ export function AgentWorkflows({ canPrepare }: { canPrepare: boolean }) {
               </div>
 
               {error && <div role="alert" className="mb-3 rounded-md border border-destructive/20 bg-destructive/5 px-3 py-2 text-xs text-destructive">{error}</div>}
+              {errorCode === "GOOGLE_CALENDAR_API_DISABLED" && (
+                <a className="mb-3 inline-flex text-xs font-medium text-primary hover:underline" href="https://console.cloud.google.com/apis/library/calendar-json.googleapis.com" target="_blank" rel="noreferrer">Open Google Calendar API settings</a>
+              )}
               {notice && <div className="mb-3 flex items-center gap-2 rounded-md border border-emerald-200 bg-emerald-50 px-3 py-2 text-xs text-emerald-900"><Check className="size-4" />{notice}</div>}
 
               <div className="flex flex-wrap items-center justify-between gap-3 border-t border-border pt-4">
                 <p className="max-w-md text-[10px] leading-4 text-muted-foreground">Creating the event sends Google Calendar invitations to the listed employees. Confirm the participants and agenda first.</p>
                 <div className="flex gap-2">
-                  {errorCode === "GOOGLE_CALENDAR_REAUTHORIZE" && <Button type="button" variant="outline" onClick={() => void signIn("google", { callbackUrl: "/ai-agents" })}>Reconnect Google</Button>}
                   {eventUrl && <Button nativeButton={false} variant="outline" render={<a href={eventUrl} target="_blank" rel="noreferrer" />}><ExternalLink className="size-4" />Open event</Button>}
-                  {!notice && <Button type="button" onClick={() => void createEvent()} disabled={sending}>{sending ? <LoaderCircle className="size-4 animate-spin" /> : <CalendarDays className="size-4" />}Create event and send invites</Button>}
+                  {!notice && calendarConnection === "connected" && <Button type="button" onClick={() => void createEvent()} disabled={sending}>{sending ? <LoaderCircle className="size-4 animate-spin" /> : <CalendarDays className="size-4" />}Create event and send invites</Button>}
+                  {!notice && calendarConnection === "disconnected" && <Button type="button" onClick={connectGoogleCalendar}>Connect Google Calendar</Button>}
                 </div>
               </div>
             </div>

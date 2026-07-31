@@ -12,5 +12,9 @@ declare module "@auth/core/jwt" {
     googleAccessToken?: string
     googleRefreshToken?: string
     googleAccessTokenExpiresAt?: number
+    googleCalendarAccessToken?: string
+    googleCalendarRefreshToken?: string
+    googleCalendarAccessTokenExpiresAt?: number
+    googleCalendarScope?: string
   }
 }
