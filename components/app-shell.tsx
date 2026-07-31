@@ -236,7 +236,7 @@ function CommandPalette({ onClose, user }: { onClose: () => void; user: ShellUse
             placeholder="Search people, pages, reports, or actions"
             aria-label="Search"
           />
-          {loading ? <Loader2 className="size-4 animate-spin text-muted-foreground" /> : <kbd>ESC</kbd>}
+          {loading && <Loader2 className="size-4 animate-spin text-muted-foreground" />}
         </div>
         <div className="command-results">
           {items.map((item, index) => {
@@ -269,11 +269,6 @@ function CommandPalette({ onClose, user }: { onClose: () => void; user: ShellUse
             </div>
           )}
         </div>
-        <footer className="command-footer">
-          <span><kbd>↑</kbd><kbd>↓</kbd> navigate</span>
-          <span><kbd>↵</kbd> open</span>
-          <span className="ml-auto">Pages · actions · reports · people</span>
-        </footer>
       </section>
     </div>
   )

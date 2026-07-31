@@ -60,7 +60,6 @@ export function Topbar({ user, onOpenPalette }: { user: ShellUser; onOpenPalette
       >
         <Search className="size-4" strokeWidth={1.8} />
         <span>Search people, pages, and actions</span>
-        <kbd>⌘ K</kbd>
       </button>
 
       <div className="ml-auto flex items-center gap-1.5 sm:gap-2">
