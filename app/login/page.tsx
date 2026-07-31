@@ -1,8 +1,11 @@
 import { redirect } from "next/navigation"
+import { env } from "cloudflare:workers"
 
-import { signIn } from "@/auth"
 import { BrandLogo } from "@/components/brand-logo"
+import { GoogleSignInButton } from "@/components/google-sign-in-button"
 import { getRequestActor } from "@/lib/server/request-user"
+
+const runtime = env as unknown as { GOOGLE_CLIENT_ID?: string }
 
 const modules = [
   { label: "People records", detail: "Profiles, teams, and employment history" },
@@ -47,12 +50,7 @@ export default async function LoginPage({ searchParams }: { searchParams: Promis
 
           {denied && <div className="mt-5 rounded-md border border-amber-200 bg-amber-50 px-4 py-3 text-sm leading-6 text-amber-900">This Google account is not on the workspace allowlist. Contact an administrator for access.</div>}
 
-          <form className="mt-7" action={async () => { "use server"; await signIn("google", { redirectTo: "/" }) }}>
-            <button className="flex h-12 w-full items-center justify-center gap-3 rounded-md bg-[#146aa3] px-5 text-sm font-semibold text-white transition-colors hover:bg-[#0f5a8d] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#146aa3] focus-visible:ring-offset-2">
-              <span className="flex size-6 items-center justify-center rounded bg-white text-xs font-bold text-[#4285f4]">G</span>
-              Continue with Google
-            </button>
-          </form>
+          <div className="mt-7"><GoogleSignInButton clientId={runtime.GOOGLE_CLIENT_ID ?? ""} /></div>
 
           <div className="mt-6 border-t border-[#d9e0e8] pt-5 text-xs leading-5 text-[#637083]">Account access is managed under Administration / Access.</div>
         </div>

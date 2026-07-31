@@ -1,8 +1,10 @@
 import NextAuth from "next-auth"
+import Credentials from "next-auth/providers/credentials"
 import Google from "next-auth/providers/google"
 import { env } from "cloudflare:workers"
 
 import { findAccessUser, recordLogin } from "@/lib/server/access"
+import { verifyGoogleIdToken } from "@/lib/server/google-id-token"
 
 const runtime = env as unknown as { GOOGLE_CLIENT_ID?: string; GOOGLE_CLIENT_SECRET?: string; AUTH_SECRET?: string }
 
@@ -19,26 +21,34 @@ const calendarScopes = new Set([
 ])
 
 export const { handlers, auth, signIn, signOut } = NextAuth({
-  providers: [Google({
-    clientId: runtime.GOOGLE_CLIENT_ID ?? "missing",
-    clientSecret: runtime.GOOGLE_CLIENT_SECRET ?? "missing",
-    authorization: {
-      params: {
-        scope: googleScopes,
+  providers: [
+    Credentials({
+      id: "google-id-token",
+      name: "Google",
+      credentials: { credential: { label: "Google credential", type: "text" } },
+      authorize: async (credentials) => verifyGoogleIdToken(credentials.credential),
+    }),
+    Google({
+      clientId: runtime.GOOGLE_CLIENT_ID ?? "missing",
+      clientSecret: runtime.GOOGLE_CLIENT_SECRET ?? "missing",
+      authorization: {
+        params: {
+          scope: googleScopes,
+        },
       },
-    },
-  })],
+    }),
+  ],
   secret: runtime.AUTH_SECRET ?? "laidbackhr-local-development-secret-change-me",
   trustHost: true,
   pages: { signIn: "/login", error: "/login" },
   session: { strategy: "jwt", maxAge: 60 * 60 * 10 },
   callbacks: {
-    async signIn({ profile }) {
-      const email = profile?.email?.toLowerCase()
+    async signIn({ profile, user }) {
+      const email = (profile?.email ?? user.email)?.toLowerCase()
       if (!email || profile?.email_verified === false) return false
       const access = await findAccessUser(email)
       if (!access || access.status !== "active") return "/login?error=AccessDenied"
-      await recordLogin(email, profile?.name ?? "")
+      await recordLogin(email, profile?.name ?? user.name ?? "")
       return true
     },
     async jwt({ token, account }) {
