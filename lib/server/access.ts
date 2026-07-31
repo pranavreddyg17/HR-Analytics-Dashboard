@@ -1,4 +1,4 @@
-import { ensureHrDatabase, type Database } from "@/lib/server/hr-database"
+import { ensureHrDatabase, getHrDatabase, type Database } from "@/lib/server/hr-database"
 
 export const roles = ["admin", "hr", "manager", "viewer"] as const
 export type AppRole = (typeof roles)[number]
@@ -14,16 +14,26 @@ async function database(): Promise<Database> {
   return db
 }
 
+async function accessTable<T>(operation: (db: Database) => Promise<T>): Promise<T> {
+  const direct = getHrDatabase()
+  if (!direct) throw new Error("DATABASE_UNAVAILABLE")
+  try {
+    return await operation(direct)
+  } catch (error) {
+    const message = error instanceof Error ? error.message.toLowerCase() : String(error).toLowerCase()
+    if (!message.includes("no such table") || !message.includes("app_users")) throw error
+    return operation(await database())
+  }
+}
+
 export async function findAccessUser(email: string): Promise<AccessUser | null> {
-  const db = await database()
-  return db.prepare("SELECT email, display_name, role, status, created_at, updated_at, last_login_at FROM app_users WHERE email = ?")
-    .bind(normalizedEmail(email)).first<AccessUser>()
+  return accessTable((db) => db.prepare("SELECT email, display_name, role, status, created_at, updated_at, last_login_at FROM app_users WHERE email = ?")
+    .bind(normalizedEmail(email)).first<AccessUser>())
 }
 
 export async function recordLogin(email: string, displayName: string) {
-  const db = await database()
-  await db.prepare("UPDATE app_users SET display_name = CASE WHEN ? = '' THEN display_name ELSE ? END, last_login_at = CURRENT_TIMESTAMP, updated_at = CURRENT_TIMESTAMP WHERE email = ?")
-    .bind(displayName, displayName, normalizedEmail(email)).run()
+  await accessTable((db) => db.prepare("UPDATE app_users SET display_name = CASE WHEN ? = '' THEN display_name ELSE ? END, last_login_at = CURRENT_TIMESTAMP, updated_at = CURRENT_TIMESTAMP WHERE email = ?")
+    .bind(displayName, displayName, normalizedEmail(email)).run())
 }
 
 export async function listAccessUsers(): Promise<AccessUser[]> {

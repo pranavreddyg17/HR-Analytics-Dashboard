@@ -48,10 +48,11 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
       if (!email || profile?.email_verified === false) return false
       const access = await findAccessUser(email)
       if (!access || access.status !== "active") return "/login?error=AccessDenied"
+      user.role = access.role
       await recordLogin(email, profile?.name ?? user.name ?? "")
       return true
     },
-    async jwt({ token, account }) {
+    async jwt({ token, account, user }) {
       if (account?.provider === "google") {
         const grantedScopes = new Set((account.scope ?? "").split(/\s+/).filter(Boolean))
         if ([...calendarScopes].some((scope) => grantedScopes.has(scope))) {
@@ -61,7 +62,9 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
           token.googleCalendarScope = account.scope
         }
       }
-      if (token.email) {
+      if (user?.role) {
+        token.role = user.role
+      } else if (!token.role && token.email) {
         const access = await findAccessUser(token.email)
         token.role = access?.status === "active" ? access.role : undefined
       }
