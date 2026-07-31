@@ -85,7 +85,8 @@ export function getHealth() {
     capabilities: {
       prediction: "ready",
       groundedAnalytics: "ready",
-      reviewActions: "ready",
+      ragKnowledge: "ready",
+      employeeCommunicationWorkflows: "ready",
       workforceWarehouse: "ready",
       mcpTools: "ready",
       langchainAgent: "ready",

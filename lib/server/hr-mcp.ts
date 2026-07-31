@@ -1,6 +1,7 @@
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js"
 import { z } from "zod"
 
+import type { DomainStatus, HrFilters, WorkforceAnalytics } from "@/lib/hr-types"
 import { getWorkforceAnalytics } from "@/lib/server/hr-analytics"
 
 const filtersShape = {
@@ -12,138 +13,299 @@ const filtersShape = {
   period: z.enum(["month", "quarter", "year"]).optional(),
 }
 
-type FilterArgs = {
-  from?: string
-  to?: string
-  department?: string
-  jobTitle?: string
-  location?: string
-  period?: "month" | "quarter" | "year"
-}
+type FilterArgs = Pick<HrFilters, "from" | "to" | "department" | "jobTitle" | "location" | "period">
 
 function result(data: unknown) {
   return { content: [{ type: "text" as const, text: JSON.stringify(data) }] }
 }
 
+function dataMode(status: DomainStatus[]): "demo" | "mixed" | "imported/operational" {
+  const modes = new Set(status.filter((item) => item.count > 0).map((item) => item.mode))
+  if (modes.size === 1 && modes.has("demo")) return "demo"
+  if (modes.size > 0 && [...modes].every((mode) => mode === "imported")) return "imported/operational"
+  return "mixed"
+}
+
+function evidence(analytics: WorkforceAnalytics) {
+  return {
+    generatedAt: analytics.generatedAt,
+    dataMode: dataMode(analytics.status),
+    dataStatus: analytics.status,
+    filters: analytics.filters,
+  }
+}
+
+function employeeName(employee: WorkforceAnalytics["employees"][number]): string {
+  return [employee.preferred_name || employee.first_name, employee.last_name].filter(Boolean).join(" ").trim() || employee.employee_id
+}
+
 export const mcpToolCatalog = [
-  { name: "executive_summary", description: "Company-wide HR KPIs and evidence-backed executive insights" },
-  { name: "analyze_hiring", description: "Hiring volume, time-to-hire, sources, departments, roles, and trends" },
-  { name: "analyze_attrition", description: "Exit rates, types, departments, tenure, trends, and high-risk review candidates" },
-  { name: "analyze_leave", description: "Approved and pending leave, days, types, departments, and trends" },
-  { name: "analyze_training", description: "Completion, hours, scores, mandatory gaps, programmes, and trends" },
-  { name: "analyze_promotions", description: "Promotion rate, time-to-promotion, departments, trends, and stalled progression" },
-  { name: "employee_drilldown", description: "Employee-level operational records across HR domains" },
-  { name: "data_quality", description: "Import status, data mode, row counts, and detected coverage gaps" },
-  { name: "analyze_employees", description: "Headcount, status, department, role, location, tenure, employment type, and manager span analytics" },
+  {
+    name: "workforce_overview",
+    title: "Workforce overview",
+    description: "Current workforce KPIs, open HR work, executive observations, and source status.",
+  },
+  {
+    name: "compare_departments",
+    title: "Compare departments",
+    description: "Department comparison for headcount, hiring, exits, leave, learning, or promotions.",
+  },
+  {
+    name: "analyze_attrition_signals",
+    title: "Analyze attrition signals",
+    description: "Observed exits and historical model signals with responsible-use context.",
+  },
+  {
+    name: "review_people_operations",
+    title: "Review people operations",
+    description: "Operational review of hiring, leave, training, or promotion records and exceptions.",
+  },
+  {
+    name: "find_employee_records",
+    title: "Find employee records",
+    description: "Search the current employee directory and return limited HR profile context.",
+  },
 ] as const
 
 export function createHrMcpServer(): McpServer {
-  const server = new McpServer({ name: "LaidbackHR.AI Workforce Intelligence", version: "2.0.0" }, { capabilities: { tools: {}, resources: {} } })
+  const server = new McpServer(
+    { name: "LaidbackHR.AI Workforce Analytics", version: "3.0.0" },
+    { capabilities: { tools: {}, resources: {} } },
+  )
 
-  server.registerTool("executive_summary", {
-    title: "Executive HR summary",
+  server.registerTool("workforce_overview", {
+    title: mcpToolCatalog[0].title,
     description: mcpToolCatalog[0].description,
     inputSchema: filtersShape,
     annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false },
   }, async (filters: FilterArgs) => {
     const analytics = await getWorkforceAnalytics(filters)
-    return result({ generatedAt: analytics.generatedAt, kpis: analytics.kpis, insights: analytics.executiveInsights, dataStatus: analytics.status })
+    return result({
+      ...evidence(analytics),
+      kpis: analytics.kpis,
+      openWork: {
+        pendingLeaveRequests: analytics.leave.pending,
+        activeHiringRequisitions: analytics.hiring.activeRequisitions,
+        mandatoryTrainingGaps: analytics.training.requiringMandatoryTraining,
+        mobilityReviews: analytics.promotions.withoutPromotionOver36Months,
+      },
+      executiveObservations: analytics.executiveInsights,
+    })
   })
 
-  server.registerTool("analyze_hiring", {
-    title: "Analyze hiring",
+  server.registerTool("compare_departments", {
+    title: mcpToolCatalog[1].title,
     description: mcpToolCatalog[1].description,
-    inputSchema: filtersShape,
+    inputSchema: {
+      metric: z.enum(["headcount", "hires", "exits", "leave_days", "training_hours", "promotions"]),
+      ...filtersShape,
+    },
     annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false },
-  }, async (filters: FilterArgs) => {
+  }, async ({ metric, ...filters }: FilterArgs & { metric: "headcount" | "hires" | "exits" | "leave_days" | "training_hours" | "promotions" }) => {
     const analytics = await getWorkforceAnalytics(filters)
-    return result({ filters: analytics.filters, ...analytics.hiring })
+    const series = {
+      headcount: analytics.employeeAnalytics.activeByDepartment,
+      hires: analytics.hiring.byDepartment,
+      exits: analytics.attrition.byDepartment,
+      leave_days: analytics.leave.byDepartment,
+      training_hours: analytics.training.byDepartment,
+      promotions: analytics.promotions.byDepartment,
+    }[metric]
+    return result({
+      ...evidence(analytics),
+      metric,
+      definition: {
+        headcount: "Active employees",
+        hires: "Completed hires in the selected period",
+        exits: "Recorded exits in the selected period",
+        leave_days: "Approved leave days",
+        training_hours: "Assigned training hours",
+        promotions: "Recorded promotions in the selected period",
+      }[metric],
+      departments: series.map((item) => ({ department: item.label, value: item.value })),
+    })
   })
 
-  server.registerTool("analyze_attrition", {
-    title: "Analyze attrition",
+  server.registerTool("analyze_attrition_signals", {
+    title: mcpToolCatalog[2].title,
     description: mcpToolCatalog[2].description,
     inputSchema: filtersShape,
     annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false },
   }, async (filters: FilterArgs) => {
     const analytics = await getWorkforceAnalytics(filters)
-    return result({ filters: analytics.filters, ...analytics.attrition })
-  })
-
-  server.registerTool("analyze_leave", {
-    title: "Analyze leave",
-    description: mcpToolCatalog[3].description,
-    inputSchema: filtersShape,
-    annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false },
-  }, async (filters: FilterArgs) => {
-    const analytics = await getWorkforceAnalytics(filters)
-    return result({ filters: analytics.filters, ...analytics.leave })
-  })
-
-  server.registerTool("analyze_training", {
-    title: "Analyze training",
-    description: mcpToolCatalog[4].description,
-    inputSchema: filtersShape,
-    annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false },
-  }, async (filters: FilterArgs) => {
-    const analytics = await getWorkforceAnalytics(filters)
-    return result({ filters: analytics.filters, ...analytics.training })
-  })
-
-  server.registerTool("analyze_promotions", {
-    title: "Analyze promotions",
-    description: mcpToolCatalog[5].description,
-    inputSchema: filtersShape,
-    annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false },
-  }, async (filters: FilterArgs) => {
-    const analytics = await getWorkforceAnalytics(filters)
-    return result({ filters: analytics.filters, ...analytics.promotions })
-  })
-
-  server.registerTool("employee_drilldown", {
-    title: "Employee drill-down",
-    description: mcpToolCatalog[6].description,
-    inputSchema: { employeeId: z.string().min(1), ...filtersShape },
-    annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false },
-  }, async ({ employeeId, ...filters }: FilterArgs & { employeeId: string }) => {
-    const analytics = await getWorkforceAnalytics(filters)
-    const employee = analytics.employees.find((record) => record.employee_id.toLowerCase() === employeeId.toLowerCase())
     return result({
-      employee: employee ?? null,
-      attrition: analytics.attrition.rows.filter((record) => record.employee_id.toLowerCase() === employeeId.toLowerCase()),
-      leave: analytics.leave.rows.filter((record) => record.employee_id.toLowerCase() === employeeId.toLowerCase()),
-      training: analytics.training.rows.filter((record) => record.employee_id.toLowerCase() === employeeId.toLowerCase()),
-      promotions: analytics.promotions.rows.filter((record) => record.employee_id.toLowerCase() === employeeId.toLowerCase()),
-      disclaimer: "Use employee-level information only for legitimate HR review and never as the sole basis for an employment decision.",
+      ...evidence(analytics),
+      observedAttrition: {
+        exits: analytics.attrition.totalExits,
+        rate: analytics.attrition.rate,
+        voluntary: analytics.attrition.voluntary,
+        involuntary: analytics.attrition.involuntary,
+        byDepartment: analytics.attrition.byDepartment,
+        byTenure: analytics.attrition.byTenure,
+        trend: analytics.attrition.trend,
+      },
+      historicalModelReview: {
+        recordsAboveReviewThreshold: analytics.attrition.highRiskEmployees.length,
+        records: analytics.attrition.highRiskEmployees.slice(0, 20),
+        scope: "Anonymized historical validation records; not live employee predictions.",
+      },
+      governance: "Patterns are associations, not proven causes. Model signals require human review and must not be used as automatic employment decisions.",
     })
   })
 
-  server.registerTool("analyze_employees", {
-    title: "Analyze employees",
-    description: mcpToolCatalog[8].description,
-    inputSchema: filtersShape,
+  server.registerTool("review_people_operations", {
+    title: mcpToolCatalog[3].title,
+    description: mcpToolCatalog[3].description,
+    inputSchema: {
+      domain: z.enum(["hiring", "leave", "training", "promotions"]),
+      ...filtersShape,
+    },
     annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false },
-  }, async (filters: FilterArgs) => {
+  }, async ({ domain, ...filters }: FilterArgs & { domain: "hiring" | "leave" | "training" | "promotions" }) => {
     const analytics = await getWorkforceAnalytics(filters)
-    return result({ filters: analytics.filters, ...analytics.employeeAnalytics })
+    const common = { ...evidence(analytics), domain }
+
+    if (domain === "hiring") {
+      return result({
+        ...common,
+        summary: {
+          completedHires: analytics.hiring.totalHired,
+          activeRequisitions: analytics.hiring.activeRequisitions,
+          offers: analytics.hiring.offers,
+          averageTimeToHireDays: analytics.hiring.averageTimeToHire,
+        },
+        sourcePerformance: analytics.hiring.sourceStats,
+        byDepartment: analytics.hiring.byDepartment,
+        pipeline: analytics.hiring.statuses,
+        trend: analytics.hiring.trend,
+      })
+    }
+
+    if (domain === "leave") {
+      return result({
+        ...common,
+        summary: {
+          requests: analytics.leave.totalRequests,
+          pending: analytics.leave.pending,
+          approved: analytics.leave.approved,
+          rejected: analytics.leave.rejected,
+          approvedDays: analytics.leave.totalDays,
+          averageApprovedDaysPerEmployee: analytics.leave.averageDaysPerEmployee,
+        },
+        byType: analytics.leave.byType,
+        byDepartment: analytics.leave.byDepartment,
+        trend: analytics.leave.trend,
+        upcoming: analytics.leave.upcoming.slice(0, 20).map((row) => ({
+          employeeId: row.employee_id,
+          leaveType: row.leave_type,
+          startDate: row.start_date,
+          endDate: row.end_date,
+          status: row.approval_status,
+        })),
+        guardrail: "Leave is a coverage signal, not an employee performance signal.",
+      })
+    }
+
+    if (domain === "training") {
+      const mandatory = analytics.training.rows
+        .filter((row) => /incomplete/i.test(row.completion_status) && /security|privacy|safety|compliance|phishing|mandatory/i.test(row.training_program))
+        .slice(0, 25)
+        .map((row) => ({ employeeId: row.employee_id, program: row.training_program, department: row.department, dueDate: row.due_date ?? null }))
+      return result({
+        ...common,
+        summary: {
+          completionRate: analytics.training.completionRate,
+          assignedHours: analytics.training.totalHours,
+          averageAssessmentScore: analytics.training.averageScore,
+          mandatoryGaps: analytics.training.requiringMandatoryTraining,
+        },
+        incompleteMandatoryAssignments: mandatory,
+        byProgram: analytics.training.byProgram,
+        byDepartment: analytics.training.byDepartment,
+        trend: analytics.training.trend,
+      })
+    }
+
+    const promotedIds = new Set(analytics.promotions.rows.map((row) => row.employee_id))
+    const mobilityReview = analytics.employees
+      .filter((employee) => employee.tenure_years >= 3 && /^active$/i.test(employee.employment_status) && !promotedIds.has(employee.employee_id))
+      .slice(0, 25)
+      .map((employee) => ({
+        employeeId: employee.employee_id,
+        department: employee.department,
+        jobTitle: employee.job_title,
+        tenureYears: employee.tenure_years,
+      }))
+    return result({
+      ...common,
+      summary: {
+        promotions: analytics.promotions.total,
+        promotionRate: analytics.promotions.rate,
+        averageMonthsToPromotion: analytics.promotions.averageMonthsToPromotion,
+        mobilityReviewCount: analytics.promotions.withoutPromotionOver36Months,
+      },
+      mobilityReview,
+      byDepartment: analytics.promotions.byDepartment,
+      trend: analytics.promotions.trend,
+      guardrail: "This is a review cohort. Check lateral moves, career ladders, employee preference, and data completeness before drawing conclusions.",
+    })
   })
 
-  server.registerTool("data_quality", {
-    title: "Check HR data quality",
-    description: mcpToolCatalog[7].description,
-    inputSchema: {},
+  server.registerTool("find_employee_records", {
+    title: mcpToolCatalog[4].title,
+    description: mcpToolCatalog[4].description,
+    inputSchema: {
+      query: z.string().trim().max(120).optional(),
+      status: z.string().trim().max(60).optional(),
+      limit: z.number().int().min(1).max(20).optional(),
+      ...filtersShape,
+    },
     annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false },
-  }, async () => {
-    const analytics = await getWorkforceAnalytics()
-    const gaps = analytics.status.filter((item) => item.mode === "demo" || item.mode === "empty").map((item) => `${item.domain}: ${item.mode}`)
-    return result({ status: analytics.status, gaps, readyForOperationalDecisions: gaps.length === 0, note: gaps.length ? "Import source HR data for each listed domain before treating the results as operational." : "All domains contain imported data." })
+  }, async ({ query = "", status, limit = 10, ...filters }: FilterArgs & { query?: string; status?: string; limit?: number }) => {
+    const analytics = await getWorkforceAnalytics(filters)
+    const needle = query.toLowerCase()
+    const matches = analytics.directoryEmployees.filter((employee) => {
+      if (status && employee.employment_status.toLowerCase() !== status.toLowerCase()) return false
+      if (!needle) return true
+      return `${employee.employee_id} ${employeeName(employee)} ${employee.department} ${employee.job_title} ${employee.location}`
+        .toLowerCase()
+        .includes(needle)
+    }).slice(0, limit)
+    return result({
+      ...evidence(analytics),
+      matchCount: matches.length,
+      employees: matches.map((employee) => ({
+        employeeId: employee.employee_id,
+        name: employeeName(employee),
+        department: employee.department,
+        jobTitle: employee.job_title,
+        location: employee.location,
+        manager: employee.manager,
+        employmentStatus: employee.employment_status,
+        tenureYears: employee.tenure_years,
+        dataSource: employee.data_source,
+        hasWorkEmail: Boolean(employee.work_email),
+      })),
+      privacy: "Only the minimum profile fields needed for the question are returned.",
+    })
   })
 
   server.registerResource("hr-data-contract", "laidbackhr://data-contract", {
-    title: "LaidbackHR.AI HR data contract",
-    description: "Domain coverage and AI governance contract",
+    title: "LaidbackHR.AI data and governance contract",
+    description: "Available HR domains, source modes, and responsible-use rules.",
     mimeType: "application/json",
-  }, async (uri) => ({ contents: [{ uri: uri.href, mimeType: "application/json", text: JSON.stringify({ domains: ["employees", "hiring", "attrition", "leave", "training", "promotions"], riskGovernance: "Human review required; no automated employment decisions.", toolCount: mcpToolCatalog.length }) }] }))
+  }, async (uri) => ({
+    contents: [{
+      uri: uri.href,
+      mimeType: "application/json",
+      text: JSON.stringify({
+        domains: ["employees", "hiring", "attrition", "leave", "training", "promotions"],
+        tools: mcpToolCatalog.map((tool) => tool.name),
+        sourceModes: ["demo", "mixed", "imported/operational"],
+        governance: "No automated employment decisions. Human review is required for employee-level action.",
+      }),
+    }],
+  }))
 
   return server
 }

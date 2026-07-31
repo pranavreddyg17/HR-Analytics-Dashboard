@@ -1,70 +1,89 @@
-import { Bot, Clock, CheckCircle2, Database, Wrench } from "lucide-react"
+import { BarChart3, BriefcaseBusiness, Database, Search, ShieldCheck, Users } from "lucide-react"
 
-import { Card, CardHeader, CardTitle, CardContent, CardDescription } from "@/components/ui/card"
 import { AgentCopilot } from "@/components/agent-copilot"
-import { AgentActionQueue } from "@/components/agent-action-queue"
-import { getActions } from "@/lib/server/actions"
-import { getDashboard } from "@/lib/server/runtime"
+import { AgentWorkflows } from "@/components/agent-workflows"
+import { getWorkforceAnalytics } from "@/lib/server/hr-analytics"
+import { getRequestActor } from "@/lib/server/request-user"
 
 export const dynamic = "force-dynamic"
 
+const capabilities = [
+  { label: "Workforce overview", detail: "Headcount, movement, open work, and source status", icon: BarChart3 },
+  { label: "Department comparison", detail: "Headcount, hiring, exits, leave, learning, and promotions", icon: Users },
+  { label: "Attrition signals", detail: "Observed exits and governed historical model review", icon: ShieldCheck },
+  { label: "People operations", detail: "Hiring, leave, training, and promotion exceptions", icon: BriefcaseBusiness },
+  { label: "Employee lookup", detail: "Limited profile context from the current directory", icon: Search },
+]
+
+function workspaceMode(status: Awaited<ReturnType<typeof getWorkforceAnalytics>>["status"]): "Demo" | "Mixed" | "Operational" {
+  const modes = new Set(status.filter((item) => item.count > 0).map((item) => item.mode))
+  if (modes.size === 1 && modes.has("demo")) return "Demo"
+  if (modes.size > 0 && [...modes].every((mode) => mode === "imported")) return "Operational"
+  return "Mixed"
+}
+
 export default async function AiAgentsPage() {
-  const [actions, dashboard] = await Promise.all([getActions(), Promise.resolve(getDashboard())])
-  const stats = [
-    { label: "MCP tools", value: "9", icon: Wrench },
-    { label: "Awaiting approval", value: String(actions.stats.awaitingApproval), icon: Clock },
-    { label: "Completed reviews", value: String(actions.stats.completed), icon: CheckCircle2 },
-  ]
+  const [analytics, actor] = await Promise.all([getWorkforceAnalytics(), getRequestActor()])
+  const mode = workspaceMode(analytics.status)
+  const canPrepare = Boolean(actor && ["admin", "hr", "manager"].includes(actor.role))
 
   return (
-    <div className="flex flex-col gap-5">
-      <div className="flex items-start gap-3 rounded-xl border border-slate-800 bg-[#0d1424] p-4 text-sm text-slate-300 shadow-sm">
-        <Database className="mt-0.5 size-4 shrink-0 text-primary" />
-        <div><p className="font-semibold text-white">Grounded analytics mode</p><p className="mt-1 text-xs leading-5 text-slate-400">Nine read-only MCP tools query the active HR dataset. Every answer includes its tool trace and requires human review for employee decisions.</p></div>
-      </div>
+    <div className="mx-auto flex w-full max-w-[1520px] flex-col gap-6 pb-10">
+      <header className="flex flex-col gap-4 border-b border-border pb-5 sm:flex-row sm:items-end sm:justify-between">
+        <div>
+          <h1 className="text-2xl font-semibold tracking-[-0.02em]">HR assistant</h1>
+          <p className="mt-1 max-w-2xl text-sm leading-6 text-muted-foreground">Ask questions about workforce data and prepare employee communications for human review.</p>
+        </div>
+        <span className="inline-flex w-fit items-center gap-2 rounded-md border border-border bg-card px-3 py-2 text-xs text-muted-foreground">
+          <Database className="size-3.5 text-primary" />
+          Current data: <b className="font-semibold text-foreground">{mode}</b>
+        </span>
+      </header>
 
-      <div className="grid grid-cols-1 gap-5 xl:grid-cols-[1fr_400px]">
-        <div className="flex flex-col gap-5">
-          <div className="grid grid-cols-3 gap-4">
-            {stats.map((stat) => (
-              <Card key={stat.label} className="gap-2 p-4">
-                <div className="flex items-center gap-2 text-muted-foreground">
-                  <stat.icon className="size-4" />
-                  <span className="truncate text-xs font-medium">{stat.label}</span>
-                </div>
-                <span className="font-mono text-2xl font-semibold tabular-nums">{stat.value}</span>
-              </Card>
-            ))}
+      <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_360px]">
+        <section className="flex h-[680px] min-h-0 flex-col overflow-hidden rounded-lg border border-border bg-muted/20">
+          <div className="border-b border-border bg-card px-5 py-4">
+            <h2 className="text-sm font-semibold">Workforce analytics</h2>
+            <p className="mt-1 text-xs text-muted-foreground">Answers combine current database evidence with the relevant HR guidance stored in the workspace knowledge base.</p>
           </div>
+          <AgentCopilot dataMode={mode.toLowerCase()} />
+        </section>
 
-          <Card>
-            <CardHeader className="border-b">
-              <CardTitle>Data-driven review queue</CardTitle>
-              <CardDescription>
-                Suggested reviews derived from workforce and model cohorts; approvals are stored durably
-              </CardDescription>
-            </CardHeader>
-            <CardContent>
-              <AgentActionQueue initialActions={actions.items} />
-            </CardContent>
-          </Card>
-        </div>
+        <aside className="space-y-4">
+          <section className="rounded-lg border border-border bg-card">
+            <div className="border-b border-border px-4 py-3">
+              <h2 className="text-sm font-semibold">Available analysis</h2>
+              <p className="mt-0.5 text-xs text-muted-foreground">Five focused data tools</p>
+            </div>
+            <div className="divide-y divide-border">
+              {capabilities.map(({ label, detail, icon: Icon }) => (
+                <div key={label} className="flex gap-3 px-4 py-3">
+                  <span className="flex size-8 shrink-0 items-center justify-center rounded-md bg-muted text-primary"><Icon className="size-4" /></span>
+                  <div><p className="text-sm font-medium">{label}</p><p className="mt-0.5 text-[11px] leading-5 text-muted-foreground">{detail}</p></div>
+                </div>
+              ))}
+            </div>
+          </section>
 
-        <div className="flex flex-col gap-5">
-          <Card className="flex h-[620px] flex-col">
-            <CardHeader className="border-b">
-              <CardTitle className="flex items-center gap-2">
-                <Bot className="size-4 text-primary" />
-                Analytics copilot
-              </CardTitle>
-              <CardDescription>LangChain + MCP tools · deterministic private synthesis by default</CardDescription>
-            </CardHeader>
-            <CardContent className="min-h-0 flex-1">
-              <AgentCopilot initialBrief={`I can analyze employees, hiring, attrition, leave, training, promotions, individual profiles, and data quality through nine MCP tools. ${dashboard.dailyBrief}`} />
-            </CardContent>
-          </Card>
-        </div>
+          <section className="rounded-lg border border-border bg-card p-4">
+            <h2 className="text-sm font-semibold">Operating boundaries</h2>
+            <ul className="mt-3 space-y-2 text-xs leading-5 text-muted-foreground">
+              <li>Uses current workspace records for factual claims.</li>
+              <li>Labels demo, mixed, and operational data.</li>
+              <li>Separates observed patterns from possible causes.</li>
+              <li>Does not make or execute employment decisions.</li>
+            </ul>
+          </section>
+        </aside>
       </div>
+
+      <section>
+        <div className="mb-3">
+          <h2 className="text-base font-semibold">Employee communication workflows</h2>
+          <p className="mt-1 text-xs text-muted-foreground">Prepare a meeting invitation or employee email from operational directory records. Google remains the final review and send step.</p>
+        </div>
+        <AgentWorkflows canPrepare={canPrepare} />
+      </section>
     </div>
   )
 }

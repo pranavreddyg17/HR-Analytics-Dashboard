@@ -165,3 +165,19 @@ export const workflowRequests = sqliteTable("workflow_requests", {
   index("workflow_employee_idx").on(table.employeeId),
   index("workflow_requester_idx").on(table.requestedByEmail),
 ])
+
+export const aiWorkflowDrafts = sqliteTable("ai_workflow_drafts", {
+  id: text("id").primaryKey(),
+  type: text("type").notNull(),
+  title: text("title").notNull(),
+  status: text("status").notNull().default("ready"),
+  employeeIdsJson: text("employee_ids_json").notNull().default("[]"),
+  detailsJson: text("details_json").notNull().default("{}"),
+  createdByEmail: text("created_by_email").notNull(),
+  openedAt: text("opened_at"),
+  createdAt: text("created_at").notNull().default(sql`CURRENT_TIMESTAMP`),
+  updatedAt: text("updated_at").notNull().default(sql`CURRENT_TIMESTAMP`),
+}, (table) => [
+  index("ai_workflow_creator_idx").on(table.createdByEmail),
+  index("ai_workflow_status_idx").on(table.status),
+])

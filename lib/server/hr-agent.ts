@@ -6,12 +6,13 @@ import { InMemoryTransport } from "@modelcontextprotocol/sdk/inMemory.js"
 import { createAgent } from "langchain"
 
 import type { HrFilters } from "@/lib/hr-types"
+import { buildHrSystemPrompt, type KnowledgeMatch } from "@/lib/server/hr-knowledge"
 import { getWorkforceAnalytics } from "@/lib/server/hr-analytics"
 import { createHrMcpServer } from "@/lib/server/hr-mcp"
 
 type ToolTrace = {
   tool: string
-  input: HrFilters & { employeeId?: string }
+  input: Record<string, unknown>
   durationMs: number
   status: "completed" | "failed"
 }
@@ -20,8 +21,17 @@ type AgentAnswer = {
   answer: string
   provider: string
   tools: ToolTrace[]
+  context: Array<Pick<KnowledgeMatch, "source" | "section">>
+  dataMode?: string
   groundedAt: string
 }
+
+type ToolPlan = {
+  name: "workforce_overview" | "compare_departments" | "analyze_attrition_signals" | "review_people_operations" | "find_employee_records"
+  input: Record<string, unknown>
+}
+
+const outOfScopeResponse = "I can help with workforce analytics, HR data questions, or model explanations from the available workspace data. For operational decisions, I recommend human review."
 
 function contentToJson(value: unknown): Record<string, unknown> {
   if (typeof value === "string") {
@@ -39,90 +49,175 @@ function contentToJson(value: unknown): Record<string, unknown> {
   return {}
 }
 
-function topLabel(value: unknown): { label: string; value: number } | null {
-  if (!Array.isArray(value) || !value.length) return null
-  const first = value[0] as { label?: unknown; value?: unknown }
-  return typeof first.label === "string" && typeof first.value === "number" ? { label: first.label, value: first.value } : null
-}
-
 function numberValue(data: Record<string, unknown>, key: string): number {
   return typeof data[key] === "number" ? data[key] : 0
 }
 
+function list(value: unknown): Array<Record<string, unknown>> {
+  return Array.isArray(value) ? value.filter((item): item is Record<string, unknown> => Boolean(item) && typeof item === "object") : []
+}
+
+function topItem(value: unknown, labelKey = "label"): { label: string; value: number } | null {
+  const first = list(value)[0]
+  if (!first) return null
+  const label = first[labelKey]
+  return typeof label === "string" && typeof first.value === "number" ? { label, value: first.value } : null
+}
+
+function dataLabel(data: Record<string, unknown>): string {
+  return typeof data.dataMode === "string" ? data.dataMode : "mixed"
+}
+
 function explainTool(toolName: string, data: Record<string, unknown>): string {
-  if (toolName === "executive_summary") {
+  const mode = dataLabel(data)
+
+  if (toolName === "workforce_overview") {
     const kpis = (data.kpis ?? {}) as Record<string, unknown>
-    const insights = Array.isArray(data.insights) ? data.insights.map(String) : []
-    return `The selected workforce view contains **${numberValue(kpis, "activeEmployees")} active employees**, ${numberValue(kpis, "hires")} hires, **${numberValue(kpis, "attritionRate")}% attrition**, ${numberValue(kpis, "leaveDays")} approved leave days, **${numberValue(kpis, "trainingCompletionRate")}% training completion**, and ${numberValue(kpis, "promotions")} promotions.\n\n${insights.map((item) => `- ${item}`).join("\n")}`
+    const open = (data.openWork ?? {}) as Record<string, unknown>
+    return [
+      `Current source: ${mode}.`,
+      `- ${numberValue(kpis, "activeEmployees")} active employees; ${numberValue(kpis, "hires")} completed hires; ${numberValue(kpis, "attritionRate")}% recorded attrition.`,
+      `- ${numberValue(open, "pendingLeaveRequests")} leave requests pending; ${numberValue(open, "activeHiringRequisitions")} active requisitions; ${numberValue(open, "mandatoryTrainingGaps")} mandatory training gaps.`,
+      `- ${numberValue(open, "mobilityReviews")} employees meet the tenure-based mobility review definition.`,
+      "Recommended next step: review the largest operational queue first, then validate any employee-level action with the underlying record.",
+    ].join("\n")
   }
-  if (toolName === "analyze_hiring") {
-    const source = topLabel(data.bySource)
-    const department = topLabel(data.byDepartment)
-    return `Hiring produced **${numberValue(data, "totalHired")} completed hires** with an average time-to-hire of **${numberValue(data, "averageTimeToHire")} days**.${source ? ` ${source.label} was the largest source (${source.value} hires).` : ""}${department ? ` ${department.label} hired the most (${department.value}).` : ""} Treat source volume as one signal—quality-of-hire and retention should be joined before reallocating spend.`
+
+  if (toolName === "compare_departments") {
+    const departments = list(data.departments)
+    const first = departments[0]
+    const metric = String(data.definition ?? data.metric ?? "selected metric")
+    if (!first) return `Current source: ${mode}. No department records match this view.`
+    return [
+      `Current source: ${mode}.`,
+      `${String(first.department)} has the highest ${metric.toLowerCase()} value in the current view (${Number(first.value ?? 0).toLocaleString()}).`,
+      ...departments.slice(0, 5).map((row) => `- ${String(row.department)}: ${Number(row.value ?? 0).toLocaleString()}`),
+      "This is a descriptive comparison and does not establish cause.",
+    ].join("\n")
   }
-  if (toolName === "analyze_attrition") {
-    const department = topLabel(data.byDepartment)
-    const risks = Array.isArray(data.highRiskEmployees) ? data.highRiskEmployees.length : 0
-    return `There were **${numberValue(data, "totalExits")} exits** and an attrition rate of **${numberValue(data, "rate")}%**: ${numberValue(data, "voluntary")} voluntary and ${numberValue(data, "involuntary")} involuntary.${department ? ` ${department.label} recorded the most exits (${department.value}).` : ""} ${risks} high-risk historical model records are available for human review. Risk scores are not employment decisions.`
+
+  if (toolName === "analyze_attrition_signals") {
+    const observed = (data.observedAttrition ?? {}) as Record<string, unknown>
+    const model = (data.historicalModelReview ?? {}) as Record<string, unknown>
+    const department = topItem(observed.byDepartment)
+    return [
+      `Current source: ${mode}.`,
+      `- ${numberValue(observed, "exits")} recorded exits; ${numberValue(observed, "rate")}% attrition; ${numberValue(observed, "voluntary")} voluntary and ${numberValue(observed, "involuntary")} involuntary.`,
+      department ? `- ${department.label} has the most recorded exits in this view (${department.value}).` : "- No department exit comparison is available.",
+      `- ${numberValue(model, "recordsAboveReviewThreshold")} anonymized historical records are above the model review threshold.`,
+      "The department pattern and model scores are associations, not forecasts or proven causes. Human review is required.",
+    ].join("\n")
   }
-  if (toolName === "analyze_leave") {
-    const type = topLabel(data.byType)
-    const department = topLabel(data.byDepartment)
-    return `Approved leave totals **${numberValue(data, "totalDays")} days**, averaging ${numberValue(data, "averageDaysPerEmployee")} days per employee with leave. ${numberValue(data, "pending")} requests are pending.${type ? ` ${type.label} is the largest leave category (${type.value} days).` : ""}${department ? ` ${department.label} has the highest leave-day total (${department.value}).` : ""} Leave use should be read as a capacity-planning signal, not an adverse employee signal.`
+
+  if (toolName === "review_people_operations") {
+    const domain = String(data.domain ?? "")
+    const summary = (data.summary ?? {}) as Record<string, unknown>
+    if (domain === "hiring") {
+      const topSource = list(data.sourcePerformance)[0]
+      return [
+        `Current source: ${mode}.`,
+        `- ${numberValue(summary, "completedHires")} completed hires; ${numberValue(summary, "activeRequisitions")} active requisitions; ${numberValue(summary, "averageTimeToHireDays")} average days to hire.`,
+        topSource ? `- ${String(topSource.label)} leads completed-hire volume with ${Number(topSource.hires ?? 0)} hires and ${Number(topSource.averageDays ?? 0)} average days to hire.` : "- No completed source data is available.",
+        "Use quality-of-hire and retention alongside source volume before changing recruiting spend.",
+      ].join("\n")
+    }
+    if (domain === "leave") {
+      const topType = topItem(data.byType)
+      return [
+        `Current source: ${mode}.`,
+        `- ${numberValue(summary, "pending")} pending requests; ${numberValue(summary, "approvedDays")} approved leave days; ${numberValue(summary, "averageApprovedDaysPerEmployee")} average approved days per employee taking leave.`,
+        topType ? `- ${topType.label} is the largest approved leave category (${topType.value} days).` : "- No approved leave category data is available.",
+        "Use this for coverage planning, not as an employee performance signal.",
+      ].join("\n")
+    }
+    if (domain === "training") {
+      const gaps = list(data.incompleteMandatoryAssignments)
+      return [
+        `Current source: ${mode}.`,
+        `- ${numberValue(summary, "completionRate")}% completion across ${numberValue(summary, "assignedHours")} assigned hours.`,
+        `- ${numberValue(summary, "mandatoryGaps")} mandatory assignments require follow-up.`,
+        ...gaps.slice(0, 5).map((row) => `- ${String(row.program)} — ${String(row.employeeId)}${row.dueDate ? `, due ${String(row.dueDate)}` : ""}`),
+        gaps.length > 5 ? `- ${gaps.length - 5} additional mandatory gaps are in the current result.` : "",
+      ].filter(Boolean).join("\n")
+    }
+    const mobility = list(data.mobilityReview)
+    return [
+      `Current source: ${mode}.`,
+      `- ${numberValue(summary, "promotions")} promotions; ${numberValue(summary, "promotionRate")}% promotion rate; ${numberValue(summary, "averageMonthsToPromotion")} average months between recorded promotions.`,
+      `- ${numberValue(summary, "mobilityReviewCount")} active employees meet the three-year tenure and no-promotion-record definition.`,
+      ...mobility.slice(0, 5).map((row) => `- ${String(row.employeeId)} — ${String(row.department)}, ${Number(row.tenureYears ?? 0)} years tenure`),
+      "Review lateral moves, career ladders, employee preference, and data completeness before drawing conclusions.",
+    ].join("\n")
   }
-  if (toolName === "analyze_training") {
-    const program = topLabel(data.byProgram)
-    return `Training completion is **${numberValue(data, "completionRate")}%** across ${numberValue(data, "totalHours")} assigned hours, with an average completed assessment score of ${numberValue(data, "averageScore")}. **${numberValue(data, "requiringMandatoryTraining")} mandatory assignments need attention**.${program ? ` ${program.label} accounts for the most assigned hours (${program.value}).` : ""}`
+
+  if (toolName === "find_employee_records") {
+    const employees = list(data.employees)
+    if (!employees.length) return `Current source: ${mode}. No employee records match the requested criteria.`
+    return [
+      `Current source: ${mode}. ${Number(data.matchCount ?? employees.length)} employee records match.`,
+      ...employees.map((employee) => `- ${String(employee.name)} (${String(employee.employeeId)}) — ${String(employee.jobTitle)}, ${String(employee.department)}, ${String(employee.location)}; status: ${String(employee.employmentStatus)}.`),
+      "Only minimum profile fields are shown. Use employee-level information for legitimate HR work and human review.",
+    ].join("\n")
   }
-  if (toolName === "analyze_promotions") {
-    const department = topLabel(data.byDepartment)
-    return `The selected data contains **${numberValue(data, "total")} promotions** (${numberValue(data, "rate")}% of active employees), with ${numberValue(data, "averageMonthsToPromotion")} average months between promotions. **${numberValue(data, "withoutPromotionOver36Months")} employees with 3+ years' tenure have no promotion record**.${department ? ` ${department.label} recorded the most promotions (${department.value}).` : ""} Check data completeness and role ladders before interpreting this as stalled progression.`
-  }
-  if (toolName === "data_quality") {
-    const gaps = Array.isArray(data.gaps) ? data.gaps.map(String) : []
-    return gaps.length ? `The analytics warehouse is still in demo mode for: ${gaps.join(", ")}. Import those domains before using the numbers for operational decisions.` : "All six HR domains contain imported operational data."
-  }
-  if (toolName === "analyze_employees") {
-    const department = topLabel(data.byDepartment)
-    const location = topLabel(data.byLocation)
-    return `The selected workforce contains **${numberValue(data, "total")} employee records**: ${numberValue(data, "active")} active, ${numberValue(data, "onLeave")} on leave, ${numberValue(data, "preboarding")} preboarding, and ${numberValue(data, "terminated")} terminated.${department ? ` ${department.label} is the largest department (${department.value}).` : ""}${location ? ` ${location.label} is the largest location (${location.value}).` : ""}`
-  }
-  if (toolName === "employee_drilldown") {
-    return data.employee ? `I found the employee record and related operational history. Review the employee-level rows in the returned evidence with appropriate HR access controls.` : "No matching employee was found in the current filtered dataset."
-  }
-  return "The requested analysis completed."
+
+  return `Current source: ${mode}. The requested HR analysis completed.`
 }
 
-function selectTools(message: string): string[] {
-  const text = message.toLowerCase()
-  const selected: string[] = []
-  if (/hire|hiring|recruit|time.to.hire|source/.test(text)) selected.push("analyze_hiring")
-  if (/attrition|turnover|exit|retention|risk/.test(text)) selected.push("analyze_attrition")
-  if (/leave|pto|absence|vacation|sick/.test(text)) selected.push("analyze_leave")
-  if (/training|learning|course|assessment|mandatory/.test(text)) selected.push("analyze_training")
-  if (/promotion|promote|career|progression|mobility/.test(text)) selected.push("analyze_promotions")
-  if (/employee|headcount|workforce|directory|location|employment type|manager span/.test(text)) selected.push("analyze_employees")
-  if (/quality|demo|import|source data|coverage/.test(text)) selected.push("data_quality")
-  const employeeMatch = text.match(/(?:employee|id)\s*[:#-]?\s*(emp[-_ ]?\d+|ibm[-_ ]?\d+)/i)
-  if (employeeMatch) selected.unshift("employee_drilldown")
-  if (!selected.length || /executive|summary|brief|overview|company|all/.test(text)) selected.unshift("executive_summary")
-  return [...new Set(selected)].slice(0, 3)
+function inHrScope(message: string): boolean {
+  return /employee|people|workforce|headcount|department|location|manager|hire|hiring|recruit|attrition|turnover|exit|retention|risk|leave|pto|absence|vacation|training|learning|course|mandatory|promotion|career|mobility|data quality|demo|import|summary|brief|company|status/i.test(message)
 }
 
-async function inferFilters(message: string): Promise<HrFilters & { employeeId?: string }> {
+function operationDomain(message: string): "hiring" | "leave" | "training" | "promotions" | null {
+  if (/hire|hiring|recruit|candidate|source|requisition|offer/i.test(message)) return "hiring"
+  if (/leave|pto|absence|vacation|sick|coverage/i.test(message)) return "leave"
+  if (/training|learning|course|assessment|mandatory|compliance|phishing|safety/i.test(message)) return "training"
+  if (/promotion|promote|career|progression|mobility/i.test(message)) return "promotions"
+  return null
+}
+
+function comparisonMetric(message: string): "headcount" | "hires" | "exits" | "leave_days" | "training_hours" | "promotions" {
+  if (/hire|recruit/i.test(message)) return "hires"
+  if (/exit|attrition|turnover/i.test(message)) return "exits"
+  if (/leave|absence|pto/i.test(message)) return "leave_days"
+  if (/training|learning/i.test(message)) return "training_hours"
+  if (/promotion|mobility/i.test(message)) return "promotions"
+  return "headcount"
+}
+
+async function inferFilters(message: string): Promise<HrFilters> {
   const analytics = await getWorkforceAnalytics()
   const lower = message.toLowerCase()
-  const department = analytics.dimensions.departments.find((value) => lower.includes(value.toLowerCase()))
-  const jobTitle = analytics.dimensions.jobTitles.find((value) => lower.includes(value.toLowerCase()))
-  const location = analytics.dimensions.locations.find((value) => lower.includes(value.toLowerCase()))
-  const employeeMatch = message.match(/(?:employee|id)\s*[:#-]?\s*([a-z]+[-_ ]?\d+)/i)
   return {
-    department,
-    jobTitle,
-    location,
-    period: /quarter/.test(lower) ? "quarter" : /year|annual/.test(lower) ? "year" : "month",
-    employeeId: employeeMatch?.[1].replace(/[_ ]/g, "-"),
+    department: analytics.dimensions.departments.find((value) => lower.includes(value.toLowerCase())),
+    jobTitle: analytics.dimensions.jobTitles.find((value) => lower.includes(value.toLowerCase())),
+    location: analytics.dimensions.locations.find((value) => lower.includes(value.toLowerCase())),
+    period: /quarter/i.test(message) ? "quarter" : /year|annual/i.test(message) ? "year" : "month",
   }
+}
+
+async function planTools(message: string): Promise<ToolPlan[]> {
+  const filters = await inferFilters(message)
+  const cleanFilters = Object.fromEntries(Object.entries(filters).filter(([, value]) => value !== undefined))
+  const plans: ToolPlan[] = []
+  const domain = operationDomain(message)
+
+  if (/attrition|turnover|exit|retention|risk/i.test(message)) {
+    plans.push({ name: "analyze_attrition_signals", input: cleanFilters })
+  }
+  if (domain) {
+    plans.push({ name: "review_people_operations", input: { ...cleanFilters, domain } })
+  }
+  if (/compare|which department|highest|lowest|break down|breakdown|by department/i.test(message)) {
+    plans.push({ name: "compare_departments", input: { ...cleanFilters, metric: comparisonMetric(message) } })
+  }
+  if (/employee|person|people|directory|employee id|location and status|status and location/i.test(message)) {
+    const identifier = message.match(/\b(?:emp|ibm)[-_ ]?\d+\b/i)?.[0]
+    plans.push({ name: "find_employee_records", input: { ...cleanFilters, query: identifier?.replace(/[_ ]/g, "-") ?? "", limit: 10 } })
+  }
+  if (!plans.length || /executive|summary|brief|overview|company|workforce/i.test(message)) {
+    plans.unshift({ name: "workforce_overview", input: cleanFilters })
+  }
+  return plans.filter((plan, index, all) => all.findIndex((candidate) => candidate.name === plan.name) === index).slice(0, 2)
 }
 
 function getWorkerSecret(name: "OPENAI_API_KEY" | "OPENAI_MODEL"): string | undefined {
@@ -141,11 +236,9 @@ function messageText(message: unknown): string {
 async function loadInProcessMcpTools() {
   const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair()
   const mcpServer = createHrMcpServer()
-  const mcpClient = new Client({ name: "LaidbackHR.AI LangChain Agent", version: "2.0.0" }, { capabilities: {} })
+  const mcpClient = new Client({ name: "LaidbackHR.AI LangChain Agent", version: "3.0.0" }, { capabilities: {} })
   await mcpServer.connect(serverTransport)
   await mcpClient.connect(clientTransport)
-  // pnpm may instantiate the MCP SDK once with Zod 3 and once with Zod 4;
-  // the runtime Client contract is identical even though its private TS brand differs.
   const tools = await loadMcpTools("laidbackhr", mcpClient as unknown as Parameters<typeof loadMcpTools>[1])
   return {
     tools,
@@ -158,45 +251,60 @@ async function loadInProcessMcpTools() {
 
 export async function runHrAgent({ message }: { message: unknown }): Promise<AgentAnswer> {
   if (typeof message !== "string" || !message.trim() || message.length > 2000) throw new Error("message must contain between 1 and 2,000 characters.")
+  const query = message.trim()
+  const { prompt, context } = buildHrSystemPrompt(query)
+  const citedContext = context.map(({ source, section }) => ({ source, section }))
+
+  if (!inHrScope(query)) {
+    return { answer: outOfScopeResponse, provider: "scope-guard", tools: [], context: citedContext, groundedAt: new Date().toISOString() }
+  }
+
   const mcp = await loadInProcessMcpTools()
   const traces: ToolTrace[] = []
   try {
-    const tools = mcp.tools
     const apiKey = getWorkerSecret("OPENAI_API_KEY")
     if (apiKey) {
       const model = new ChatOpenAI({ apiKey, model: getWorkerSecret("OPENAI_MODEL") ?? "gpt-4.1-mini", temperature: 0 })
-      const agent = createAgent({
-        model,
-        tools,
-        systemPrompt: "You are LaidbackHR.AI, an executive HR analytics agent. Use the provided MCP tools for every factual claim. State whether data is demo or imported. Give concise, decision-useful explanations, separate association from causation, and require human review for employee-level risk.",
-      })
+      const agent = createAgent({ model, tools: mcp.tools, systemPrompt: prompt })
       const started = Date.now()
-      const response = await agent.invoke({ messages: [{ role: "user", content: message }] })
-      const usedTools = response.messages.flatMap((item) => "tool_calls" in item && Array.isArray(item.tool_calls) ? item.tool_calls.map((call) => call.name) : [])
-      for (const tool of [...new Set(usedTools)]) traces.push({ tool, input: {}, durationMs: Date.now() - started, status: "completed" })
-      return { answer: messageText(response.messages.at(-1)) || "The agent completed without a text response.", provider: "langchain-agent+openai+mcp", tools: traces, groundedAt: new Date().toISOString() }
+      const response = await agent.invoke({ messages: [{ role: "user", content: query }] })
+      const usedTools = response.messages.flatMap((item) => {
+        if (!("tool_calls" in item) || !Array.isArray(item.tool_calls)) return []
+        return item.tool_calls.map((call) => ({ name: call.name, input: call.args && typeof call.args === "object" ? call.args as Record<string, unknown> : {} }))
+      })
+      for (const call of usedTools) traces.push({ tool: call.name, input: call.input, durationMs: Date.now() - started, status: "completed" })
+      return {
+        answer: messageText(response.messages.at(-1)) || "No answer was produced for this question.",
+        provider: "langchain-openai-mcp-rag",
+        tools: traces,
+        context: citedContext,
+        groundedAt: new Date().toISOString(),
+      }
     }
 
-    const selected = selectTools(message)
-    const filters = await inferFilters(message)
-    const cleanFilters = Object.fromEntries(Object.entries(filters).filter(([, value]) => value !== undefined)) as HrFilters & { employeeId?: string }
-    const evidence: Array<{ tool: string; data: Record<string, unknown> }> = []
-    for (const name of selected) {
-      const selectedTool = tools.find((tool) => tool.name === name)
-      if (!selectedTool) continue
-      const input = name === "data_quality" ? {} : name === "employee_drilldown" ? { ...cleanFilters, employeeId: cleanFilters.employeeId ?? "missing" } : cleanFilters
+    const evidenceResults: Array<{ tool: string; data: Record<string, unknown> }> = []
+    for (const plan of await planTools(query)) {
+      const tool = mcp.tools.find((candidate) => candidate.name === plan.name)
+      if (!tool) continue
       const started = Date.now()
       try {
-        const output = await selectedTool.invoke(input)
-        evidence.push({ tool: name, data: contentToJson(output) })
-        traces.push({ tool: name, input, durationMs: Date.now() - started, status: "completed" })
+        const output = await tool.invoke(plan.input)
+        evidenceResults.push({ tool: plan.name, data: contentToJson(output) })
+        traces.push({ tool: plan.name, input: plan.input, durationMs: Date.now() - started, status: "completed" })
       } catch (error) {
-        traces.push({ tool: name, input, durationMs: Date.now() - started, status: "failed" })
+        traces.push({ tool: plan.name, input: plan.input, durationMs: Date.now() - started, status: "failed" })
         throw error
       }
     }
-    const answer = evidence.map(({ tool, data }) => explainTool(tool, data)).join("\n\n")
-    return { answer: `${answer}\n\n_MCP evidence retrieved through LangChain. ${apiKey ? "LLM synthesis enabled." : "Deterministic synthesis is active; no employee data was sent to an external model."}_`, provider: "langchain-mcp-grounded-agent", tools: traces, groundedAt: new Date().toISOString() }
+    const mode = evidenceResults.map((item) => item.data.dataMode).find((value): value is string => typeof value === "string")
+    return {
+      answer: evidenceResults.map(({ tool, data }) => explainTool(tool, data)).join("\n\n"),
+      provider: "langchain-mcp-rag-deterministic",
+      tools: traces,
+      context: citedContext,
+      dataMode: mode,
+      groundedAt: new Date().toISOString(),
+    }
   } finally {
     await mcp.close()
   }

@@ -59,7 +59,7 @@ export const navigationGroups: Array<{ label: string; items: NavigationItem[] }>
     items: [
       { href: "/insights", label: "Insights", icon: BarChart3 },
       { href: "/attrition", label: "Attrition risk", icon: ShieldAlert },
-      { href: "/ai-agents", label: "AI assistant", icon: Bot },
+      { href: "/ai-agents", label: "HR assistant", icon: Bot },
     ],
   },
   {

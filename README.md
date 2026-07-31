@@ -16,7 +16,9 @@ The deployed application is a single Cloudflare-compatible web runtime:
 - Employee profiles, reporting lines, soft archival, operational HR domains, approvals, imports, and activity history are stored in D1.
 - The persisted scikit-learn pipeline is exported into an equivalent TypeScript inference runtime.
 - Predictions from the web runtime are parity-tested against the Python model.
-- Nine in-process MCP tools ground a LangChain agent across employees, hiring, attrition, leave, training, promotions, employee drill-down, data quality, and executive summaries.
+- Five focused MCP tools ground a LangChain agent across workforce summaries, department comparisons, attrition signals, people operations, and employee lookup.
+- A small Markdown knowledge base supplies HR metric definitions and responsible-use guidance through lightweight retrieval.
+- Approval-based Google Calendar and Gmail draft workflows use operational employee email records without sending or scheduling automatically.
 - Reports export to PDF and Excel, while domain feeds support Power BI refreshes.
 - The original FastAPI backend remains in `backend/` as the reproducible training and reference implementation.
 
@@ -106,9 +108,8 @@ PYTHONPATH=. .venv/bin/python scripts/export_worker_runtime.py
 | POST | `/api/v1/data/import` | Authenticated domain import |
 | GET | `/api/v1/reports` | PDF or Excel report export |
 | GET | `/api/v1/power-bi/{domain}` | Power BI-ready CSV feed |
-| GET/POST/DELETE | `/api/mcp` | Streamable HTTP MCP endpoint with nine tools |
-| GET | `/api/v1/actions` | Data-derived review actions |
-| POST | `/api/v1/actions/{id}` | Persist a review action status |
+| GET/POST/DELETE | `/api/mcp` | Streamable HTTP MCP endpoint with five focused HR tools |
+| GET/POST | `/api/v1/ai/workflows` | List or prepare Calendar and Gmail employee workflows |
 | POST | `/api/v1/chat` | Grounded analytics agent |
 | GET | `/api/v1/data-dictionary` | Source schema and model-use flags |
 

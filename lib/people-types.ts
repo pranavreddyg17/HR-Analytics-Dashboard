@@ -58,7 +58,7 @@ export type EmployeeInput = {
 
 export type InboxItem = {
   id: string
-  type: "leave" | "hiring" | "training" | "review"
+  type: "leave" | "hiring" | "training"
   title: string
   detail: string
   person: string | null

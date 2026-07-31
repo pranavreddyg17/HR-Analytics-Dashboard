@@ -15,7 +15,7 @@ const pageMeta: Record<string, { title: string; subtitle: string }> = {
   "/hiring": { title: "Hiring", subtitle: "Requisitions, pipeline, velocity, and source performance" },
   "/time-off": { title: "Time off", subtitle: "Requests, approvals, coverage, and leave patterns" },
   "/attrition": { title: "Attrition risk", subtitle: "Review explainable workforce signals" },
-  "/ai-agents": { title: "AI copilot", subtitle: "Grounded analysis across workforce data" },
+  "/ai-agents": { title: "HR assistant", subtitle: "Workforce analysis and employee communications" },
   "/data": { title: "Data hub", subtitle: "Imports, integrations, and data readiness" },
   "/access": { title: "Access", subtitle: "Google sign-in, roles, and workspace membership" },
   "/learning": { title: "Learning", subtitle: "Assignments, compliance, progress, and development" },

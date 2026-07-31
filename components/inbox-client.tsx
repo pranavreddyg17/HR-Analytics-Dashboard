@@ -16,7 +16,6 @@ import {
   Inbox,
   LoaderCircle,
   RefreshCw,
-  Sparkles,
   X,
 } from "lucide-react"
 import { AnimatePresence, motion } from "motion/react"
@@ -33,16 +32,14 @@ const filterOptions: Array<{ id: Filter; label: string }> = [
   { id: "leave", label: "Leave" },
   { id: "hiring", label: "Hiring" },
   { id: "training", label: "Training" },
-  { id: "review", label: "Reviews" },
 ]
 
-const groupOrder: InboxItem["type"][] = ["leave", "hiring", "training", "review"]
+const groupOrder: InboxItem["type"][] = ["leave", "hiring", "training"]
 
 const groupMeta: Record<InboxItem["type"], { title: string; description: string; icon: typeof Inbox; iconClass: string; href: string }> = {
   leave: { title: "Leave requests", description: "Review upcoming time away", icon: CalendarCheck2, iconClass: "bg-rose-100 text-rose-700 dark:bg-rose-900/30 dark:text-rose-300", href: "/time-off" },
   hiring: { title: "Hiring follow-ups", description: "Open roles and offers in motion", icon: BriefcaseBusiness, iconClass: "bg-sky-100 text-sky-700 dark:bg-sky-900/30 dark:text-sky-300", href: "/hiring" },
   training: { title: "Training & compliance", description: "Mandatory assignments needing attention", icon: GraduationCap, iconClass: "bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-300", href: "/learning" },
-  review: { title: "Human review", description: "AI work waiting for a decision", icon: Sparkles, iconClass: "bg-violet-100 text-violet-700 dark:bg-violet-900/30 dark:text-violet-300", href: "/ai-agents" },
 }
 
 function validFilter(value: string | null): Filter {

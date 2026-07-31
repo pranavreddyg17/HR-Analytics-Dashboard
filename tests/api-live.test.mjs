@@ -17,7 +17,8 @@ test("health reports every production capability ready", async () => {
   assert.deepEqual(body.capabilities, {
     prediction: "ready",
     groundedAnalytics: "ready",
-    reviewActions: "ready",
+    ragKnowledge: "ready",
+    employeeCommunicationWorkflows: "ready",
     workforceWarehouse: "ready",
     mcpTools: "ready",
     langchainAgent: "ready",
@@ -110,21 +111,22 @@ test("LangChain agent invokes MCP tools and returns its trace", async () => {
     body: JSON.stringify({ message: "Which department has the highest predicted risk?" }),
   })
   assert.equal(response.status, 200)
-  assert.equal(body.provider, "langchain-mcp-grounded-agent")
-  assert.ok(body.tools.some((trace) => trace.tool === "analyze_attrition" && trace.status === "completed"))
-  assert.match(body.answer, /attrition rate/)
+  assert.equal(body.provider, "langchain-mcp-rag-deterministic")
+  assert.ok(body.tools.some((trace) => trace.tool === "analyze_attrition_signals" && trace.status === "completed"))
+  assert.match(body.answer, /recorded exits/)
+  assert.ok(body.context.some((item) => item.section === "Attrition and model risk"))
 })
 
 test("MCP server lists and calls the HR tools", async () => {
   const headers = { "Content-Type": "application/json", Accept: "application/json, text/event-stream", "mcp-protocol-version": "2025-06-18" }
   const listed = await json("/api/mcp", { method: "POST", headers, body: JSON.stringify({ jsonrpc: "2.0", id: 2, method: "tools/list", params: {} }) })
   assert.equal(listed.response.status, 200)
-  assert.equal(listed.body.result.tools.length, 9)
-  assert.ok(listed.body.result.tools.some((tool) => tool.name === "analyze_promotions"))
-  assert.ok(listed.body.result.tools.some((tool) => tool.name === "analyze_employees"))
-  const called = await json("/api/mcp", { method: "POST", headers, body: JSON.stringify({ jsonrpc: "2.0", id: 3, method: "tools/call", params: { name: "data_quality", arguments: {} } }) })
+  assert.equal(listed.body.result.tools.length, 5)
+  assert.ok(listed.body.result.tools.some((tool) => tool.name === "review_people_operations"))
+  assert.ok(listed.body.result.tools.some((tool) => tool.name === "find_employee_records"))
+  const called = await json("/api/mcp", { method: "POST", headers, body: JSON.stringify({ jsonrpc: "2.0", id: 3, method: "tools/call", params: { name: "workforce_overview", arguments: {} } }) })
   assert.equal(called.response.status, 200)
-  assert.match(called.body.result.content[0].text, /readyForOperationalDecisions/)
+  assert.match(called.body.result.content[0].text, /dataMode/)
 })
 
 test("report and Power BI exports are valid files", async () => {
@@ -139,23 +141,6 @@ test("report and Power BI exports are valid files", async () => {
   assert.equal(Buffer.from(await pdf.arrayBuffer()).subarray(0, 4).toString(), "%PDF")
   assert.equal(Buffer.from(await workbook.arrayBuffer()).subarray(0, 2).toString(), "PK")
   assert.match(await feed.text(), /^id,employee_id,leave_type/m)
-})
-
-test("review action status persists and can be restored", async () => {
-  const update = await json("/api/v1/actions/A-01", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ status: "running" }),
-  })
-  assert.equal(update.response.status, 200)
-  const after = await json("/api/v1/actions")
-  assert.equal(after.body.items.find((item) => item.id === "A-01").status, "running")
-  const restore = await json("/api/v1/actions/A-01", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ status: "needs_approval" }),
-  })
-  assert.equal(restore.response.status, 200)
 })
 
 test("HR admins can manage an employee lifecycle with an attributable activity log", async () => {

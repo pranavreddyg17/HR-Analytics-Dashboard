@@ -4,7 +4,6 @@ import type { AttritionRecord, LeaveRecord, PromotionRecord, TrainingRecord } fr
 import type { EmployeeActivity, EmployeeDirectoryResponse, EmployeeInput, EmployeeProfileResponse, InboxItem, ManagedEmployee } from "@/lib/people-types"
 import type { RequestActor } from "@/lib/server/request-user"
 import { ensureHrDatabase, type Database } from "@/lib/server/hr-database"
-import { getActions } from "@/lib/server/actions"
 
 export class PeopleError extends Error {
   constructor(message: string, public status = 400) { super(message) }
@@ -229,11 +228,10 @@ export async function setPersonArchived(employeeId: string, archived: boolean, a
 export async function listInboxItems(actor?: RequestActor): Promise<InboxItem[]> {
   const database = await databaseOrThrow()
   type WorkflowPerson = { first_name?: string; last_name?: string; preferred_name?: string | null; work_email?: string | null; manager_id?: string | null; requested_by_email?: string | null; details_json?: string | null }
-  const [leave, hiring, training, actions, actorEmployee] = await Promise.all([
+  const [leave, hiring, training, actorEmployee] = await Promise.all([
     database.prepare("SELECT l.*, e.first_name, e.last_name, e.preferred_name, e.work_email, e.manager_id, w.requested_by_email, w.details_json FROM leave_records l LEFT JOIN employees e ON e.employee_id=l.employee_id LEFT JOIN workflow_requests w ON w.id=l.id WHERE LOWER(l.approval_status)='pending' AND LOWER(l.data_source) <> 'demo' ORDER BY l.start_date LIMIT 100").all<LeaveRecord & WorkflowPerson>(),
     database.prepare("SELECT h.*, w.requested_by_email, w.details_json FROM hiring_records h LEFT JOIN workflow_requests w ON w.id=h.id WHERE LOWER(h.recruitment_status) IN ('requested','offer') AND LOWER(h.data_source) <> 'demo' ORDER BY h.application_date LIMIT 100").all<Record<string, unknown> & WorkflowPerson>(),
     database.prepare("SELECT t.*, e.first_name, e.last_name, e.preferred_name, e.work_email, e.manager_id, w.requested_by_email, w.details_json FROM training_records t LEFT JOIN employees e ON e.employee_id=t.employee_id LEFT JOIN workflow_requests w ON w.id=t.id WHERE LOWER(t.completion_status) <> 'completed' AND LOWER(t.data_source) <> 'demo' LIMIT 100").all<TrainingRecord & WorkflowPerson>(),
-    getActions(),
     actor ? database.prepare("SELECT employee_id FROM employees WHERE LOWER(work_email)=LOWER(?) AND archived_at IS NULL").bind(actor.email).first<{ employee_id: string }>() : Promise.resolve(null),
   ])
   const personName = (row: { first_name?: string; last_name?: string; preferred_name?: string | null; employee_id: string }) => `${row.preferred_name || row.first_name || row.employee_id} ${row.last_name || ""}`.trim()
@@ -259,7 +257,6 @@ export async function listInboxItems(actor?: RequestActor): Promise<InboxItem[]>
       const canComplete = Boolean(row.requested_by_email && actor && (isPeopleTeam || row.work_email?.toLowerCase() === ownEmail))
       return { id: row.id, type: "training", title: row.training_program, detail: `${row.training_hours} hours · assigned training`, person: personName(row), employeeId: row.employee_id, dueDate: workflowDate(row) ?? row.completion_date, status: row.completion_status, priority: workflowDate(row) && workflowDate(row)! < new Date().toISOString().slice(0, 10) ? "high" : "medium", actionable: canComplete, actions: canComplete ? ["complete"] : [] }
     }),
-    ...(isPeopleTeam ? actions.items.filter((item) => item.status === "needs_approval").slice(0, 5) : []).map((item): InboxItem => ({ id: item.id, type: "review", title: item.title, detail: item.detail, person: null, employeeId: null, dueDate: null, status: item.status, priority: "medium", actionable: false, actions: [] })),
   ].sort((left, right) => ({ high: 0, medium: 1, low: 2 })[left.priority] - ({ high: 0, medium: 1, low: 2 })[right.priority])
 }
 
