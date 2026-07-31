@@ -54,12 +54,29 @@ async function refreshAccessToken(refreshToken: string): Promise<string> {
 }
 
 async function googleAccessToken(request: Request): Promise<string> {
-  const secureCookie = new URL(request.url).protocol === "https:"
-  const token = await getToken({
-    req: request,
-    secret: runtime.AUTH_SECRET ?? localAuthSecret,
-    secureCookie,
-  }) as GoogleToken | null
+  // Auth.js can choose its cookie prefix from the public request URL. Behind a
+  // reverse proxy/custom domain that can differ from the URL seen while the
+  // cookie is issued, so resolve the supported Auth.js cookie names explicitly.
+  const cookieNames = [
+    "__Secure-authjs.session-token",
+    "authjs.session-token",
+    "__Secure-next-auth.session-token",
+    "next-auth.session-token",
+  ]
+  let token: GoogleToken | null = null
+  for (const cookieName of cookieNames) {
+    const candidate = await getToken({
+      req: request,
+      secret: runtime.AUTH_SECRET ?? localAuthSecret,
+      cookieName,
+      secureCookie: cookieName.startsWith("__Secure-"),
+    }) as GoogleToken | null
+    if (candidate?.googleAccessToken) {
+      token = candidate
+      break
+    }
+    if (!token && candidate) token = candidate
+  }
 
   if (!token?.googleAccessToken) {
     throw new GoogleCalendarError("Reconnect your Google account to authorize Calendar events.", 409, "GOOGLE_CALENDAR_REAUTHORIZE")
