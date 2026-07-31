@@ -26,7 +26,7 @@ const suggestedPrompts = [
   "Summarize the current workforce and open HR work",
   "Compare attrition across departments",
   "Which mandatory training needs follow-up?",
-  "How is hiring performing by source?",
+  "Which active employees meet the mobility review criteria?",
 ]
 
 export function AgentCopilot({ dataMode }: { dataMode: string }) {

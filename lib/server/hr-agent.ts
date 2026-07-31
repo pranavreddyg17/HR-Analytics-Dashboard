@@ -74,10 +74,12 @@ function explainTool(toolName: string, data: Record<string, unknown>): string {
   if (toolName === "workforce_overview") {
     const kpis = (data.kpis ?? {}) as Record<string, unknown>
     const open = (data.openWork ?? {}) as Record<string, unknown>
+    const workflows = (data.workflowQueue ?? {}) as Record<string, unknown>
     return [
       `Current source: ${mode}.`,
       `- ${numberValue(kpis, "activeEmployees")} active employees; ${numberValue(kpis, "hires")} completed hires; ${numberValue(kpis, "attritionRate")}% recorded attrition.`,
       `- ${numberValue(open, "pendingLeaveRequests")} leave requests pending; ${numberValue(open, "activeHiringRequisitions")} active requisitions; ${numberValue(open, "mandatoryTrainingGaps")} mandatory training gaps.`,
+      `- ${numberValue(workflows, "openTotal")} persisted workflow requests remain open across leave, hiring, and training.`,
       `- ${numberValue(open, "mobilityReviews")} employees meet the tenure-based mobility review definition.`,
       "Recommended next step: review the largest operational queue first, then validate any employee-level action with the underlying record.",
     ].join("\n")
@@ -99,13 +101,14 @@ function explainTool(toolName: string, data: Record<string, unknown>): string {
   if (toolName === "analyze_attrition_signals") {
     const observed = (data.observedAttrition ?? {}) as Record<string, unknown>
     const model = (data.historicalModelReview ?? {}) as Record<string, unknown>
+    const distribution = (model.riskDistribution ?? {}) as Record<string, unknown>
     const department = topItem(observed.byDepartment)
     return [
       `Current source: ${mode}.`,
       `- ${numberValue(observed, "exits")} recorded exits; ${numberValue(observed, "rate")}% attrition; ${numberValue(observed, "voluntary")} voluntary and ${numberValue(observed, "involuntary")} involuntary.`,
       department ? `- ${department.label} has the most recorded exits in this view (${department.value}).` : "- No department exit comparison is available.",
-      `- ${numberValue(model, "recordsAboveReviewThreshold")} anonymized historical records are above the model review threshold.`,
-      "The department pattern and model scores are associations, not forecasts or proven causes. Human review is required.",
+      `- Historical model review: ${numberValue(distribution, "high")} high, ${numberValue(distribution, "medium")} medium, and ${numberValue(distribution, "low")} low risk records across ${numberValue(model, "totalScoredRecords")} anonymized validation rows.`,
+      "The historical scores are not joined to live employee IDs. Department patterns and model scores are associations, not forecasts or proven causes; human review is required.",
     ].join("\n")
   }
 
@@ -144,10 +147,11 @@ function explainTool(toolName: string, data: Record<string, unknown>): string {
     return [
       `Current source: ${mode}.`,
       `- ${numberValue(summary, "promotions")} promotions; ${numberValue(summary, "promotionRate")}% promotion rate; ${numberValue(summary, "averageMonthsToPromotion")} average months between recorded promotions.`,
-      `- ${numberValue(summary, "mobilityReviewCount")} active employees meet the three-year tenure and no-promotion-record definition.`,
-      ...mobility.slice(0, 5).map((row) => `- ${String(row.employeeId)} — ${String(row.department)}, ${Number(row.tenureYears ?? 0)} years tenure`),
-      "Review lateral moves, career ladders, employee preference, and data completeness before drawing conclusions.",
-    ].join("\n")
+      `- ${numberValue(summary, "mobilityReviewCount")} active employees meet the three-year tenure and no-recorded-promotion review definition.`,
+      ...mobility.slice(0, 10).map((row) => `- ${String(row.name)} (${String(row.employeeId)}) — ${String(row.jobTitle)}, ${String(row.department)}, ${Number(row.tenureYears ?? 0)} years tenure; ${String(row.dataSource)} record.`),
+      numberValue(summary, "mobilityReviewCount") > 10 ? `- ${numberValue(summary, "mobilityReviewCount") - 10} additional records are available in this cohort.` : "",
+      "This list identifies employees for a career-mobility review; it does not determine who should be promoted. Confirm role level, performance evidence, lateral moves, employee preference, and record completeness.",
+    ].filter(Boolean).join("\n")
   }
 
   if (toolName === "find_employee_records") {
@@ -210,9 +214,15 @@ async function planTools(message: string): Promise<ToolPlan[]> {
   if (/compare|which department|highest|lowest|break down|breakdown|by department/i.test(message)) {
     plans.push({ name: "compare_departments", input: { ...cleanFilters, metric: comparisonMetric(message) } })
   }
-  if (/employee|person|people|directory|employee id|location and status|status and location/i.test(message)) {
+  const explicitLookup = /\b(?:emp|ibm)[-_ ]?[a-z0-9]+\b/i.test(message)
+    || /\b(?:find|lookup|open|show)\b.{0,30}\b(?:employee|person|profile|record)\b/i.test(message)
+    || /\b(?:employee|person)\b.{0,20}\b(?:profile|record|details)\b/i.test(message)
+  const cohortQuestion = /promot|mobility|career progression|attrition|risk|training|leave|hiring|recruit/i.test(message)
+  if (explicitLookup && !cohortQuestion) {
     const identifier = message.match(/\b(?:emp|ibm)[-_ ]?\d+\b/i)?.[0]
-    plans.push({ name: "find_employee_records", input: { ...cleanFilters, query: identifier?.replace(/[_ ]/g, "-") ?? "", limit: 10 } })
+    plans.push({ name: "find_employee_records", input: { ...cleanFilters, query: identifier?.replace(/[_ ]/g, "-") ?? message, limit: 10 } })
+  } else if (/\b(?:list|show|find)\b.{0,20}\bactive employees\b/i.test(message) && !cohortQuestion) {
+    plans.push({ name: "find_employee_records", input: { ...cleanFilters, status: "Active", limit: 10 } })
   }
   if (!plans.length || /executive|summary|brief|overview|company|workforce/i.test(message)) {
     plans.unshift({ name: "workforce_overview", input: cleanFilters })

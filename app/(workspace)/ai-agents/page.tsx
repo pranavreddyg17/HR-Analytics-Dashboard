@@ -30,7 +30,7 @@ export default async function AiAgentsPage() {
       <header className="flex flex-col gap-4 border-b border-border pb-5 sm:flex-row sm:items-end sm:justify-between">
         <div>
           <h1 className="text-2xl font-semibold tracking-tight">Analytics assistant</h1>
-          <p className="mt-1 max-w-2xl text-sm text-muted-foreground">Analyze workforce data and prepare employee communications.</p>
+          <p className="mt-1 max-w-2xl text-sm text-muted-foreground">Analyze workforce records and create reviewed calendar actions.</p>
         </div>
         <p className="text-xs text-muted-foreground">Data source: <b className="font-semibold text-foreground">{mode}</b></p>
       </header>
@@ -44,7 +44,7 @@ export default async function AiAgentsPage() {
           <AgentCopilot dataMode={mode.toLowerCase()} />
         </section>
 
-        <aside className="space-y-4">
+        <aside>
           <section className="rounded-lg border border-border bg-card">
             <div className="border-b border-border px-4 py-3">
               <h2 className="text-sm font-semibold">Analysis coverage</h2>
@@ -58,22 +58,13 @@ export default async function AiAgentsPage() {
               ))}
             </div>
           </section>
-
-          <section className="rounded-lg border border-border bg-card p-4">
-            <h2 className="text-sm font-semibold">Usage notes</h2>
-            <ul className="mt-3 space-y-2 text-xs leading-5 text-muted-foreground">
-              <li>Uses current workspace records for factual claims.</li>
-              <li>Identifies sample, mixed, and operational data.</li>
-              <li>Requires human review for employment decisions.</li>
-            </ul>
-          </section>
         </aside>
       </div>
 
       <section>
         <div className="mb-3">
-          <h2 className="text-base font-semibold">Employee communication workflows</h2>
-          <p className="mt-1 text-xs text-muted-foreground">Prepare a meeting invitation or email from employee directory records. Review and send in Google.</p>
+          <h2 className="text-base font-semibold">Calendar workflow</h2>
+          <p className="mt-1 text-xs text-muted-foreground">Describe a meeting in plain language, review the matched employees, then create the event and send Google Calendar invitations.</p>
         </div>
         <AgentWorkflows canPrepare={canPrepare} />
       </section>

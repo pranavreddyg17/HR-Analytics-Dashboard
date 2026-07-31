@@ -6,8 +6,25 @@ import { findAccessUser, recordLogin } from "@/lib/server/access"
 
 const runtime = env as unknown as { GOOGLE_CLIENT_ID?: string; GOOGLE_CLIENT_SECRET?: string; AUTH_SECRET?: string }
 
+const googleScopes = [
+  "openid",
+  "email",
+  "profile",
+  "https://www.googleapis.com/auth/calendar.events",
+].join(" ")
+
 export const { handlers, auth, signIn, signOut } = NextAuth({
-  providers: [Google({ clientId: runtime.GOOGLE_CLIENT_ID ?? "missing", clientSecret: runtime.GOOGLE_CLIENT_SECRET ?? "missing" })],
+  providers: [Google({
+    clientId: runtime.GOOGLE_CLIENT_ID ?? "missing",
+    clientSecret: runtime.GOOGLE_CLIENT_SECRET ?? "missing",
+    authorization: {
+      params: {
+        scope: googleScopes,
+        access_type: "offline",
+        prompt: "consent",
+      },
+    },
+  })],
   secret: runtime.AUTH_SECRET ?? "laidbackhr-local-development-secret-change-me",
   trustHost: true,
   pages: { signIn: "/login", error: "/login" },
@@ -21,7 +38,12 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
       await recordLogin(email, profile?.name ?? "")
       return true
     },
-    async jwt({ token }) {
+    async jwt({ token, account }) {
+      if (account?.provider === "google") {
+        token.googleAccessToken = account.access_token
+        token.googleRefreshToken = account.refresh_token ?? token.googleRefreshToken
+        token.googleAccessTokenExpiresAt = account.expires_at
+      }
       if (token.email) {
         const access = await findAccessUser(token.email)
         token.role = access?.status === "active" ? access.role : undefined

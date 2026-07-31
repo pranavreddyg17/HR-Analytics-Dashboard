@@ -3,6 +3,8 @@ import { z } from "zod"
 
 import type { DomainStatus, HrFilters, WorkforceAnalytics } from "@/lib/hr-types"
 import { getWorkforceAnalytics } from "@/lib/server/hr-analytics"
+import { ensureHrDatabase } from "@/lib/server/hr-database"
+import { getEmployees as getScoredEmployees } from "@/lib/server/runtime"
 
 const filtersShape = {
   from: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional().describe("Start date in YYYY-MM-DD format"),
@@ -37,6 +39,25 @@ function evidence(analytics: WorkforceAnalytics) {
 
 function employeeName(employee: WorkforceAnalytics["employees"][number]): string {
   return [employee.preferred_name || employee.first_name, employee.last_name].filter(Boolean).join(" ").trim() || employee.employee_id
+}
+
+async function workflowSnapshot() {
+  const database = await ensureHrDatabase()
+  if (!database) return { openTotal: 0, byType: [], byStatus: [] }
+  const rows = await database.prepare("SELECT type, status, COUNT(*) AS count FROM workflow_requests GROUP BY type, status")
+    .all<{ type: string; status: string; count: number }>()
+  const items = rows.results ?? []
+  const closed = new Set(["approved", "rejected", "completed", "closed"])
+  const open = items.filter((item) => !closed.has(item.status.toLowerCase()))
+  const byType = [...new Set(open.map((item) => item.type))].map((type) => ({
+    type,
+    count: open.filter((item) => item.type === type).reduce((sum, item) => sum + Number(item.count), 0),
+  }))
+  return {
+    openTotal: byType.reduce((sum, item) => sum + item.count, 0),
+    byType,
+    byStatus: open.map((item) => ({ type: item.type, status: item.status, count: Number(item.count) })),
+  }
 }
 
 export const mcpToolCatalog = [
@@ -79,7 +100,7 @@ export function createHrMcpServer(): McpServer {
     inputSchema: filtersShape,
     annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false },
   }, async (filters: FilterArgs) => {
-    const analytics = await getWorkforceAnalytics(filters)
+    const [analytics, workflows] = await Promise.all([getWorkforceAnalytics(filters), workflowSnapshot()])
     return result({
       ...evidence(analytics),
       kpis: analytics.kpis,
@@ -89,6 +110,7 @@ export function createHrMcpServer(): McpServer {
         mandatoryTrainingGaps: analytics.training.requiringMandatoryTraining,
         mobilityReviews: analytics.promotions.withoutPromotionOver36Months,
       },
+      workflowQueue: workflows,
       executiveObservations: analytics.executiveInsights,
     })
   })
@@ -133,6 +155,11 @@ export function createHrMcpServer(): McpServer {
     annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false },
   }, async (filters: FilterArgs) => {
     const analytics = await getWorkforceAnalytics(filters)
+    const riskDistribution = {
+      high: getScoredEmployees({ risk: "high", limit: 1 }).total,
+      medium: getScoredEmployees({ risk: "medium", limit: 1 }).total,
+      low: getScoredEmployees({ risk: "low", limit: 1 }).total,
+    }
     return result({
       ...evidence(analytics),
       observedAttrition: {
@@ -145,9 +172,11 @@ export function createHrMcpServer(): McpServer {
         trend: analytics.attrition.trend,
       },
       historicalModelReview: {
+        totalScoredRecords: Object.values(riskDistribution).reduce((sum, count) => sum + count, 0),
+        riskDistribution,
         recordsAboveReviewThreshold: analytics.attrition.highRiskEmployees.length,
         records: analytics.attrition.highRiskEmployees.slice(0, 20),
-        scope: "Anonymized historical validation records; not live employee predictions.",
+        scope: "Anonymized historical validation records. These model records are not joined to live employee IDs and cannot identify current employees.",
       },
       governance: "Patterns are associations, not proven causes. Model signals require human review and must not be used as automatic employment decisions.",
     })
@@ -162,8 +191,8 @@ export function createHrMcpServer(): McpServer {
     },
     annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false },
   }, async ({ domain, ...filters }: FilterArgs & { domain: "hiring" | "leave" | "training" | "promotions" }) => {
-    const analytics = await getWorkforceAnalytics(filters)
-    const common = { ...evidence(analytics), domain }
+    const [analytics, workflows] = await Promise.all([getWorkforceAnalytics(filters), workflowSnapshot()])
+    const common = { ...evidence(analytics), domain, workflowQueue: workflows }
 
     if (domain === "hiring") {
       return result({
@@ -229,12 +258,17 @@ export function createHrMcpServer(): McpServer {
     const promotedIds = new Set(analytics.promotions.rows.map((row) => row.employee_id))
     const mobilityReview = analytics.employees
       .filter((employee) => employee.tenure_years >= 3 && /^active$/i.test(employee.employment_status) && !promotedIds.has(employee.employee_id))
+      .sort((left, right) => right.tenure_years - left.tenure_years || left.employee_id.localeCompare(right.employee_id))
       .slice(0, 25)
       .map((employee) => ({
         employeeId: employee.employee_id,
+        name: employeeName(employee),
         department: employee.department,
         jobTitle: employee.job_title,
+        location: employee.location,
+        employmentStatus: employee.employment_status,
         tenureYears: employee.tenure_years,
+        dataSource: employee.data_source,
       }))
     return result({
       ...common,
@@ -247,7 +281,7 @@ export function createHrMcpServer(): McpServer {
       mobilityReview,
       byDepartment: analytics.promotions.byDepartment,
       trend: analytics.promotions.trend,
-      guardrail: "This is a review cohort. Check lateral moves, career ladders, employee preference, and data completeness before drawing conclusions.",
+      guardrail: "This is a mobility-review cohort, not a determination that anyone should be promoted. Check performance evidence, role levels, lateral moves, career ladders, employee preference, and data completeness.",
     })
   })
 
@@ -263,17 +297,17 @@ export function createHrMcpServer(): McpServer {
     annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false },
   }, async ({ query = "", status, limit = 10, ...filters }: FilterArgs & { query?: string; status?: string; limit?: number }) => {
     const analytics = await getWorkforceAnalytics(filters)
-    const needle = query.toLowerCase()
-    const matches = analytics.directoryEmployees.filter((employee) => {
-      if (status && employee.employment_status.toLowerCase() !== status.toLowerCase()) return false
-      if (!needle) return true
-      return `${employee.employee_id} ${employeeName(employee)} ${employee.department} ${employee.job_title} ${employee.location}`
-        .toLowerCase()
-        .includes(needle)
-    }).slice(0, limit)
+    const terms = query.toLowerCase().split(/[^a-z0-9-]+/).filter((term) => term.length > 1 && !["find", "show", "employee", "employees", "record", "records", "profile", "details", "for", "the"].includes(term))
+    const effectiveStatus = status ?? (!terms.length ? "Active" : undefined)
+    const allMatches = analytics.directoryEmployees.filter((employee) => {
+      if (effectiveStatus && employee.employment_status.toLowerCase() !== effectiveStatus.toLowerCase()) return false
+      const searchable = `${employee.employee_id} ${employeeName(employee)} ${employee.department} ${employee.job_title} ${employee.location}`.toLowerCase()
+      return terms.every((term) => searchable.includes(term))
+    })
+    const matches = allMatches.slice(0, limit)
     return result({
       ...evidence(analytics),
-      matchCount: matches.length,
+      matchCount: allMatches.length,
       employees: matches.map((employee) => ({
         employeeId: employee.employee_id,
         name: employeeName(employee),

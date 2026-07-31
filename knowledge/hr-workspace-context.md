@@ -30,4 +30,4 @@ Promotion rate compares recorded promotions with active headcount. Employees wit
 
 ## Workflow actions
 
-LaidbackHR.AI may prepare a calendar event or an employee email draft using operational employee records with work email addresses. The signed-in HR user must review and confirm the action in Google Calendar or Gmail. The assistant never sends messages, schedules meetings, approves leave, or makes employment decisions on its own.
+LaidbackHR.AI may plan a calendar event using active operational employee records with work email addresses. The plan resolves named employees or supported cohorts from persisted employee and promotion records, then shows the participants, timing, agenda, and evidence before execution. Only after the signed-in HR user explicitly confirms may the app create the event in that user's Google Calendar and send attendee invitations. Historical attrition-model rows cannot be used as recipients because they are anonymized and are not joined to live employee IDs. The assistant never approves leave or makes employment decisions on its own.
