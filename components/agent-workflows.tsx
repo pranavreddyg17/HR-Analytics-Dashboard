@@ -1,7 +1,7 @@
 "use client"
 
 import { useEffect, useMemo, useState } from "react"
-import { CalendarDays, Check, ExternalLink, LoaderCircle, Mail, Search, Users, X } from "lucide-react"
+import { CalendarDays, Check, ExternalLink, LoaderCircle, Mail, Search, X } from "lucide-react"
 
 import { Button } from "@/components/ui/button"
 import { cn } from "@/lib/utils"
@@ -69,11 +69,11 @@ function EmployeePicker({
           value={query}
           onFocus={() => setOpen(true)}
           onChange={(event) => { setQuery(event.target.value); setOpen(true) }}
-          placeholder="Search operational employee records"
+          placeholder="Search employees"
           className="h-10 w-full rounded-md border border-border bg-background pl-9 pr-3 text-sm outline-none"
         />
         {open && (
-          <div className="absolute z-20 mt-1 max-h-64 w-full overflow-y-auto rounded-md border border-border bg-popover p-1 shadow-lg">
+          <div className="absolute z-20 mt-1 max-h-64 w-full overflow-y-auto rounded-md border border-border bg-popover p-1 shadow-none">
             {matches.map((employee) => {
               const checked = selected.includes(employee.employee_id)
               return (
@@ -103,14 +103,14 @@ function EmployeePicker({
       {selectedEmployees.length > 0 && (
         <div className="mt-2 flex flex-wrap gap-1.5">
           {selectedEmployees.map((employee) => (
-            <span key={employee.employee_id} className="inline-flex items-center gap-1 rounded-md bg-muted px-2 py-1 text-xs">
+            <span key={employee.employee_id} className="inline-flex items-center gap-1 rounded-sm border border-border bg-background px-2 py-1 text-xs">
               {employee.display_name}
               <button type="button" onClick={() => toggle(employee.employee_id)} aria-label={`Remove ${employee.display_name}`} className="text-muted-foreground hover:text-foreground"><X className="size-3" /></button>
             </span>
           ))}
         </div>
       )}
-      <p className="mt-1.5 text-[11px] text-muted-foreground">Only active operational records with work email addresses are available. Maximum 20 recipients.</p>
+      <p className="mt-1.5 text-[11px] text-muted-foreground">Active employees with work email addresses · Maximum 20 recipients</p>
     </div>
   )
 }
@@ -199,9 +199,9 @@ export function AgentWorkflows({ canPrepare }: { canPrepare: boolean }) {
   return (
     <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_360px]">
       <section className="rounded-lg border border-border bg-card">
-        <div className="flex border-b border-border p-1">
-          <button type="button" onClick={() => { setKind("calendar_invite"); setError(""); setNotice(""); setReadyLink("") }} className={cn("flex flex-1 items-center justify-center gap-2 rounded-md px-3 py-2 text-sm font-medium", kind === "calendar_invite" ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:bg-muted hover:text-foreground")}><CalendarDays className="size-4" />Calendar meeting</button>
-          <button type="button" onClick={() => { setKind("employee_email"); setError(""); setNotice(""); setReadyLink("") }} className={cn("flex flex-1 items-center justify-center gap-2 rounded-md px-3 py-2 text-sm font-medium", kind === "employee_email" ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:bg-muted hover:text-foreground")}><Mail className="size-4" />Employee email</button>
+        <div className="flex border-b border-border px-4">
+          <button type="button" onClick={() => { setKind("calendar_invite"); setError(""); setNotice(""); setReadyLink("") }} className={cn("-mb-px flex flex-1 items-center justify-center gap-2 border-b-2 px-3 py-3 text-sm font-medium", kind === "calendar_invite" ? "border-primary text-foreground" : "border-transparent text-muted-foreground hover:text-foreground")}><CalendarDays className="size-4" />Calendar meeting</button>
+          <button type="button" onClick={() => { setKind("employee_email"); setError(""); setNotice(""); setReadyLink("") }} className={cn("-mb-px flex flex-1 items-center justify-center gap-2 border-b-2 px-3 py-3 text-sm font-medium", kind === "employee_email" ? "border-primary text-foreground" : "border-transparent text-muted-foreground hover:text-foreground")}><Mail className="size-4" />Employee email</button>
         </div>
 
         <div className="space-y-4 p-5">
@@ -253,16 +253,15 @@ export function AgentWorkflows({ canPrepare }: { canPrepare: boolean }) {
         <div className="divide-y divide-border">
           {drafts.length ? drafts.map((draft) => (
             <div key={draft.id} className="px-4 py-3">
-              <div className="flex items-start gap-3">
-                <span className="flex size-8 shrink-0 items-center justify-center rounded-md bg-muted text-primary">{draft.type === "calendar_invite" ? <CalendarDays className="size-4" /> : <Mail className="size-4" />}</span>
-                <div className="min-w-0 flex-1">
+              <div>
+                <div className="min-w-0">
                   <p className="truncate text-sm font-medium">{draft.title}</p>
                   <p className="mt-1 text-[11px] text-muted-foreground">{draft.recipientCount} recipient{draft.recipientCount === 1 ? "" : "s"} · {draft.summary}</p>
                   <p className="mt-1 text-[10px] capitalize text-muted-foreground">{draft.status} · {new Date(draft.createdAt).toLocaleString()}</p>
                 </div>
               </div>
             </div>
-          )) : <div className="flex min-h-40 flex-col items-center justify-center px-5 text-center"><Users className="size-5 text-muted-foreground" /><p className="mt-2 text-sm font-medium">No prepared workflows</p><p className="mt-1 text-xs text-muted-foreground">Calendar and email drafts will appear here.</p></div>}
+          )) : <div className="flex min-h-40 items-center justify-center px-5 text-center text-sm text-muted-foreground">No prepared communications.</div>}
         </div>
       </aside>
     </div>

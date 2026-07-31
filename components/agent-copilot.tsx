@@ -1,7 +1,7 @@
 "use client"
 
 import { useRef, useState } from "react"
-import { ArrowUp, Database, LoaderCircle, MessageSquareText, User } from "lucide-react"
+import { ArrowUp, LoaderCircle } from "lucide-react"
 
 import { Button } from "@/components/ui/button"
 import { cn } from "@/lib/utils"
@@ -83,38 +83,36 @@ export function AgentCopilot({ dataMode }: { dataMode: string }) {
     <div className="flex h-full min-h-0 flex-col">
       <div ref={scrollRef} className="min-h-0 flex-1 space-y-5 overflow-y-auto px-5 py-5">
         {messages.map((message, index) => (
-          <article key={index} className={cn("flex gap-3", message.role === "user" && "justify-end")}>
-            {message.role === "assistant" && <span className="mt-0.5 flex size-8 shrink-0 items-center justify-center rounded-md border border-border bg-background text-primary"><MessageSquareText className="size-4" /></span>}
-            <div className={cn("max-w-[86%]", message.role === "user" && "flex flex-row-reverse gap-3")}>
+          <article key={index} className={cn("flex", message.role === "user" && "justify-end")}>
+            <div className="max-w-[88%]">
               <div className={cn(
                 "whitespace-pre-wrap rounded-md px-3.5 py-3 text-sm leading-6",
-                message.role === "assistant" ? "border border-border bg-background text-foreground" : "bg-primary text-primary-foreground",
+                message.role === "assistant" ? "border border-border bg-background text-foreground" : "bg-secondary text-secondary-foreground",
               )}>
                 {message.content.replace(/\*\*/g, "").replace(/_([^_]+)_/g, "$1")}
               </div>
               {message.role === "assistant" && ((message.tools?.length ?? 0) > 0 || (message.context?.length ?? 0) > 0) && (
                 <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 px-1 text-[10px] text-muted-foreground">
-                  <span className="inline-flex items-center gap-1"><Database className="size-3" />Evidence:</span>
+                  <span>Sources:</span>
                   {message.tools?.map((trace) => <span key={trace.tool}>{toolLabels[trace.tool] ?? trace.tool}</span>)}
                   {message.context?.map((item) => <span key={`${item.source}-${item.section}`}>{item.section}</span>)}
                 </div>
               )}
             </div>
-            {message.role === "user" && <span className="mt-0.5 flex size-8 shrink-0 items-center justify-center rounded-md bg-secondary text-secondary-foreground"><User className="size-4" /></span>}
           </article>
         ))}
         {thinking && (
           <div className="flex items-center gap-3 text-sm text-muted-foreground">
-            <span className="flex size-8 items-center justify-center rounded-md border border-border bg-background text-primary"><LoaderCircle className="size-4 animate-spin" /></span>
-            Reviewing workspace data…
+            <LoaderCircle className="size-4 animate-spin" />
+            Reviewing workspace data
           </div>
         )}
       </div>
 
       <div className="border-t border-border bg-card px-4 py-4">
-        <div className="mb-3 flex gap-2 overflow-x-auto pb-1">
+        <div className="mb-3 grid gap-1 sm:grid-cols-2">
           {suggestedPrompts.map((prompt) => (
-            <button key={prompt} type="button" onClick={() => void send(prompt)} className="shrink-0 rounded-md border border-border bg-background px-2.5 py-1.5 text-xs text-muted-foreground hover:border-primary/40 hover:text-foreground">
+            <button key={prompt} type="button" onClick={() => void send(prompt)} className="border-l-2 border-border px-2 py-1 text-left text-xs text-muted-foreground hover:border-primary hover:text-foreground">
               {prompt}
             </button>
           ))}

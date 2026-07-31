@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react"
 import { AnimatePresence, motion, useReducedMotion } from "motion/react"
-import { BriefcaseBusiness, Check, ChevronRight, Mail, MapPin, Save, UserRound, X } from "lucide-react"
+import { ChevronRight, Mail, MapPin, Save, X } from "lucide-react"
 
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -53,8 +53,8 @@ function fieldLabel(label: string, optional = false) {
   return <span className="mb-1.5 flex items-center gap-1.5 text-xs font-semibold text-foreground">{label}{optional && <span className="font-normal text-muted-foreground">Optional</span>}</span>
 }
 
-const inputClass = "h-10 rounded-xl border-border/80 bg-background px-3 shadow-none focus-visible:ring-2"
-const selectClass = "h-10 w-full rounded-xl border border-border/80 bg-background px-3 text-sm text-foreground outline-none transition focus:border-ring focus:ring-2 focus:ring-ring/20"
+const inputClass = "h-10 rounded-md border-border/80 bg-background px-3 shadow-none focus-visible:ring-2"
+const selectClass = "h-10 w-full rounded-md border border-border/80 bg-background px-3 text-sm text-foreground outline-none transition focus:border-ring focus:ring-2 focus:ring-ring/20"
 
 type EmployeeDrawerProps = {
   open: boolean
@@ -122,7 +122,7 @@ function EmployeeDrawerPanel({
       setStep(nextStep)
       return
     }
-    setError(step === 0 ? "Enter a first and last name before opening Role." : "Enter a job title, department, and location before opening Review & save.")
+    setError(step === 0 ? "Enter a first and last name before continuing." : "Enter a job title, department, and location before continuing.")
   }
 
   async function handlePrimaryAction() {
@@ -177,7 +177,7 @@ function EmployeeDrawerPanel({
           <motion.button
             type="button"
             aria-label="Close employee form"
-            className="absolute inset-0 bg-slate-950/25 backdrop-blur-[2px]"
+            className="absolute inset-0 bg-slate-950/25"
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
@@ -188,7 +188,7 @@ function EmployeeDrawerPanel({
             role="dialog"
             aria-modal="true"
             aria-labelledby="employee-drawer-title"
-            className="absolute right-0 top-0 flex h-[100dvh] w-full max-w-xl flex-col overflow-hidden border-l border-border/70 bg-background shadow-2xl"
+            className="absolute right-0 top-0 flex h-[100dvh] w-full max-w-xl flex-col overflow-hidden border-l border-border/70 bg-background shadow-none"
             initial={{ x: reduceMotion ? 0 : "100%" }}
             animate={{ x: 0 }}
             exit={{ x: reduceMotion ? 0 : "100%" }}
@@ -198,15 +198,14 @@ function EmployeeDrawerPanel({
               <div className="flex items-start gap-4">
                 <PersonAvatar employeeId={form.employee_id || "new-person"} initials={previewInitials} size="lg" />
                 <div className="min-w-0 flex-1">
-                  <p className="text-xs font-semibold text-primary">{mode === "create" ? "New employee record" : "Edit employee record"}</p>
-                  <h2 id="employee-drawer-title" className="mt-1 truncate text-xl font-semibold tracking-tight">{mode === "create" ? "Add employee" : previewName}</h2>
-                  <p className="mt-1 text-sm text-muted-foreground">{mode === "create" ? "Enter profile and employment details, then review before saving." : "Update the employee profile and employment details."}</p>
+                  <h2 id="employee-drawer-title" className="truncate text-xl font-semibold tracking-tight">{mode === "create" ? "Add employee" : `Edit ${previewName}`}</h2>
+                  <p className="mt-1 text-sm text-muted-foreground">Enter the employee&apos;s personal and employment information.</p>
                 </div>
                 <Button type="button" variant="ghost" size="icon" aria-label="Close" onClick={onClose} disabled={saving}><X className="size-4" /></Button>
               </div>
 
               <div className="mt-5 grid grid-cols-3 gap-2">
-                {["Basics", "Role", "Review & save"].map((label, index) => (
+                {["Personal", "Employment", "Review"].map((label, index) => (
                   <button key={label} type="button" onClick={() => goToStep(index)} className="group text-left">
                     <span className={cn("mb-2 block h-1 rounded-full transition-colors", index <= step ? "bg-primary" : "bg-muted")} />
                     <span className={cn("text-xs font-medium", index === step ? "text-foreground" : "text-muted-foreground")}>{label}</span>
@@ -214,9 +213,9 @@ function EmployeeDrawerPanel({
                 ))}
               </div>
               <div className="mt-4 flex items-center gap-2">
-                {step > 0 && <Button type="button" variant="outline" size="lg" className="rounded-xl" onClick={() => goToStep(step - 1)} disabled={saving}>Back</Button>}
-                <Button type="button" size="lg" className="h-10 flex-1 rounded-xl" disabled={saving} onClick={() => void handlePrimaryAction()}>
-                  {saving ? "Saving employee…" : step === 0 ? <>Continue to role <ChevronRight className="size-4" /></> : step === 1 ? <>Continue to review <ChevronRight className="size-4" /></> : mode === "create" ? <><Save className="size-4" />Save employee</> : <><Save className="size-4" />Save changes</>}
+                {step > 0 && <Button type="button" variant="outline" size="lg" className="rounded-md" onClick={() => goToStep(step - 1)} disabled={saving}>Back</Button>}
+                <Button type="button" size="lg" className="h-10 flex-1 rounded-md" disabled={saving} onClick={() => void handlePrimaryAction()}>
+                  {saving ? "Saving employee…" : step < 2 ? <>Continue <ChevronRight className="size-4" /></> : mode === "create" ? <><Save className="size-4" />Save employee</> : <><Save className="size-4" />Save changes</>}
                 </Button>
               </div>
             </div>
@@ -234,13 +233,13 @@ function EmployeeDrawerPanel({
                   >
                     {step === 0 && (
                       <>
-                        <SectionIntro icon={UserRound} title="Who are they?" detail="Start with the basics HR and teammates will use every day." />
+                        <SectionIntro title="Personal information" detail="Name and contact details" />
                         {mode === "create" && <label className="block">{fieldLabel("Employee ID", true)}<Input autoFocus value={form.employee_id ?? ""} onChange={(event) => update("employee_id", event.target.value.toUpperCase())} placeholder="Generated automatically if blank" className={inputClass} /></label>}
                         <div className="grid gap-4 sm:grid-cols-2">
                           <label className="block">{fieldLabel("First name")}<Input autoFocus={mode === "edit"} required value={form.first_name} onChange={(event) => update("first_name", event.target.value)} placeholder="Jordan" className={inputClass} /></label>
                           <label className="block">{fieldLabel("Last name")}<Input required value={form.last_name} onChange={(event) => update("last_name", event.target.value)} placeholder="Lee" className={inputClass} /></label>
                         </div>
-                        <label className="block">{fieldLabel("Preferred name", true)}<Input value={form.preferred_name ?? ""} onChange={(event) => update("preferred_name", event.target.value)} placeholder="What should their team call them?" className={inputClass} /></label>
+                        <label className="block">{fieldLabel("Preferred name", true)}<Input value={form.preferred_name ?? ""} onChange={(event) => update("preferred_name", event.target.value)} placeholder="Preferred first name" className={inputClass} /></label>
                         <div className="grid gap-4 sm:grid-cols-2">
                           <label className="block">{fieldLabel("Work email", true)}<div className="relative"><Mail className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" /><Input type="email" value={form.work_email ?? ""} onChange={(event) => update("work_email", event.target.value)} placeholder="jordan@company.com" className={cn(inputClass, "pl-9")} /></div></label>
                           <label className="block">{fieldLabel("Phone", true)}<Input type="tel" value={form.phone ?? ""} onChange={(event) => update("phone", event.target.value)} placeholder="+1 415 555 0123" className={inputClass} /></label>
@@ -250,7 +249,7 @@ function EmployeeDrawerPanel({
 
                     {step === 1 && (
                       <>
-                        <SectionIntro icon={BriefcaseBusiness} title="Where do they fit?" detail="Set their role, home team, location, and reporting line." />
+                        <SectionIntro title="Employment details" detail="Role, department, location, and manager" />
                         <label className="block">{fieldLabel("Job title")}<Input autoFocus required value={form.job_title} onChange={(event) => update("job_title", event.target.value)} placeholder="People Operations Manager" className={inputClass} /></label>
                         <div className="grid gap-4 sm:grid-cols-2">
                           <label className="block">{fieldLabel("Department")}<Input required list="people-departments" value={form.department} onChange={(event) => update("department", event.target.value)} placeholder="People" className={inputClass} /><datalist id="people-departments">{dimensions?.departments.map((item) => <option key={item} value={item} />)}</datalist></label>
@@ -262,13 +261,13 @@ function EmployeeDrawerPanel({
 
                     {step === 2 && (
                       <>
-                        <SectionIntro icon={Check} title="Set up employment" detail="A few final details make reporting and workflows accurate." />
+                        <SectionIntro title="Review" detail="Confirm status and employment details before saving" />
                         <label className="block">{fieldLabel("Hire date")}<Input autoFocus required type="date" value={form.hire_date} onChange={(event) => update("hire_date", event.target.value)} className={inputClass} /></label>
                         <div className="grid gap-4 sm:grid-cols-2">
                           <label className="block">{fieldLabel("Employment type")}<select value={form.employment_type} onChange={(event) => update("employment_type", event.target.value)} className={selectClass}>{employmentTypes.map((type) => <option key={type}>{type}</option>)}</select></label>
                           <label className="block">{fieldLabel("Status")}<select value={form.employment_status} onChange={(event) => update("employment_status", event.target.value)} className={selectClass}>{employmentStatuses.map((status) => <option key={status}>{status}</option>)}</select></label>
                         </div>
-                        <div className="rounded-2xl border border-primary/15 bg-primary/[0.04] p-4">
+                        <div className="rounded-lg border border-primary/15 bg-primary/[0.04] p-4">
                           <div className="flex items-center gap-3">
                             <PersonAvatar employeeId={form.employee_id || previewName} initials={previewInitials} />
                             <div className="min-w-0"><p className="truncate text-sm font-semibold">{previewName}</p><p className="truncate text-xs text-muted-foreground">{form.job_title || "Role not set"} · {form.department || "Department not set"}</p></div>
@@ -278,7 +277,7 @@ function EmployeeDrawerPanel({
                     )}
                   </motion.div>
                 </AnimatePresence>
-                {error && <p role="alert" aria-live="polite" className="mt-5 rounded-xl border border-destructive/20 bg-destructive/5 px-3 py-2.5 text-sm text-destructive">{error}</p>}
+                {error && <p role="alert" aria-live="polite" className="mt-5 rounded-md border border-destructive/20 bg-destructive/5 px-3 py-2.5 text-sm text-destructive">{error}</p>}
               </div>
 
             </form>
@@ -287,6 +286,6 @@ function EmployeeDrawerPanel({
   )
 }
 
-function SectionIntro({ icon: Icon, title, detail }: { icon: typeof UserRound; title: string; detail: string }) {
-  return <div className="flex items-start gap-3"><span className="flex size-9 shrink-0 items-center justify-center rounded-xl bg-primary/10 text-primary"><Icon className="size-4" /></span><div><h3 className="font-semibold tracking-tight">{title}</h3><p className="mt-0.5 text-sm leading-relaxed text-muted-foreground">{detail}</p></div></div>
+function SectionIntro({ title, detail }: { title: string; detail: string }) {
+  return <div className="border-b border-border pb-3"><h3 className="font-semibold">{title}</h3><p className="mt-0.5 text-xs text-muted-foreground">{detail}</p></div>
 }

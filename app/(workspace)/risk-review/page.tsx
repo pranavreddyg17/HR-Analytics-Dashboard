@@ -5,12 +5,13 @@ export const dynamic = "force-dynamic"
 
 export default function RiskReviewPage() {
   const response = getEmployees({ limit: 2000 })
-  return <div className="space-y-6">
-    <div>
-      <p className="eyebrow">Historical model governance</p>
-      <h1 className="page-title">Scored-record review</h1>
-      <p className="page-description">Audit the validated historical attrition model separately from your live employee directory. These anonymized rows are evidence for model review, never automatic employment decisions.</p>
+  return (
+    <div className="mx-auto flex w-full max-w-[1440px] flex-col gap-6 pb-10">
+      <header className="border-b border-border pb-5">
+        <h1 className="text-2xl font-semibold tracking-tight">Model review</h1>
+        <p className="mt-1 max-w-3xl text-sm text-muted-foreground">Review anonymized historical model scores separately from the employee directory.</p>
+      </header>
+      <EmployeesClient employees={response.items} total={response.total} />
     </div>
-    <EmployeesClient employees={response.items} total={response.total} />
-  </div>
+  )
 }

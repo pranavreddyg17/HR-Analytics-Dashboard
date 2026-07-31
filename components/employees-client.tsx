@@ -1,7 +1,7 @@
 "use client"
 
 import { useMemo, useState } from "react"
-import { Search, ShieldCheck, ChevronDown, DollarSign, Database } from "lucide-react"
+import { ChevronDown, Search } from "lucide-react"
 
 import { Card, CardHeader, CardTitle, CardContent, CardDescription } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
@@ -54,14 +54,11 @@ export function EmployeesClient({ employees, total }: { employees: Employee[]; t
 
   return (
     <div className="flex flex-col gap-5">
-      <div className="flex items-start gap-2 rounded-xl border border-warning/25 bg-warning/10 p-3 text-sm text-warning">
-        <Database className="mt-0.5 size-4 shrink-0" />
-        <p>
-          These are anonymised rows from the historical training dataset, not live employees. The source file contains no names, job titles, managers, or locations.
-        </p>
+      <div className="border border-border bg-muted/35 px-4 py-3 text-sm text-muted-foreground">
+        Historical dataset: {total.toLocaleString()} anonymized records. These rows are not linked to current employees.
       </div>
 
-      <Card>
+      <Card className="gap-0 overflow-hidden py-0">
         <CardHeader className="flex-col gap-4 border-b sm:flex-row sm:items-center">
           <div>
             <CardTitle>Model-scored records</CardTitle>
@@ -79,16 +76,16 @@ export function EmployeesClient({ employees, total }: { employees: Employee[]; t
                 className="h-9 bg-background pl-8 sm:w-64"
               />
             </div>
-            <div className="flex items-center gap-1 rounded-lg bg-secondary p-0.5">
+            <div className="flex items-center border-b border-border">
               {filters.map((item) => (
                 <button
                   key={item.key}
                   onClick={() => { setFilter(item.key); setPage(1); setOpenId(null) }}
                   className={cn(
-                    "rounded-md px-2.5 py-1 text-xs font-medium transition-colors",
+                    "-mb-px border-b-2 px-2.5 py-2 text-xs font-medium transition-colors",
                     filter === item.key
-                      ? "bg-card text-foreground ring-1 ring-border"
-                      : "text-muted-foreground hover:text-foreground",
+                      ? "border-primary text-foreground"
+                      : "border-transparent text-muted-foreground hover:text-foreground",
                   )}
                 >
                   {item.label} <span className="ml-1 tabular-nums opacity-70">{counts[item.key].toLocaleString()}</span>
@@ -98,8 +95,8 @@ export function EmployeesClient({ employees, total }: { employees: Employee[]; t
           </div>
         </CardHeader>
 
-        <CardContent className="flex flex-col gap-2">
-          <div className="hidden grid-cols-[1.4fr_1fr_1.4fr_0.9fr_auto] gap-4 px-3 pb-1 text-xs font-medium text-muted-foreground md:grid">
+        <CardContent className="p-0">
+          <div className="hidden grid-cols-[1.4fr_1fr_1.4fr_0.9fr_auto] gap-4 bg-muted/35 px-5 py-3 text-xs font-medium text-muted-foreground md:grid">
             <span>Record</span>
             <span>Department</span>
             <span>Top model signal</span>
@@ -110,24 +107,16 @@ export function EmployeesClient({ employees, total }: { employees: Employee[]; t
           {rows.map((employee) => {
             const open = openId === employee.id
             return (
-              <div key={employee.id} className="rounded-lg bg-muted/40 ring-1 ring-border/60">
-                <div className="grid grid-cols-1 items-center gap-3 p-3 md:grid-cols-[1.4fr_1fr_1.4fr_0.9fr_auto] md:gap-4">
-                  <div className="flex items-center gap-3">
-                    <div className="flex size-9 shrink-0 items-center justify-center rounded-full bg-primary/15 text-[10px] font-semibold text-primary">
-                      {employee.id.slice(-4)}
-                    </div>
-                    <div className="min-w-0">
-                      <p className="truncate text-sm font-medium">{employee.id}</p>
-                      <p className="truncate text-xs text-muted-foreground">{employee.role}</p>
-                    </div>
+              <div key={employee.id} className="border-b border-border last:border-b-0">
+                <div className="grid grid-cols-1 items-center gap-3 px-5 py-4 md:grid-cols-[1.4fr_1fr_1.4fr_0.9fr_auto] md:gap-4">
+                  <div className="min-w-0">
+                    <p className="truncate text-sm font-medium">{employee.id}</p>
+                    <p className="truncate text-xs text-muted-foreground">{employee.role}</p>
                   </div>
 
                   <div className="flex flex-col text-sm">
                     <span>{employee.department}</span>
-                    <span className="flex items-center gap-1 text-xs text-muted-foreground">
-                      <DollarSign className="size-3" />
-                      ${employee.monthlyIncome.toLocaleString()}/month
-                    </span>
+                    <span className="text-xs text-muted-foreground">${employee.monthlyIncome.toLocaleString()} monthly income</span>
                   </div>
 
                   <p className="text-sm text-muted-foreground">{employee.topDriver}</p>
@@ -142,21 +131,16 @@ export function EmployeesClient({ employees, total }: { employees: Employee[]; t
                     <RiskBadge level={employee.riskLevel} />
                   </div>
 
-                  <Button variant="outline" size="sm" className="gap-1.5" onClick={() => setOpenId(open ? null : employee.id)}>
-                    <ShieldCheck className="size-3.5 text-primary" />
+                  <Button variant="outline" size="sm" onClick={() => setOpenId(open ? null : employee.id)}>
                     Review
                     <ChevronDown className={cn("size-3.5 transition-transform", open && "rotate-180")} />
                   </Button>
                 </div>
 
                 {open && (
-                  <div className="border-t border-border/60 bg-primary/5 p-3">
-                    <div className="flex items-start gap-2.5">
-                      <div className="flex size-7 shrink-0 items-center justify-center rounded-md bg-primary/15 text-primary">
-                        <ShieldCheck className="size-3.5" />
-                      </div>
-                      <div className="flex-1">
-                        <p className="text-xs font-medium text-primary">Human-review recommendation</p>
+                  <div className="border-t border-border bg-muted/25 px-5 py-4">
+                      <div>
+                        <p className="text-xs font-medium">Review guidance</p>
                         <p className="mt-1 text-sm text-pretty">{employee.suggestion}</p>
                         <p className="mt-2 text-xs text-muted-foreground">
                           Tenure: {employee.tenure} · Job satisfaction: {employee.jobSatisfaction}/4 · Work-life balance: {employee.workLifeBalance}/4 · Historical outcome: {employee.observedAttrition}
@@ -165,7 +149,6 @@ export function EmployeesClient({ employees, total }: { employees: Employee[]; t
                           The historical outcome is shown for audit purposes. The score must not be used as the sole basis for an employment action.
                         </p>
                       </div>
-                    </div>
                   </div>
                 )}
               </div>
@@ -176,7 +159,7 @@ export function EmployeesClient({ employees, total }: { employees: Employee[]; t
             <p className="py-10 text-center text-sm text-muted-foreground">No records match your filters.</p>
           )}
           {filteredRows.length > 0 && (
-            <div className="flex flex-col gap-3 border-t border-border pt-4 sm:flex-row sm:items-center sm:justify-between">
+            <div className="flex flex-col gap-3 border-t border-border px-5 py-4 sm:flex-row sm:items-center sm:justify-between">
               <p className="text-xs text-muted-foreground">
                 Showing {firstVisible.toLocaleString()}–{lastVisible.toLocaleString()} of {filteredRows.length.toLocaleString()} matching records
               </p>

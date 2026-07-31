@@ -55,15 +55,15 @@ export const navigationGroups: Array<{ label: string; items: NavigationItem[] }>
     ],
   },
   {
-    label: "Intelligence",
+    label: "Reporting",
     items: [
       { href: "/insights", label: "Insights", icon: BarChart3 },
       { href: "/attrition", label: "Attrition risk", icon: ShieldAlert },
-      { href: "/ai-agents", label: "HR assistant", icon: Bot },
+      { href: "/ai-agents", label: "Analytics assistant", icon: Bot },
     ],
   },
   {
-    label: "System",
+    label: "Administration",
     items: [
       { href: "/data", label: "Data hub", icon: Database },
       { href: "/access", label: "Access", icon: KeyRound },
@@ -123,7 +123,7 @@ export function AppSidebar({
         {!collapsed && (
           <button type="button" onClick={onOpenPalette} className="sidebar-search" aria-label="Search people and navigate">
             <Search className="size-4" />
-            <span>Search anything</span>
+            <span>Search</span>
             <kbd>⌘ K</kbd>
           </button>
         )}
@@ -160,7 +160,7 @@ export function AppSidebar({
         </nav>
 
         <div className={cn("border-t border-sidebar-border", collapsed ? "p-3" : "p-4")}>
-          <div className={cn("flex items-center rounded-xl", collapsed ? "justify-center" : "gap-3 bg-sidebar-accent/65 p-2.5")}>
+          <div className={cn("flex items-center rounded-md", collapsed ? "justify-center" : "gap-3 bg-sidebar-accent/65 p-2.5")}>
             <span className="avatar-soft" title={user.displayName}>{initials(user.displayName)}</span>
             {!collapsed && (
               <span className="min-w-0 flex-1 leading-tight">

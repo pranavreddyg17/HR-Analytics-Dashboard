@@ -8,19 +8,19 @@ import { signOut } from "next-auth/react"
 import { BrandLogo } from "@/components/brand-logo"
 import type { ShellUser } from "@/components/app-sidebar"
 
-const pageMeta: Record<string, { title: string; subtitle: string }> = {
-  "/": { title: "Overview", subtitle: "Workforce status and priority actions" },
-  "/people": { title: "People", subtitle: "Directory, profiles, and employee records" },
-  "/inbox": { title: "Inbox", subtitle: "Approvals and work that needs your attention" },
-  "/hiring": { title: "Hiring", subtitle: "Requisitions, pipeline, velocity, and source performance" },
-  "/time-off": { title: "Time off", subtitle: "Requests, approvals, coverage, and leave patterns" },
-  "/attrition": { title: "Attrition risk", subtitle: "Review explainable workforce signals" },
-  "/ai-agents": { title: "HR assistant", subtitle: "Workforce analysis and employee communications" },
-  "/data": { title: "Data Hub", subtitle: "Source coverage, imports, and reporting feeds" },
-  "/access": { title: "Access", subtitle: "Google sign-in, roles, and workspace membership" },
-  "/learning": { title: "Learning", subtitle: "Assignments, compliance, progress, and development" },
-  "/employees": { title: "People", subtitle: "Directory, profiles, and employee records" },
-  "/risk-review": { title: "Model review", subtitle: "Historical scored records for responsible audit" },
+const pageTitles: Record<string, string> = {
+  "/": "Overview",
+  "/people": "People",
+  "/inbox": "Inbox",
+  "/hiring": "Hiring",
+  "/time-off": "Time off",
+  "/attrition": "Attrition risk",
+  "/ai-agents": "Analytics assistant",
+  "/data": "Data Hub",
+  "/access": "Access",
+  "/learning": "Learning",
+  "/employees": "People",
+  "/risk-review": "Model review",
 }
 
 function initials(name: string): string {
@@ -30,18 +30,18 @@ function initials(name: string): string {
 export function Topbar({ user, onOpenPalette }: { user: ShellUser; onOpenPalette: () => void }) {
   const pathname = usePathname()
   const searchParams = useSearchParams()
-  let meta = pageMeta[pathname] ?? pageMeta["/"]
+  let title = pageTitles[pathname] ?? pageTitles["/"]
   if (pathname === "/insights") {
     const view = searchParams.get("view")
-    meta = view === "hiring"
-      ? { title: "Hiring", subtitle: "Recruiting health, velocity, and source performance" }
+    title = view === "hiring"
+      ? "Hiring"
       : view === "leave"
-        ? { title: "Time off", subtitle: "Leave patterns, balances, and approvals" }
+        ? "Time off"
         : view === "training"
-          ? { title: "Learning", subtitle: "Training, compliance, and career mobility" }
-          : { title: "Insights", subtitle: "Connected workforce analytics" }
+          ? "Learning"
+          : "Insights"
   } else if (pathname.startsWith("/people/")) {
-    meta = { title: "Employee profile", subtitle: "People record and activity" }
+    title = "Employee profile"
   }
 
   return (
@@ -50,10 +50,7 @@ export function Topbar({ user, onOpenPalette }: { user: ShellUser; onOpenPalette
         <BrandLogo compact />
       </Link>
 
-      <div className="hidden min-w-0 flex-col md:flex">
-        <p className="truncate text-[15px] font-bold tracking-[-0.025em] text-foreground">{meta.title}</p>
-        <p className="truncate text-[11px] text-muted-foreground">{meta.subtitle}</p>
-      </div>
+      <p className="hidden truncate text-sm font-semibold text-foreground md:block">{title}</p>
 
       <div className="ml-auto flex items-center gap-1.5 sm:gap-2">
         <button type="button" onClick={onOpenPalette} className="topbar-icon-button md:hidden" aria-label="Search people and navigate" title="Search">
@@ -61,7 +58,6 @@ export function Topbar({ user, onOpenPalette }: { user: ShellUser; onOpenPalette
         </button>
         <Link href="/inbox" className="topbar-icon-button" aria-label="Open inbox" title="Inbox">
           <Bell className="size-[18px]" strokeWidth={1.8} />
-          <span className="notification-dot" aria-hidden="true" />
         </Link>
 
         <details className="user-menu">

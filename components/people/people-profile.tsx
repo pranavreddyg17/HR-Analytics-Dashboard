@@ -8,22 +8,17 @@ import {
   ArrowLeft,
   ArrowUpRight,
   BriefcaseBusiness,
-  Building2,
   CalendarDays,
-  CheckCircle2,
-  Database,
   Gauge,
   GraduationCap,
   History,
   Mail,
-  MapPin,
   Pencil,
   Phone,
   RefreshCcw,
   ShieldAlert,
   TrendingUp,
   UserRound,
-  UserPlus,
   UsersRound,
   X,
 } from "lucide-react"
@@ -38,16 +33,15 @@ import { cn } from "@/lib/utils"
 
 type ProfileTab = "overview" | "job" | "time-off" | "growth" | "activity"
 
-const tabs: Array<{ id: ProfileTab; label: string; icon: typeof UserRound }> = [
-  { id: "overview", label: "Overview", icon: UserRound },
-  { id: "job", label: "Job", icon: BriefcaseBusiness },
-  { id: "time-off", label: "Time off", icon: CalendarDays },
-  { id: "growth", label: "Growth", icon: TrendingUp },
-  { id: "activity", label: "Activity", icon: History },
+const tabs: Array<{ id: ProfileTab; label: string }> = [
+  { id: "overview", label: "Overview" },
+  { id: "job", label: "Job" },
+  { id: "time-off", label: "Time off" },
+  { id: "growth", label: "Growth" },
+  { id: "activity", label: "Activity" },
 ]
 
 export function PeopleProfile({ employeeId }: { employeeId: string }) {
-  const reduceMotion = useReducedMotion()
   const [data, setData] = useState<EmployeeProfileResponse | null>(null)
   const [managerPool, setManagerPool] = useState<ManagedEmployee[]>([])
   const [revision, setRevision] = useState(0)
@@ -88,8 +82,7 @@ export function PeopleProfile({ employeeId }: { employeeId: string }) {
   if (!data && loading) return <ProfileSkeleton />
   if (!data) return (
     <div className="mx-auto flex min-h-[65vh] max-w-xl flex-col items-center justify-center text-center">
-      <span className="flex size-14 items-center justify-center rounded-2xl bg-destructive/10 text-destructive"><ShieldAlert className="size-6" /></span>
-      <h2 className="mt-4 text-xl font-semibold tracking-tight">Profile unavailable</h2>
+      <h2 className="text-xl font-semibold tracking-tight">Profile unavailable</h2>
       <p className="mt-2 text-sm text-muted-foreground">{error || "We could not find this employee."}</p>
       <Button nativeButton={false} variant="outline" className="mt-5" render={<Link href="/people" />}><ArrowLeft className="size-4" />Back to people</Button>
     </div>
@@ -105,47 +98,40 @@ export function PeopleProfile({ employeeId }: { employeeId: string }) {
         {loading && <span className="flex items-center gap-2 text-xs text-muted-foreground"><RefreshCcw className="size-3.5 animate-spin" />Refreshing</span>}
       </div>
 
-      <section className="overflow-hidden rounded-lg border border-border bg-card shadow-sm">
+      <section className="overflow-hidden rounded-lg border border-border bg-card shadow-none">
         <div className="flex flex-col gap-5 px-5 pb-6 pt-6 sm:px-6 lg:flex-row lg:items-end">
           <PersonAvatar employeeId={employee.employee_id} initials={employee.initials} size="xl" />
           <div className="min-w-0 flex-1">
-            <div className="flex flex-wrap items-center gap-2"><SourcePill source={employee.data_source} />{employee.archived_at && <span className="text-[11px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">Archived {formatDate(employee.archived_at)}</span>}</div>
+            <div className="flex flex-wrap items-center gap-2"><SourcePill source={employee.data_source} />{employee.archived_at && <span className="text-[11px] font-medium text-muted-foreground">Archived {formatDate(employee.archived_at)}</span>}</div>
             <h2 className="mt-2 truncate text-2xl font-semibold tracking-[-0.02em] sm:text-3xl">{employee.display_name}</h2>
-            <div className="mt-2 flex flex-wrap items-center gap-x-4 gap-y-2 text-sm text-muted-foreground">
-              <span className="flex items-center gap-1.5"><BriefcaseBusiness className="size-3.5" />{employee.job_title}</span>
-              <span className="flex items-center gap-1.5"><Building2 className="size-3.5" />{employee.department}</span>
-              <span className="flex items-center gap-1.5"><MapPin className="size-3.5" />{employee.location}</span>
-            </div>
+            <p className="mt-2 text-sm text-muted-foreground">{employee.job_title} · {employee.department} · {employee.location}</p>
           </div>
           <div className="flex flex-wrap items-center gap-2">
             <StatusPill status={employee.employment_status} />
-            <Button variant="outline" size="lg" className="h-10 rounded-xl" onClick={() => setEditOpen(true)} disabled={Boolean(employee.archived_at)}><Pencil className="size-4" />Edit profile</Button>
-            <Button variant={employee.archived_at ? "outline" : "ghost"} size="lg" className={cn("h-10 rounded-xl", !employee.archived_at && "text-muted-foreground hover:text-destructive")} onClick={() => setArchiveOpen(true)}>{employee.archived_at ? <RefreshCcw className="size-4" /> : <Archive className="size-4" />}{employee.archived_at ? "Restore" : "Archive"}</Button>
+            <Button variant="outline" size="lg" className="h-10 rounded-md" onClick={() => setEditOpen(true)} disabled={Boolean(employee.archived_at)}><Pencil className="size-4" />Edit profile</Button>
+            <Button variant={employee.archived_at ? "outline" : "ghost"} size="lg" className={cn("h-10 rounded-md", !employee.archived_at && "text-muted-foreground hover:text-destructive")} onClick={() => setArchiveOpen(true)}>{employee.archived_at ? <RefreshCcw className="size-4" /> : <Archive className="size-4" />}{employee.archived_at ? "Restore" : "Archive"}</Button>
           </div>
         </div>
 
         <div className="overflow-x-auto border-t border-border/60 px-3 sm:px-5">
           <nav aria-label="Employee profile sections" className="flex min-w-max gap-1">
             {tabs.map((item) => {
-              const Icon = item.icon
               const active = tab === item.id
-              return <button key={item.id} type="button" onClick={() => setTab(item.id)} className={cn("relative flex items-center gap-2 px-3 py-3.5 text-sm font-medium transition-colors", active ? "text-foreground" : "text-muted-foreground hover:text-foreground")}><Icon className="size-3.5" />{item.label}{active && <motion.span layoutId="profile-tab" className="absolute inset-x-2 bottom-0 h-0.5 rounded-full bg-primary" transition={{ type: "spring", stiffness: 450, damping: 34 }} />}</button>
+              return <button key={item.id} type="button" onClick={() => setTab(item.id)} className={cn("-mb-px border-b-2 px-3 py-3.5 text-sm font-medium transition-colors", active ? "border-primary text-foreground" : "border-transparent text-muted-foreground hover:text-foreground")}>{item.label}</button>
             })}
           </nav>
         </div>
       </section>
 
-      {demoRecord && <div className="flex items-start gap-3 rounded-2xl border border-amber-200/80 bg-amber-50/70 px-4 py-3 dark:border-amber-900/60 dark:bg-amber-950/20"><Database className="mt-0.5 size-4 shrink-0 text-amber-600" /><p className="text-xs leading-relaxed text-muted-foreground"><b className="text-foreground">This is sample team data.</b> Explore the full workflow safely. Edits remain clearly labeled as demo until you add or import your real team.</p></div>}
+      {demoRecord && <div className="border border-amber-200 bg-amber-50 px-4 py-3 text-xs text-amber-950 dark:border-amber-900/60 dark:bg-amber-950/20 dark:text-amber-100">This is a sample employee record.</div>}
 
-      <AnimatePresence mode="wait" initial={false}>
-        <motion.div key={tab} initial={{ opacity: 0, y: reduceMotion ? 0 : 8 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: reduceMotion ? 0 : -5 }} transition={{ duration: reduceMotion ? 0 : 0.18 }}>
+      <div>
           {tab === "overview" && <OverviewTab data={data} />}
           {tab === "job" && <JobTab data={data} />}
           {tab === "time-off" && <TimeOffTab data={data} />}
           {tab === "growth" && <GrowthTab data={data} />}
           {tab === "activity" && <ActivityTab data={data} />}
-        </motion.div>
-      </AnimatePresence>
+      </div>
 
       <EmployeeDrawer
         open={editOpen}
@@ -181,14 +167,14 @@ function OverviewTab({ data }: { data: EmployeeProfileResponse }) {
         {data.manager ? <PersonLink employee={data.manager} detail="Manager" /> : <p className="text-sm text-muted-foreground">No manager assigned</p>}
         <div className="border-t border-border/60 pt-3"><p className="text-xs text-muted-foreground">Direct reports</p><p className="mt-1 text-lg font-semibold">{employee.direct_reports}</p></div>
       </InfoCard>
-      <InfoCard title="At a glance" icon={Gauge}>
+      <InfoCard title="Summary" icon={Gauge}>
         <InfoLine label="Tenure" value={`${employee.tenure_years.toFixed(1)} years`} />
         <InfoLine label="Training" value={`${completedTraining} of ${data.training.length} complete`} />
         <InfoLine label="Latest time off" value={latestLeave ? `${latestLeave.leave_type} · ${formatDate(latestLeave.start_date)}` : "No leave recorded"} />
       </InfoCard>
     </div>
-    <Card className="gap-0 overflow-hidden rounded-2xl border-border/70 shadow-sm">
-      <div className="border-b border-border/60 px-5 py-4"><h3 className="font-semibold tracking-tight">Recent activity</h3><p className="mt-1 text-xs text-muted-foreground">The latest moments on this profile</p></div>
+    <Card className="gap-0 overflow-hidden rounded-lg border-border/70 shadow-none">
+      <div className="border-b border-border/60 px-5 py-4"><h3 className="font-semibold">Recent activity</h3><p className="mt-1 text-xs text-muted-foreground">Latest recorded profile and workflow changes</p></div>
       <div className="p-5">{data.activity.length ? <Timeline activity={data.activity.slice(0, 6)} compact /> : <EmptyState icon={History} title="No activity yet" detail="Profile changes and HR events will appear here." />}</div>
     </Card>
   </div>
@@ -206,13 +192,13 @@ function JobTab({ data }: { data: EmployeeProfileResponse }) {
       </InfoCard>
       <InfoCard title="Manager" icon={UserRound}>{data.manager ? <PersonLink employee={data.manager} detail={data.manager.job_title} /> : <p className="text-sm text-muted-foreground">No manager assigned</p>}</InfoCard>
     </div>
-    <Card className="gap-0 overflow-hidden rounded-2xl border-border/70 shadow-sm">
+    <Card className="gap-0 overflow-hidden rounded-lg border-border/70 shadow-none">
       <SectionHeader title="Team" detail={plural(data.directReports.length, "direct report")} icon={UsersRound} />
       <div className="divide-y divide-border/60">{data.directReports.length ? data.directReports.map((report) => <PersonLink key={report.employee_id} employee={report} detail={`${report.job_title} · ${report.location}`} roomy />) : <div className="p-8"><EmptyState icon={UsersRound} title="No direct reports" detail="Reporting relationships will appear here." /></div>}</div>
     </Card>
-    <Card className="gap-0 overflow-hidden rounded-2xl border-border/70 shadow-sm xl:col-span-2">
-      <SectionHeader title="Promotion history" detail="Recorded role changes and career milestones" icon={TrendingUp} />
-      {data.promotions.length ? <div className="divide-y divide-border/60">{data.promotions.map((promotion) => <div key={promotion.id} className="grid gap-2 px-5 py-4 sm:grid-cols-[130px_1fr_auto] sm:items-center"><p className="text-xs font-medium text-muted-foreground">{formatDate(promotion.promotion_date)}</p><div className="flex flex-wrap items-center gap-2 text-sm"><span className="text-muted-foreground">{promotion.previous_title}</span><ArrowUpRight className="size-3.5 text-primary" /><span className="font-semibold">{promotion.new_title}</span></div><span className="text-xs text-muted-foreground">After {promotion.months_since_previous_promotion} months</span></div>)}</div> : <div className="p-8"><EmptyState icon={TrendingUp} title="No promotions recorded" detail="Career moves will build a clear history here." /></div>}
+    <Card className="gap-0 overflow-hidden rounded-lg border-border/70 shadow-none xl:col-span-2">
+      <SectionHeader title="Promotion history" detail="Recorded job-title changes" icon={TrendingUp} />
+      {data.promotions.length ? <div className="divide-y divide-border/60">{data.promotions.map((promotion) => <div key={promotion.id} className="grid gap-2 px-5 py-4 sm:grid-cols-[130px_1fr_auto] sm:items-center"><p className="text-xs font-medium text-muted-foreground">{formatDate(promotion.promotion_date)}</p><div className="flex flex-wrap items-center gap-2 text-sm"><span className="text-muted-foreground">{promotion.previous_title}</span><ArrowUpRight className="size-3.5 text-primary" /><span className="font-semibold">{promotion.new_title}</span></div><span className="text-xs text-muted-foreground">After {promotion.months_since_previous_promotion} months</span></div>)}</div> : <div className="p-8"><EmptyState icon={TrendingUp} title="No promotions recorded" detail="Promotion records will appear here." /></div>}
     </Card>
   </div>
 }
@@ -222,7 +208,7 @@ function TimeOffTab({ data }: { data: EmployeeProfileResponse }) {
   const pending = data.leave.filter((item) => item.approval_status.toLowerCase() === "pending").length
   return <div className="space-y-5">
     <div className="grid gap-4 sm:grid-cols-3"><MetricCard label="Approved days" value={approvedDays.toLocaleString()} detail="Across recorded requests" /><MetricCard label="Pending requests" value={pending.toLocaleString()} detail="Awaiting HR review" /><MetricCard label="Total requests" value={data.leave.length.toLocaleString()} detail="Complete leave history" /></div>
-    <Card className="gap-0 overflow-hidden rounded-2xl border-border/70 shadow-sm"><SectionHeader title="Time-off history" detail="Requests, dates, and approval status" icon={CalendarDays} />{data.leave.length ? <div className="divide-y divide-border/60">{data.leave.map((leave) => <div key={leave.id} className="grid gap-3 px-5 py-4 sm:grid-cols-[1fr_1fr_auto] sm:items-center"><div><p className="text-sm font-semibold">{leave.leave_type}</p><p className="mt-1 text-xs text-muted-foreground">{formatDate(leave.start_date)} – {formatDate(leave.end_date)}</p></div><p className="text-sm"><b>{leave.leave_days}</b> {leave.leave_days === 1 ? "day" : "days"}</p><RecordStatus status={leave.approval_status} /></div>)}</div> : <div className="p-10"><EmptyState icon={CalendarDays} title="No time off recorded" detail="Leave requests for this employee will show up here." /></div>}</Card>
+    <Card className="gap-0 overflow-hidden rounded-lg border-border/70 shadow-none"><SectionHeader title="Time-off history" detail="Requests, dates, and approval status" icon={CalendarDays} />{data.leave.length ? <div className="divide-y divide-border/60">{data.leave.map((leave) => <div key={leave.id} className="grid gap-3 px-5 py-4 sm:grid-cols-[1fr_1fr_auto] sm:items-center"><div><p className="text-sm font-semibold">{leave.leave_type}</p><p className="mt-1 text-xs text-muted-foreground">{formatDate(leave.start_date)} – {formatDate(leave.end_date)}</p></div><p className="text-sm"><b>{leave.leave_days}</b> {leave.leave_days === 1 ? "day" : "days"}</p><RecordStatus status={leave.approval_status} /></div>)}</div> : <div className="p-10"><EmptyState icon={CalendarDays} title="No time off recorded" detail="Leave requests for this employee will show up here." /></div>}</Card>
   </div>
 }
 
@@ -234,28 +220,28 @@ function GrowthTab({ data }: { data: EmployeeProfileResponse }) {
   return <div className="space-y-5">
     <div className="grid gap-4 sm:grid-cols-3"><MetricCard label="Completed" value={`${completed.length}/${data.training.length}`} detail="Assigned programmes" /><MetricCard label="Learning hours" value={totalHours.toLocaleString()} detail="Total assigned time" /><MetricCard label="Average score" value={averageScore === null ? "—" : `${averageScore}%`} detail="Completed assessments" /></div>
     <div className="grid gap-5 xl:grid-cols-[1.25fr_.75fr]">
-      <Card className="gap-0 overflow-hidden rounded-2xl border-border/70 shadow-sm"><SectionHeader title="Learning" detail="Training programmes and progress" icon={GraduationCap} />{data.training.length ? <div className="divide-y divide-border/60">{data.training.map((training) => <div key={training.id} className="grid gap-3 px-5 py-4 sm:grid-cols-[1fr_auto] sm:items-center"><div><p className="text-sm font-semibold">{training.training_program}</p><p className="mt-1 text-xs text-muted-foreground">{training.training_hours} hours{training.completion_date ? ` · Completed ${formatDate(training.completion_date)}` : ""}</p></div><div className="flex items-center gap-3"><RecordStatus status={training.completion_status} />{training.assessment_score !== null && <span className="font-mono text-sm font-semibold">{training.assessment_score}%</span>}</div></div>)}</div> : <div className="p-10"><EmptyState icon={GraduationCap} title="No learning assigned" detail="Training progress will appear here." /></div>}</Card>
-      <Card className="gap-0 overflow-hidden rounded-2xl border-border/70 shadow-sm"><SectionHeader title="Career moves" detail={plural(data.promotions.length, "promotion")} icon={TrendingUp} /><div className="p-5">{data.promotions.length ? <div className="space-y-4">{data.promotions.map((promotion) => <div key={promotion.id} className="relative border-l-2 border-primary/25 pl-4"><span className="absolute -left-[5px] top-1 size-2 rounded-full bg-primary" /><p className="text-sm font-semibold">{promotion.new_title}</p><p className="mt-1 text-xs text-muted-foreground">From {promotion.previous_title}</p><p className="mt-2 text-[11px] font-medium text-primary">{formatDate(promotion.promotion_date)}</p></div>)}</div> : <EmptyState icon={TrendingUp} title="Career path starts here" detail="Promotions and role changes will form a visible story." />}</div></Card>
+      <Card className="gap-0 overflow-hidden rounded-lg border-border/70 shadow-none"><SectionHeader title="Learning" detail="Training programmes and progress" icon={GraduationCap} />{data.training.length ? <div className="divide-y divide-border/60">{data.training.map((training) => <div key={training.id} className="grid gap-3 px-5 py-4 sm:grid-cols-[1fr_auto] sm:items-center"><div><p className="text-sm font-semibold">{training.training_program}</p><p className="mt-1 text-xs text-muted-foreground">{training.training_hours} hours{training.completion_date ? ` · Completed ${formatDate(training.completion_date)}` : ""}</p></div><div className="flex items-center gap-3"><RecordStatus status={training.completion_status} />{training.assessment_score !== null && <span className="font-mono text-sm font-semibold">{training.assessment_score}%</span>}</div></div>)}</div> : <div className="p-10"><EmptyState icon={GraduationCap} title="No learning assigned" detail="Training progress will appear here." /></div>}</Card>
+      <Card className="gap-0 overflow-hidden rounded-lg border-border/70 shadow-none"><SectionHeader title="Promotions" detail={plural(data.promotions.length, "promotion")} icon={TrendingUp} /><div className="p-5">{data.promotions.length ? <div className="space-y-4">{data.promotions.map((promotion) => <div key={promotion.id} className="relative border-l-2 border-primary/25 pl-4"><span className="absolute -left-[5px] top-1 size-2 rounded-full bg-primary" /><p className="text-sm font-semibold">{promotion.new_title}</p><p className="mt-1 text-xs text-muted-foreground">Previous title: {promotion.previous_title}</p><p className="mt-2 text-[11px] font-medium text-primary">{formatDate(promotion.promotion_date)}</p></div>)}</div> : <EmptyState icon={TrendingUp} title="No promotions recorded" detail="Promotion records will appear here." />}</div></Card>
     </div>
   </div>
 }
 
 function ActivityTab({ data }: { data: EmployeeProfileResponse }) {
   return <div className="grid gap-5 xl:grid-cols-[1.2fr_.8fr]">
-    <Card className="gap-0 overflow-hidden rounded-2xl border-border/70 shadow-sm"><SectionHeader title="Profile activity" detail="A transparent history of changes and decisions" icon={History} /><div className="p-5">{data.activity.length ? <Timeline activity={data.activity} /> : <EmptyState icon={History} title="No profile activity yet" detail="Updates made by HR will be logged here." />}</div></Card>
+    <Card className="gap-0 overflow-hidden rounded-lg border-border/70 shadow-none"><SectionHeader title="Change history" detail="Recorded profile and workflow changes" icon={History} /><div className="p-5">{data.activity.length ? <Timeline activity={data.activity} /> : <EmptyState icon={History} title="No activity recorded" detail="Profile and workflow changes will appear here." />}</div></Card>
     <div className="space-y-5">
       <InfoCard title="Record details" icon={ShieldAlert}><InfoLine label="Source" value={data.employee.data_source === "demo" ? "Sample workspace data" : "HR-managed record"} /><InfoLine label="Version" value={`v${data.employee.version}`} /><InfoLine label="Last updated" value={data.employee.updated_at ? new Date(data.employee.updated_at).toLocaleString() : "Not recorded"} /></InfoCard>
-      {data.attrition.length > 0 && <Card className="gap-0 overflow-hidden rounded-2xl border-border/70 shadow-sm"><SectionHeader title="Exit records" detail="Recorded employee departures" icon={Archive} /><div className="divide-y divide-border/60">{data.attrition.map((item) => <div key={item.id} className="p-4"><div className="flex items-center justify-between gap-3"><p className="text-sm font-semibold">{item.exit_reason}</p><RecordStatus status={item.exit_type} /></div><p className="mt-1 text-xs text-muted-foreground">{formatDate(item.exit_date)} · {item.tenure_years} years tenure</p></div>)}</div></Card>}
+      {data.attrition.length > 0 && <Card className="gap-0 overflow-hidden rounded-lg border-border/70 shadow-none"><SectionHeader title="Exit records" detail="Recorded employee departures" icon={Archive} /><div className="divide-y divide-border/60">{data.attrition.map((item) => <div key={item.id} className="p-4"><div className="flex items-center justify-between gap-3"><p className="text-sm font-semibold">{item.exit_reason}</p><RecordStatus status={item.exit_type} /></div><p className="mt-1 text-xs text-muted-foreground">{formatDate(item.exit_date)} · {item.tenure_years} years tenure</p></div>)}</div></Card>}
     </div>
   </div>
 }
 
-function InfoCard({ title, icon: Icon, children }: { title: string; icon: typeof UserRound; children: React.ReactNode }) {
-  return <Card className="gap-0 overflow-hidden rounded-2xl border-border/70 shadow-sm"><SectionHeader title={title} icon={Icon} /><div className="space-y-4 p-5">{children}</div></Card>
+function InfoCard({ title, icon, children }: { title: string; icon: typeof UserRound; children: React.ReactNode }) {
+  return <Card className="gap-0 overflow-hidden rounded-lg border-border/70 shadow-none"><SectionHeader title={title} icon={icon} /><div className="space-y-4 p-5">{children}</div></Card>
 }
 
-function SectionHeader({ title, detail, icon: Icon }: { title: string; detail?: string; icon: typeof UserRound }) {
-  return <div className="flex items-center gap-3 border-b border-border/60 px-5 py-4"><span className="flex size-8 items-center justify-center rounded-xl bg-primary/10 text-primary"><Icon className="size-4" /></span><div><h3 className="font-semibold tracking-tight">{title}</h3>{detail && <p className="mt-0.5 text-xs text-muted-foreground">{detail}</p>}</div></div>
+function SectionHeader({ title, detail }: { title: string; detail?: string; icon: typeof UserRound }) {
+  return <div className="border-b border-border/60 px-5 py-4"><h3 className="font-semibold">{title}</h3>{detail && <p className="mt-0.5 text-xs text-muted-foreground">{detail}</p>}</div>
 }
 
 function InfoLine({ label, value, href }: { label: string; value: string; href?: string }) {
@@ -264,23 +250,23 @@ function InfoLine({ label, value, href }: { label: string; value: string; href?:
 }
 
 function PersonLink({ employee, detail, roomy = false }: { employee: ManagedEmployee; detail: string; roomy?: boolean }) {
-  return <Link href={`/people/${encodeURIComponent(employee.employee_id)}`} className={cn("group flex items-center gap-3 rounded-xl transition-colors hover:bg-primary/[0.04]", roomy ? "rounded-none px-5 py-4" : "-mx-2 p-2")}><PersonAvatar employeeId={employee.employee_id} initials={employee.initials} /><div className="min-w-0 flex-1"><p className="truncate text-sm font-semibold group-hover:text-primary">{employee.display_name}</p><p className="truncate text-xs text-muted-foreground">{detail}</p></div><ArrowUpRight className="size-4 text-muted-foreground transition group-hover:translate-x-0.5 group-hover:text-primary" /></Link>
+  return <Link href={`/people/${encodeURIComponent(employee.employee_id)}`} className={cn("group flex items-center gap-3 rounded-md transition-colors hover:bg-primary/[0.04]", roomy ? "rounded-none px-5 py-4" : "-mx-2 p-2")}><PersonAvatar employeeId={employee.employee_id} initials={employee.initials} /><div className="min-w-0 flex-1"><p className="truncate text-sm font-semibold group-hover:text-primary">{employee.display_name}</p><p className="truncate text-xs text-muted-foreground">{detail}</p></div><ArrowUpRight className="size-4 text-muted-foreground transition group-hover:text-primary" /></Link>
 }
 
 function MetricCard({ label, value, detail }: { label: string; value: string; detail: string }) {
-  return <Card className="gap-1 rounded-2xl border-border/70 p-5 shadow-sm"><p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">{label}</p><p className="mt-2 text-3xl font-semibold tracking-tight tabular-nums">{value}</p><p className="mt-1 text-xs text-muted-foreground">{detail}</p></Card>
+  return <Card className="gap-1 rounded-lg border-border/70 p-5 shadow-none"><p className="text-xs font-medium text-muted-foreground">{label}</p><p className="mt-2 text-2xl font-semibold tracking-tight tabular-nums">{value}</p><p className="mt-1 text-xs text-muted-foreground">{detail}</p></Card>
 }
 
 function RecordStatus({ status }: { status: string }) {
   const positive = /approved|completed|voluntary/i.test(status)
   const pending = /pending|incomplete|open/i.test(status)
-  return <span className={cn("inline-flex w-fit items-center gap-1.5 rounded-full border px-2.5 py-1 text-[11px] font-semibold", positive ? "border-emerald-200 bg-emerald-50 text-emerald-700 dark:border-emerald-900/60 dark:bg-emerald-950/30 dark:text-emerald-300" : pending ? "border-amber-200 bg-amber-50 text-amber-700 dark:border-amber-900/60 dark:bg-amber-950/30 dark:text-amber-300" : "border-border bg-muted text-muted-foreground")}><span className="size-1.5 rounded-full bg-current" />{status}</span>
+  return <span className={cn("inline-flex w-fit items-center rounded-sm border px-2.5 py-1 text-[11px] font-medium", positive ? "border-emerald-200 bg-emerald-50 text-emerald-800 dark:border-emerald-900/60 dark:bg-emerald-950/30 dark:text-emerald-300" : pending ? "border-amber-200 bg-amber-50 text-amber-800 dark:border-amber-900/60 dark:bg-amber-950/30 dark:text-amber-300" : "border-border bg-muted text-muted-foreground")}>{status}</span>
 }
 
 function Timeline({ activity, compact = false }: { activity: EmployeeActivity[]; compact?: boolean }) {
-  return <div className="space-y-0">{activity.map((item, index) => {
+  return <div className="divide-y divide-border">{activity.map((item) => {
     const changedFields = parseChangedFields(item.changes_json)
-    return <div key={item.id} className="relative flex gap-3 pb-5 last:pb-0"><div className="relative z-10 flex size-8 shrink-0 items-center justify-center rounded-full border border-border bg-background text-primary">{activityIcon(item.event_type)}</div>{index < activity.length - 1 && <span className="absolute bottom-0 left-[15px] top-8 w-px bg-border" />}<div className="min-w-0 flex-1 pt-0.5"><p className="text-sm font-medium leading-relaxed">{item.summary}</p><p className="mt-1 text-[11px] text-muted-foreground">{new Date(item.created_at).toLocaleString()} · {item.actor_email}</p>{!compact && changedFields.length > 0 && <div className="mt-2 flex flex-wrap gap-1.5">{changedFields.map((field) => <span key={field} className="rounded-md bg-muted px-2 py-1 text-[10px] font-medium text-muted-foreground">{friendlyField(field)}</span>)}</div>}</div></div>
+    return <div key={item.id} className="py-3 first:pt-0 last:pb-0"><p className="text-sm font-medium leading-relaxed">{item.summary}</p><p className="mt-1 text-[11px] text-muted-foreground">{new Date(item.created_at).toLocaleString()} · {item.actor_email}</p>{!compact && changedFields.length > 0 && <p className="mt-2 text-[10px] text-muted-foreground">Fields changed: {changedFields.map(friendlyField).join(", ")}</p>}</div>
   })}</div>
 }
 
@@ -293,16 +279,8 @@ function friendlyField(value: string): string {
   return value.replace(/_/g, " ").replace(/\b\w/g, (character) => character.toUpperCase())
 }
 
-function activityIcon(type: string) {
-  if (type === "created") return <UserPlus className="size-3.5" />
-  if (type === "updated") return <Pencil className="size-3.5" />
-  if (type === "leave_decision") return <CalendarDays className="size-3.5" />
-  if (type === "archived") return <Archive className="size-3.5" />
-  return <CheckCircle2 className="size-3.5" />
-}
-
-function EmptyState({ icon: Icon, title, detail }: { icon: typeof UserRound; title: string; detail: string }) {
-  return <div className="flex flex-col items-center justify-center text-center"><span className="flex size-11 items-center justify-center rounded-2xl bg-muted text-muted-foreground"><Icon className="size-4" /></span><p className="mt-3 text-sm font-semibold">{title}</p><p className="mt-1 max-w-xs text-xs leading-relaxed text-muted-foreground">{detail}</p></div>
+function EmptyState({ title, detail }: { icon: typeof UserRound; title: string; detail: string }) {
+  return <div className="text-center"><p className="text-sm font-semibold">{title}</p><p className="mt-1 text-xs text-muted-foreground">{detail}</p></div>
 }
 
 function ArchiveDialog({ open, employee, onClose, onChanged }: { open: boolean; employee: ManagedEmployee; onClose: () => void; onChanged: () => void }) {
@@ -323,9 +301,9 @@ function ArchiveDialog({ open, employee, onClose, onChanged }: { open: boolean; 
     finally { setBusy(false) }
   }
 
-  return <AnimatePresence>{open && <div className="fixed inset-0 z-[90] flex items-center justify-center p-4"><motion.button type="button" aria-label="Close" className="absolute inset-0 bg-slate-950/30 backdrop-blur-[2px]" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} onClick={onClose} /><motion.div role="alertdialog" aria-modal="true" className="relative w-full max-w-md rounded-[24px] border border-border bg-background p-6 shadow-2xl" initial={{ opacity: 0, scale: reduceMotion ? 1 : .96, y: reduceMotion ? 0 : 8 }} animate={{ opacity: 1, scale: 1, y: 0 }} exit={{ opacity: 0, scale: reduceMotion ? 1 : .97 }}><button type="button" onClick={onClose} aria-label="Close" className="absolute right-4 top-4 text-muted-foreground hover:text-foreground"><X className="size-4" /></button><span className={cn("flex size-11 items-center justify-center rounded-2xl", restoring ? "bg-primary/10 text-primary" : "bg-amber-100 text-amber-700 dark:bg-amber-950/40 dark:text-amber-300")}>{restoring ? <RefreshCcw className="size-5" /> : <Archive className="size-5" />}</span><h3 className="mt-4 text-lg font-semibold tracking-tight">{restoring ? "Restore employee?" : "Archive employee?"}</h3><p className="mt-2 text-sm leading-relaxed text-muted-foreground">{restoring ? `${employee.display_name} will return to the active directory with an Active status.` : `${employee.display_name} will leave the active directory. Their history stays intact and can be restored anytime.`}</p>{error && <p className="mt-4 rounded-xl bg-destructive/10 p-3 text-xs text-destructive">{error}</p>}<div className="mt-6 flex justify-end gap-2"><Button variant="ghost" onClick={onClose} disabled={busy}>Cancel</Button><Button variant={restoring ? "default" : "destructive"} onClick={() => void changeStatus()} disabled={busy}>{busy ? "Updating…" : restoring ? "Restore employee" : "Archive employee"}</Button></div></motion.div></div>}</AnimatePresence>
+  return <AnimatePresence>{open && <div className="fixed inset-0 z-[90] flex items-center justify-center p-4"><motion.button type="button" aria-label="Close" className="absolute inset-0 bg-slate-950/30" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} onClick={onClose} /><motion.div role="alertdialog" aria-modal="true" className="relative w-full max-w-md rounded-lg border border-border bg-background p-6" initial={{ opacity: 0, scale: reduceMotion ? 1 : .98 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0 }}><button type="button" onClick={onClose} aria-label="Close" className="absolute right-4 top-4 text-muted-foreground hover:text-foreground"><X className="size-4" /></button><h3 className="text-lg font-semibold tracking-tight">{restoring ? "Restore employee?" : "Archive employee?"}</h3><p className="mt-2 text-sm leading-relaxed text-muted-foreground">{restoring ? `${employee.display_name} will return to the active directory with an Active status.` : `${employee.display_name} will be removed from the active directory. The employee history will be retained.`}</p>{error && <p className="mt-4 rounded-md bg-destructive/10 p-3 text-xs text-destructive">{error}</p>}<div className="mt-6 flex justify-end gap-2"><Button variant="ghost" onClick={onClose} disabled={busy}>Cancel</Button><Button variant={restoring ? "default" : "destructive"} onClick={() => void changeStatus()} disabled={busy}>{busy ? "Updating…" : restoring ? "Restore employee" : "Archive employee"}</Button></div></motion.div></div>}</AnimatePresence>
 }
 
 function ProfileSkeleton() {
-  return <div className="mx-auto w-full max-w-[1500px] space-y-5"><div className="h-8 w-24 animate-pulse rounded-lg bg-muted" /><div className="rounded-[28px] border border-border bg-card p-7"><div className="flex items-center gap-5"><div className="size-20 animate-pulse rounded-full bg-muted" /><div className="space-y-3"><div className="h-7 w-56 animate-pulse rounded bg-muted" /><div className="h-4 w-80 max-w-full animate-pulse rounded bg-muted" /></div></div><div className="mt-7 h-10 animate-pulse rounded bg-muted" /></div><div className="grid gap-5 md:grid-cols-2"><div className="h-64 animate-pulse rounded-2xl bg-muted" /><div className="h-64 animate-pulse rounded-2xl bg-muted" /></div></div>
+  return <div className="mx-auto w-full max-w-[1500px] space-y-5"><div className="h-8 w-24 animate-pulse rounded-lg bg-muted" /><div className="rounded-lg border border-border bg-card p-7"><div className="flex items-center gap-5"><div className="size-20 animate-pulse rounded-full bg-muted" /><div className="space-y-3"><div className="h-7 w-56 animate-pulse rounded bg-muted" /><div className="h-4 w-80 max-w-full animate-pulse rounded bg-muted" /></div></div><div className="mt-7 h-10 animate-pulse rounded bg-muted" /></div><div className="grid gap-5 md:grid-cols-2"><div className="h-64 animate-pulse rounded-lg bg-muted" /><div className="h-64 animate-pulse rounded-lg bg-muted" /></div></div>
 }

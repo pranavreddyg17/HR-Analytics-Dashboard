@@ -1,7 +1,7 @@
 "use client"
 
 import { useEffect, useState } from "react"
-import { CheckCircle2, Clipboard, Database, Download, FileSpreadsheet, RefreshCw, Upload } from "lucide-react"
+import { Clipboard, Download, RefreshCw, Upload } from "lucide-react"
 
 import { apiBaseUrl } from "@/lib/api"
 import { hrDomains, importFields, type DomainStatus, type HrDomain } from "@/lib/hr-types"
@@ -124,7 +124,7 @@ export function DataManager() {
           <tbody>{status.map((item) => <tr key={item.domain} className="border-t border-border/70">
             <td className="px-5 py-3 font-medium capitalize">{item.domain}</td>
             <td className="px-5 py-3 tabular-nums">{item.count.toLocaleString()}</td>
-            <td className="px-5 py-3"><span className={cn("inline-flex rounded-md px-2 py-1 text-[10px] font-medium", item.mode === "imported" ? "bg-emerald-100 text-emerald-800" : item.mode === "demo" ? "bg-amber-100 text-amber-800" : item.mode === "mixed" ? "bg-sky-100 text-sky-800" : "bg-muted text-muted-foreground")}>{modeLabel(item.mode)}</span></td>
+            <td className="px-5 py-3"><span className="text-xs text-muted-foreground">{modeLabel(item.mode)}</span></td>
             <td className="px-5 py-3 text-xs text-muted-foreground">{item.lastImport ? new Date(item.lastImport).toLocaleString() : "No import recorded"}</td>
           </tr>)}</tbody>
         </table>
@@ -133,25 +133,25 @@ export function DataManager() {
 
     <div className="grid gap-5 xl:grid-cols-[1.15fr_0.85fr]">
       <Card className="shadow-none">
-        <CardHeader className="border-b border-border"><CardTitle className="flex items-center gap-2"><Upload className="size-4 text-primary"/>Import records</CardTitle><CardDescription>Select a domain and upload a CSV using the required template.</CardDescription></CardHeader>
+        <CardHeader className="border-b border-border"><CardTitle>Import records</CardTitle><CardDescription>Select a domain and upload a CSV using the required template.</CardDescription></CardHeader>
         <CardContent className="space-y-5">
           <div className="grid gap-4 sm:grid-cols-2">
             <label className="text-xs text-muted-foreground">Domain<select value={domain} onChange={(event)=>{setDomain(event.target.value as HrDomain);setRows([]);setFilename("");setError("");setMessage("")}} className="mt-1 h-10 w-full rounded-md border border-input bg-background px-3 text-sm text-foreground">{hrDomains.map((item)=><option key={item} value={item}>{item[0].toUpperCase()+item.slice(1)}</option>)}</select></label>
             <div className="flex items-end"><a className="inline-flex h-10 items-center gap-2 rounded-md border border-border bg-card px-3 text-sm hover:bg-muted" href={`${apiBaseUrl}/api/v1/data/template?domain=${domain}`}><Download className="size-4"/>Download template</a></div>
           </div>
-          <div className="rounded-md border border-dashed border-input bg-muted/20 p-6">
-            <label className="flex cursor-pointer flex-col items-center gap-2 text-center"><FileSpreadsheet className="size-8 text-primary"/><span className="text-sm font-medium">Choose a CSV file</span><span className="text-xs text-muted-foreground">Up to 5,000 rows per import · UTF-8 · quoted fields supported</span><input type="file" accept=".csv,text/csv" className="sr-only" onChange={(event)=>void loadFile(event.target.files?.[0])}/></label>
+          <div className="rounded-md border border-dashed border-input p-6">
+            <label className="flex cursor-pointer flex-col items-center gap-2 text-center"><span className="text-sm font-medium">Choose a CSV file</span><span className="text-xs text-muted-foreground">Maximum 5,000 rows</span><input type="file" accept=".csv,text/csv" className="sr-only" onChange={(event)=>void loadFile(event.target.files?.[0])}/></label>
           </div>
-          <div className="rounded-lg bg-muted/40 p-3"><p className="text-xs font-medium">Required columns</p><p className="mt-1 font-mono text-[11px] leading-relaxed text-muted-foreground">{importFields[domain].join(", ")}</p></div>
-          {rows.length > 0 && <div className="rounded-lg border border-border p-3"><div className="flex items-center gap-2"><CheckCircle2 className="size-4 text-success"/><span className="text-sm font-medium">{filename}</span><span className="ml-auto font-mono text-xs">{rows.length} rows</span></div><div className="mt-3 overflow-x-auto"><table className="min-w-full text-left text-[11px]"><thead><tr>{Object.keys(rows[0]).slice(0,6).map((key)=><th key={key} className="border-b px-2 py-1.5 text-muted-foreground">{key}</th>)}</tr></thead><tbody>{rows.slice(0,3).map((row,index)=><tr key={index}>{Object.keys(rows[0]).slice(0,6).map((key)=><td key={key} className="max-w-36 truncate border-b border-border/50 px-2 py-1.5">{row[key]}</td>)}</tr>)}</tbody></table></div></div>}
+          <div className="rounded-md bg-muted/40 p-3"><p className="text-xs font-medium">Required columns</p><p className="mt-1 font-mono text-[11px] leading-relaxed text-muted-foreground">{importFields[domain].join(", ")}</p></div>
+          {rows.length > 0 && <div className="rounded-md border border-border p-3"><div className="flex items-center gap-2"><span className="text-sm font-medium">{filename}</span><span className="ml-auto font-mono text-xs">{rows.length} rows</span></div><div className="mt-3 overflow-x-auto"><table className="min-w-full text-left text-[11px]"><thead><tr>{Object.keys(rows[0]).slice(0,6).map((key)=><th key={key} className="border-b px-2 py-1.5 text-muted-foreground">{key}</th>)}</tr></thead><tbody>{rows.slice(0,3).map((row,index)=><tr key={index}>{Object.keys(rows[0]).slice(0,6).map((key)=><td key={key} className="max-w-36 truncate border-b border-border/50 px-2 py-1.5">{row[key]}</td>)}</tr>)}</tbody></table></div></div>}
           <label className="flex items-start gap-2 text-sm"><input type="checkbox" checked={replace} onChange={(event)=>setReplace(event.target.checked)} className="mt-1 accent-primary"/><span><b>Replace this domain</b><span className="block text-xs text-muted-foreground">Recommended for full HRIS refresh files. Turn off to upsert by ID while preserving other imported rows.</span></span></label>
-          {error && <pre className="max-h-40 overflow-auto whitespace-pre-wrap rounded-lg bg-destructive/10 p-3 text-xs text-destructive">{error}</pre>}
-          {message && <p className="rounded-lg bg-success/10 p-3 text-sm text-success">{message}</p>}
+          {error && <pre className="max-h-40 overflow-auto whitespace-pre-wrap rounded-md bg-destructive/10 p-3 text-xs text-destructive">{error}</pre>}
+          {message && <p className="rounded-md bg-success/10 p-3 text-sm text-success">{message}</p>}
           <Button onClick={()=>void importRows()} disabled={!rows.length || Boolean(error) || busy}>{busy?<RefreshCw className="size-4 animate-spin"/>:<Upload className="size-4"/>}{busy?"Importing…":`Import ${rows.length || ""} rows`}</Button>
         </CardContent>
       </Card>
 
-      <Card className="h-fit shadow-none"><CardHeader className="border-b border-border"><CardTitle className="flex items-center gap-2"><Database className="size-4 text-primary"/>Power BI feeds</CardTitle><CardDescription>Copy a CSV endpoint for the domain you want to refresh.</CardDescription></CardHeader><CardContent className="space-y-2">{hrDomains.map((item)=>{const url=`${origin}${apiBaseUrl}/api/v1/power-bi/${item}`;return <button key={item} onClick={()=>void navigator.clipboard.writeText(url)} className="group flex w-full items-center gap-3 rounded-md border border-border p-3 text-left hover:bg-muted"><span className="min-w-0 flex-1"><span className="block text-sm font-medium capitalize">{item}</span><span className="mt-0.5 block truncate font-mono text-[10px] text-muted-foreground">/api/v1/power-bi/{item}</span></span><Clipboard className="size-3.5 text-muted-foreground group-hover:text-primary"/></button>})}<p className="pt-2 text-[11px] leading-5 text-muted-foreground">Use an authenticated Power BI Web connector or gateway when scheduling refreshes.</p></CardContent></Card>
+      <Card className="h-fit shadow-none"><CardHeader className="border-b border-border"><CardTitle>Power BI feeds</CardTitle><CardDescription>Copy a CSV endpoint for scheduled reporting.</CardDescription></CardHeader><CardContent className="space-y-2">{hrDomains.map((item)=>{const url=`${origin}${apiBaseUrl}/api/v1/power-bi/${item}`;return <button key={item} onClick={()=>void navigator.clipboard.writeText(url)} className="group flex w-full items-center gap-3 rounded-md border border-border p-3 text-left hover:bg-muted"><span className="min-w-0 flex-1"><span className="block text-sm font-medium capitalize">{item}</span><span className="mt-0.5 block truncate font-mono text-[10px] text-muted-foreground">/api/v1/power-bi/{item}</span></span><Clipboard className="size-3.5 text-muted-foreground group-hover:text-primary"/></button>})}<p className="pt-2 text-[11px] leading-5 text-muted-foreground">Use an authenticated Power BI Web connector or gateway for scheduled refreshes.</p></CardContent></Card>
     </div>
   </div>
 }

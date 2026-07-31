@@ -2,9 +2,9 @@ import { cn } from "@/lib/utils"
 import type { RiskLevel } from "@/lib/types"
 
 const styles: Record<RiskLevel, string> = {
-  high: "bg-destructive/15 text-destructive ring-destructive/25",
-  medium: "bg-warning/15 text-warning ring-warning/25",
-  low: "bg-success/15 text-success ring-success/25",
+  high: "border-destructive/30 text-destructive",
+  medium: "border-warning/30 text-warning",
+  low: "border-success/30 text-success",
 }
 
 const labels: Record<RiskLevel, string> = {
@@ -17,7 +17,7 @@ export function RiskBadge({ level, className }: { level: RiskLevel; className?: 
   return (
     <span
       className={cn(
-        "inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium ring-1 ring-inset",
+        "inline-flex items-center rounded-sm border px-2 py-0.5 text-xs font-medium",
         styles[level],
         className,
       )}

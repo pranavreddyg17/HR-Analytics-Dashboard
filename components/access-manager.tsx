@@ -1,7 +1,7 @@
 "use client"
 
 import { useCallback, useEffect, useState } from "react"
-import { Check, Clock3, KeyRound, Loader2, Plus, ShieldCheck, Trash2, UserRoundCheck, X } from "lucide-react"
+import { Loader2, Plus, Trash2, X } from "lucide-react"
 
 type User = { email: string; display_name: string; role: string; status: string; created_at: string; last_login_at: string | null }
 type Audit = { id: string; actor_email: string; action: string; target_email: string; created_at: string }
@@ -59,37 +59,110 @@ export function AccessManager({ ownerEmail }: { ownerEmail: string }) {
     setMessage(`${removeTarget.email} no longer has access.`); setRemoveTarget(null); setRemoving(false); await load()
   }
 
-  return <div className="page-stack">
-    <section className="surface-card overflow-hidden">
-      <div className="grid gap-8 p-6 lg:grid-cols-[1fr_.78fr] lg:p-8">
-        <div><div className="flex items-center gap-2 text-xs font-semibold text-primary"><ShieldCheck className="size-4" /> Workspace security</div><h1 className="mt-2 text-2xl font-semibold tracking-[-.02em]">Access management</h1><p className="mt-2 max-w-2xl text-sm leading-6 text-muted-foreground">Control which Google accounts can sign in, assign roles, and disable or remove access.</p></div>
-        <form onSubmit={invite} className="rounded-lg border border-border bg-muted/35 p-4">
-          <label className="text-xs font-semibold text-muted-foreground">Allow a Google account</label>
-          <input required type="email" value={email} onChange={(event) => setEmail(event.target.value)} placeholder="name@company.com" className="mt-2 h-11 w-full rounded-xl border border-border bg-background px-3 text-sm outline-none focus:ring-2 focus:ring-primary/25" />
-          <div className="mt-2 flex gap-2"><select value={role} onChange={(event) => setRole(event.target.value)} className="h-10 flex-1 rounded-xl border border-border bg-background px-3 text-sm"><option value="hr">HR</option><option value="manager">Manager</option><option value="viewer">Viewer</option><option value="admin">Admin</option></select><button disabled={saving} className="inline-flex h-10 items-center gap-2 rounded-xl bg-primary px-4 text-sm font-semibold text-primary-foreground disabled:opacity-50">{saving ? <Loader2 className="size-4 animate-spin" /> : <Plus className="size-4" />} Add</button></div>
+  return (
+    <div className="page-stack">
+      <header className="border-b border-border pb-5">
+        <h1 className="text-2xl font-semibold tracking-tight">Access management</h1>
+        <p className="mt-1 text-sm text-muted-foreground">Manage approved Google accounts, roles, and account status.</p>
+      </header>
+
+      <section className="surface-card">
+        <div className="border-b border-border px-5 py-4">
+          <h2 className="text-sm font-semibold">Add account</h2>
+          <p className="mt-1 text-xs text-muted-foreground">Grant access to an approved Google account.</p>
+        </div>
+        <form onSubmit={invite} className="grid gap-3 p-5 sm:grid-cols-[minmax(0,1fr)_160px_auto] sm:items-end">
+          <label className="text-xs font-medium text-foreground">
+            Email address
+            <input required type="email" value={email} onChange={(event) => setEmail(event.target.value)} placeholder="name@company.com" className="mt-1.5 h-10 w-full rounded-md border border-border bg-background px-3 text-sm outline-none focus:ring-2 focus:ring-primary/25" />
+          </label>
+          <label className="text-xs font-medium text-foreground">
+            Role
+            <select value={role} onChange={(event) => setRole(event.target.value)} className="mt-1.5 h-10 w-full rounded-md border border-border bg-background px-3 text-sm">
+              <option value="hr">HR</option>
+              <option value="manager">Manager</option>
+              <option value="viewer">Viewer</option>
+              <option value="admin">Admin</option>
+            </select>
+          </label>
+          <button disabled={saving} className="inline-flex h-10 items-center justify-center gap-2 rounded-md bg-primary px-4 text-sm font-semibold text-primary-foreground disabled:opacity-50">
+            {saving ? <Loader2 className="size-4 animate-spin" /> : <Plus className="size-4" />}
+            Add account
+          </button>
         </form>
-      </div>
-      {message && <div className="border-t border-border bg-primary/[.04] px-6 py-3 text-sm text-foreground">{message}</div>}
-    </section>
+        {message && <div className="border-t border-border bg-muted/35 px-5 py-3 text-sm text-foreground">{message}</div>}
+      </section>
 
-    <section className="surface-card">
-      <div className="flex items-center justify-between border-b border-border px-5 py-4"><div><h2 className="font-semibold">People with access</h2><p className="text-xs text-muted-foreground">{users.length} approved Google {users.length === 1 ? "account" : "accounts"}</p></div><UserRoundCheck className="size-5 text-primary" /></div>
-      {loading ? <div className="flex h-40 items-center justify-center"><Loader2 className="size-5 animate-spin text-muted-foreground" /></div> : <div className="divide-y divide-border">
-        {users.map((user) => <div key={user.email} className="grid gap-3 px-5 py-4 md:grid-cols-[minmax(0,1fr)_140px_130px_40px] md:items-center">
-          <div className="min-w-0"><p className="truncate text-sm font-semibold">{user.display_name || user.email.split("@")[0]} {user.email === ownerEmail && <span className="ml-2 rounded-full bg-primary/10 px-2 py-0.5 text-[10px] font-semibold text-primary">You</span>}</p><p className="truncate text-xs text-muted-foreground">{user.email} · {user.last_login_at ? `Last signed in ${new Date(user.last_login_at).toLocaleDateString()}` : "Not signed in yet"}</p></div>
-          <select aria-label={`Role for ${user.email}`} value={user.role} disabled={user.email === ownerEmail} onChange={(event) => update(user, { role: event.target.value })} className="h-9 rounded-lg border border-border bg-background px-2 text-sm disabled:opacity-60"><option value="admin">Admin</option><option value="hr">HR</option><option value="manager">Manager</option><option value="viewer">Viewer</option></select>
-          <button disabled={user.email === ownerEmail} onClick={() => update(user, { status: user.status === "active" ? "disabled" : "active" })} className={`inline-flex h-9 items-center justify-center gap-2 rounded-lg border px-3 text-xs font-semibold disabled:opacity-50 ${user.status === "active" ? "border-emerald-200 bg-emerald-50 text-emerald-800" : "border-border bg-muted text-muted-foreground"}`}>{user.status === "active" ? <><Check className="size-3.5" /> Active</> : "Disabled"}</button>
-          <button type="button" disabled={user.email === ownerEmail} onClick={() => setRemoveTarget(user)} className="inline-flex size-9 items-center justify-center rounded-lg border border-border text-muted-foreground transition hover:border-red-200 hover:bg-red-50 hover:text-red-700 disabled:cursor-not-allowed disabled:opacity-30" aria-label={`Remove ${user.email}`} title={user.email === ownerEmail ? "The workspace owner cannot be removed" : "Remove access"}><Trash2 className="size-4" /></button>
-        </div>)}
-      </div>}
-    </section>
+      <section className="surface-card">
+        <div className="border-b border-border px-5 py-4">
+          <h2 className="text-sm font-semibold">Accounts</h2>
+          <p className="mt-1 text-xs text-muted-foreground">{users.length} approved Google {users.length === 1 ? "account" : "accounts"}</p>
+        </div>
+        {loading ? (
+          <div className="flex h-40 items-center justify-center"><Loader2 className="size-5 animate-spin text-muted-foreground" /></div>
+        ) : (
+          <div className="divide-y divide-border">
+            {users.map((user) => (
+              <div key={user.email} className="grid gap-3 px-5 py-4 md:grid-cols-[minmax(0,1fr)_140px_120px_40px] md:items-center">
+                <div className="min-w-0">
+                  <p className="truncate text-sm font-semibold">
+                    {user.display_name || user.email.split("@")[0]}
+                    {user.email === ownerEmail && <span className="ml-2 text-[10px] font-medium text-muted-foreground">Current user</span>}
+                  </p>
+                  <p className="truncate text-xs text-muted-foreground">{user.email} · {user.last_login_at ? `Last sign-in ${new Date(user.last_login_at).toLocaleDateString()}` : "No sign-in recorded"}</p>
+                </div>
+                <select aria-label={`Role for ${user.email}`} value={user.role} disabled={user.email === ownerEmail} onChange={(event) => update(user, { role: event.target.value })} className="h-9 rounded-md border border-border bg-background px-2 text-sm disabled:opacity-60">
+                  <option value="admin">Admin</option>
+                  <option value="hr">HR</option>
+                  <option value="manager">Manager</option>
+                  <option value="viewer">Viewer</option>
+                </select>
+                <button disabled={user.email === ownerEmail} onClick={() => update(user, { status: user.status === "active" ? "disabled" : "active" })} className="h-9 rounded-md border border-border bg-background px-3 text-xs font-medium capitalize disabled:opacity-50">
+                  {user.status}
+                </button>
+                <button type="button" disabled={user.email === ownerEmail} onClick={() => setRemoveTarget(user)} className="inline-flex size-9 items-center justify-center rounded-md border border-border text-muted-foreground hover:bg-muted hover:text-destructive disabled:cursor-not-allowed disabled:opacity-30" aria-label={`Remove ${user.email}`} title={user.email === ownerEmail ? "The workspace owner cannot be removed" : "Remove access"}>
+                  <Trash2 className="size-4" />
+                </button>
+              </div>
+            ))}
+          </div>
+        )}
+      </section>
 
-    <section className="surface-card"><div className="flex items-center gap-2 border-b border-border px-5 py-4"><Clock3 className="size-4 text-muted-foreground" /><h2 className="font-semibold">Recent access changes</h2></div><div className="divide-y divide-border">{audit.length ? audit.slice(0, 12).map((item) => <div key={item.id} className="flex items-center gap-3 px-5 py-3 text-xs"><KeyRound className="size-4 text-primary" /><span className="min-w-0 flex-1 truncate"><b>{item.actor_email}</b> {item.action.replaceAll("_", " ")} for <b>{item.target_email}</b></span><time className="text-muted-foreground">{new Date(item.created_at).toLocaleString()}</time></div>) : <p className="px-5 py-8 text-center text-sm text-muted-foreground">New access changes will appear here.</p>}</div></section>
-    {removeTarget && <div className="fixed inset-0 z-[80] flex items-center justify-center bg-foreground/25 p-4 backdrop-blur-sm" role="dialog" aria-modal="true" aria-labelledby="remove-access-title">
-      <div className="w-full max-w-md rounded-2xl border border-border bg-card p-5 shadow-2xl">
-        <div className="flex items-start justify-between gap-4"><div><h2 id="remove-access-title" className="text-lg font-semibold">Remove workspace access?</h2><p className="mt-1 text-sm leading-6 text-muted-foreground"><b className="text-foreground">{removeTarget.email}</b> will be removed from the allowlist and will not be able to sign in again.</p></div><button type="button" onClick={() => setRemoveTarget(null)} className="inline-flex size-8 shrink-0 items-center justify-center rounded-lg text-muted-foreground hover:bg-muted" aria-label="Cancel removal"><X className="size-4" /></button></div>
-        <div className="mt-5 flex justify-end gap-2"><button type="button" onClick={() => setRemoveTarget(null)} className="h-10 rounded-xl border border-border px-4 text-sm font-semibold">Cancel</button><button type="button" onClick={remove} disabled={removing} className="inline-flex h-10 items-center gap-2 rounded-xl bg-red-600 px-4 text-sm font-semibold text-white hover:bg-red-700 disabled:opacity-50">{removing ? <Loader2 className="size-4 animate-spin" /> : <Trash2 className="size-4" />} Remove user</button></div>
-      </div>
-    </div>}
-  </div>
+      <section className="surface-card">
+        <div className="border-b border-border px-5 py-4">
+          <h2 className="text-sm font-semibold">Access history</h2>
+        </div>
+        <div className="divide-y divide-border">
+          {audit.length ? audit.slice(0, 12).map((item) => (
+            <div key={item.id} className="grid gap-1 px-5 py-3 text-xs sm:grid-cols-[minmax(0,1fr)_auto] sm:items-center">
+              <span className="min-w-0 truncate"><b>{item.actor_email}</b> {item.action.replaceAll("_", " ")} for <b>{item.target_email}</b></span>
+              <time className="text-muted-foreground">{new Date(item.created_at).toLocaleString()}</time>
+            </div>
+          )) : <p className="px-5 py-8 text-center text-sm text-muted-foreground">No access changes recorded.</p>}
+        </div>
+      </section>
+
+      {removeTarget && (
+        <div className="fixed inset-0 z-[80] flex items-center justify-center bg-foreground/25 p-4" role="dialog" aria-modal="true" aria-labelledby="remove-access-title">
+          <div className="w-full max-w-md rounded-lg border border-border bg-card p-5">
+            <div className="flex items-start justify-between gap-4">
+              <div>
+                <h2 id="remove-access-title" className="text-lg font-semibold">Remove access?</h2>
+                <p className="mt-1 text-sm leading-6 text-muted-foreground"><b className="text-foreground">{removeTarget.email}</b> will no longer be able to sign in.</p>
+              </div>
+              <button type="button" onClick={() => setRemoveTarget(null)} className="inline-flex size-8 shrink-0 items-center justify-center rounded-md text-muted-foreground hover:bg-muted" aria-label="Cancel removal"><X className="size-4" /></button>
+            </div>
+            <div className="mt-5 flex justify-end gap-2">
+              <button type="button" onClick={() => setRemoveTarget(null)} className="h-10 rounded-md border border-border px-4 text-sm font-semibold">Cancel</button>
+              <button type="button" onClick={remove} disabled={removing} className="inline-flex h-10 items-center gap-2 rounded-md bg-red-600 px-4 text-sm font-semibold text-white hover:bg-red-700 disabled:opacity-50">
+                {removing ? <Loader2 className="size-4 animate-spin" /> : <Trash2 className="size-4" />}
+                Remove account
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  )
 }

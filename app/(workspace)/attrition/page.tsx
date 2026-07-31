@@ -1,5 +1,4 @@
 import Link from "next/link"
-import { ArrowRight, Database, ShieldCheck } from "lucide-react"
 
 import { AttritionPredictor } from "@/components/attrition-predictor"
 import { AttritionTrendChart } from "@/components/charts/attrition-trend-chart"
@@ -134,33 +133,27 @@ export default async function AttritionPage() {
             Review scored records
           </Button>
           <Button nativeButton={false} size="sm" render={<Link href="/insights" />}>
-            Workforce insights <ArrowRight className="size-4" />
+            Workforce insights
           </Button>
         </div>
       </header>
 
       <section className="grid gap-3 md:grid-cols-2" aria-label="Data scope">
         <div className="rounded-lg border border-border bg-card p-4">
-          <div className="flex items-start gap-3">
-            <Database className="mt-0.5 size-4 shrink-0 text-muted-foreground" />
             <div>
               <p className="text-sm font-semibold">Current workforce evidence</p>
               <p className="mt-1 text-xs leading-relaxed text-muted-foreground">
                 Attrition outcomes stored in the HR database. Source status: <span className="font-medium text-foreground">{sourceLabel(attritionStatus?.mode)}</span>.
               </p>
             </div>
-          </div>
         </div>
         <div className="rounded-lg border border-border bg-card p-4">
-          <div className="flex items-start gap-3">
-            <ShieldCheck className="mt-0.5 size-4 shrink-0 text-muted-foreground" />
             <div>
               <p className="text-sm font-semibold">Historical prediction benchmark</p>
               <p className="mt-1 text-xs leading-relaxed text-muted-foreground">
                 {historicalRows.toLocaleString()} anonymized training records. Scores support human review and are not live employee outcomes.
               </p>
             </div>
-          </div>
         </div>
       </section>
 
@@ -197,7 +190,7 @@ export default async function AttritionPage() {
                 {priorities.map((item) => (
                   <tr key={`${item.priority}-${item.finding}`} className="align-top hover:bg-muted/20">
                     <td className="px-5 py-4">
-                      <span className="inline-flex rounded-md bg-muted px-2 py-1 text-xs font-medium">{item.priority}</span>
+                      <span className="text-xs font-medium text-muted-foreground">{item.priority}</span>
                     </td>
                     <td className="px-5 py-4 font-medium">{item.finding}</td>
                     <td className="px-5 py-4 text-muted-foreground">{item.evidence}</td>

@@ -1,7 +1,7 @@
 "use client"
 
 import { useMemo, useState } from "react"
-import { Loader2, RotateCcw, ShieldAlert } from "lucide-react"
+import { Loader2, RotateCcw } from "lucide-react"
 
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
@@ -125,13 +125,13 @@ export function AttritionPredictor({ schema }: { schema: PredictionSchema }) {
         </CardHeader>
         <CardContent>
           {!result ? (
-            <div className="flex min-h-72 flex-col items-center justify-center gap-2 rounded-lg border border-dashed border-border p-6 text-center">
+            <div className="flex min-h-72 flex-col items-center justify-center gap-2 rounded-md border border-border p-6 text-center">
               <p className="text-sm font-medium">No assessment calculated</p>
               <p className="max-w-sm text-xs leading-relaxed text-muted-foreground">Review the profile inputs, then calculate a score to see the model estimate and its strongest contributing signals.</p>
             </div>
           ) : (
             <div className="flex flex-col gap-4">
-              <div className="flex items-center justify-between rounded-lg border border-border p-4">
+              <div className="flex items-center justify-between rounded-md border border-border p-4">
                 <div>
                   <p className="text-xs text-muted-foreground">Predicted attrition probability</p>
                   <p className="text-3xl font-semibold tracking-tight tabular-nums">{result.riskScore.toFixed(1)}%</p>
@@ -142,22 +142,19 @@ export function AttritionPredictor({ schema }: { schema: PredictionSchema }) {
               <div className="flex flex-col gap-2">
                 <p className="text-xs font-medium text-muted-foreground">Top model contributions</p>
                 {result.topDrivers.map((driver) => (
-                  <div key={driver.feature} className="rounded-lg border border-border p-3">
+                  <div key={driver.feature} className="rounded-md border border-border p-3">
                     <p className="text-sm font-medium">{driver.label}</p>
                     <p className="text-xs text-muted-foreground">{driver.explanation}</p>
                   </div>
                 ))}
               </div>
 
-              <div className="rounded-lg border border-border bg-muted/25 p-3">
+              <div className="rounded-md border border-border bg-muted/25 p-3">
                 <p className="text-xs font-medium">Recommended HR review</p>
                 <p className="mt-1 text-sm">{result.recommendation}</p>
               </div>
 
-              <div className="flex gap-2 rounded-lg bg-warning/10 p-3 text-xs text-warning">
-                <ShieldAlert className="mt-0.5 size-4 shrink-0" />
-                <p>{result.disclaimer}</p>
-              </div>
+              <div className="border-l-2 border-warning px-3 py-2 text-xs text-warning">{result.disclaimer}</div>
             </div>
           )}
         </CardContent>

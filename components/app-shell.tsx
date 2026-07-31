@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useRef, useState } from "react"
 import Link from "next/link"
 import { usePathname, useRouter, useSearchParams } from "next/navigation"
-import { ArrowRight, Loader2, Search, UserRound, X } from "lucide-react"
+import { Loader2, Search, UserRound, X } from "lucide-react"
 
 import {
   AppSidebar,
@@ -106,7 +106,7 @@ function CommandPalette({ onClose, user }: { onClose: () => void; user: ShellUse
       .filter((item) => item.href !== "/access" || user.role === "admin")
       .filter((item) => !normalized || matchesNavigation(item, normalized))
       .slice(0, normalized ? 5 : 8)
-      .map((item) => ({ id: `page-${item.href}`, href: item.href, label: item.label, detail: "Go to page", kind: "page" as const, icon: item.icon }))
+      .map((item) => ({ id: `page-${item.href}`, href: item.href, label: item.label, detail: "Page", kind: "page" as const, icon: item.icon }))
     const employees = people.map((person) => ({
       id: `person-${person.employee_id}`,
       href: `/people/${encodeURIComponent(person.employee_id)}`,
@@ -148,7 +148,7 @@ function CommandPalette({ onClose, user }: { onClose: () => void; user: ShellUse
               if (event.key === "Enter" && items[activeIndex]) { event.preventDefault(); select(items[activeIndex]) }
               if (event.key === "Escape") onClose()
             }}
-            placeholder="Search people and workspace pages"
+            placeholder="Search pages or people"
             aria-label="Search"
           />
           {loading ? <Loader2 className="size-4 animate-spin text-muted-foreground" /> : <kbd>ESC</kbd>}
@@ -175,7 +175,6 @@ function CommandPalette({ onClose, user }: { onClose: () => void; user: ShellUse
                     <span className="block truncate text-sm font-semibold">{item.label}</span>
                     <span className="block truncate text-xs text-muted-foreground">{item.detail}</span>
                   </span>
-                  <ArrowRight className="size-4 text-muted-foreground" />
                 </button>
               </div>
             )

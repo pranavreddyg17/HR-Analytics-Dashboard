@@ -65,7 +65,7 @@ function Metric({ label, value, hint, icon: Icon, tone = "primary" }: { label: s
 
 function ChartTooltip({ active, payload, label }: { active?: boolean; payload?: Array<{ value?: number; name?: string }>; label?: string }) {
   if (!active || !payload?.length) return null
-  return <div className="rounded-lg border border-border bg-popover px-3 py-2 text-xs shadow-xl"><p className="font-medium">{label}</p><p className="mt-1 text-primary">{payload[0].name}: {payload[0].value}</p></div>
+  return <div className="rounded-lg border border-border bg-popover px-3 py-2 text-xs shadow-none"><p className="font-medium">{label}</p><p className="mt-1 text-primary">{payload[0].name}: {payload[0].value}</p></div>
 }
 
 function TrendChart({ data, label }: { data: TimePoint[]; label: string }) {
@@ -183,12 +183,12 @@ export function WorkforceDashboard({ initialView = "executive" }: { initialView?
     return () => controller.abort()
   }, [query])
 
-  if (!data && loading) return <div className="grid gap-4"><div className="h-24 animate-pulse rounded-xl bg-muted"/><div className="grid gap-4 md:grid-cols-4">{Array.from({length:4},(_,i)=><div key={i} className="h-32 animate-pulse rounded-xl bg-muted"/>)}</div></div>
+  if (!data && loading) return <div className="grid gap-4"><div className="h-24 animate-pulse rounded-md bg-muted"/><div className="grid gap-4 md:grid-cols-4">{Array.from({length:4},(_,i)=><div key={i} className="h-32 animate-pulse rounded-md bg-muted"/>)}</div></div>
   if (!data) return <Card><CardContent className="p-6 text-sm text-destructive">{error || "Analytics unavailable."}</CardContent></Card>
   const demoDomains = data.status.filter((item) => item.mode === "demo")
 
   return <div className="flex flex-col gap-5">
-    {demoDomains.length > 0 && <div className="flex flex-col gap-3 rounded-xl border border-warning/25 bg-warning/5 p-4 sm:flex-row sm:items-center"><AlertTriangle className="size-5 shrink-0 text-warning"/><div className="flex-1"><p className="text-sm font-medium">Demo operational data is active</p><p className="text-xs text-muted-foreground">{demoDomains.map((item)=>item.domain).join(", ")} use clearly labelled sample records. The validated attrition model remains based on the original 1,470-row dataset.</p></div><Button nativeButton={false} variant="outline" size="sm" render={<Link href="/data"/>}>Import HR data <ArrowRight className="size-3.5"/></Button></div>}
+    {demoDomains.length > 0 && <div className="flex flex-col gap-3 rounded-md border border-warning/25 bg-warning/5 p-4 sm:flex-row sm:items-center"><AlertTriangle className="size-5 shrink-0 text-warning"/><div className="flex-1"><p className="text-sm font-medium">Demo operational data is active</p><p className="text-xs text-muted-foreground">{demoDomains.map((item)=>item.domain).join(", ")} use clearly labelled sample records. The validated attrition model remains based on the original 1,470-row dataset.</p></div><Button nativeButton={false} variant="outline" size="sm" render={<Link href="/data"/>}>Import HR data <ArrowRight className="size-3.5"/></Button></div>}
 
     <Card className="gap-4 p-4 sm:p-5">
       <div className="flex items-center justify-between gap-3 border-b border-border/70 pb-3"><div className="flex items-center gap-2"><span className="flex size-8 items-center justify-center rounded-lg bg-primary/10 text-primary"><SlidersHorizontal className="size-4" /></span><div><p className="text-sm font-semibold">Dashboard filters</p><p className="text-[11px] text-muted-foreground">Applied to charts, records, and exports</p></div></div><Button variant="ghost" size="sm" onClick={()=>setFilters(initialFilters)}><FilterX className="size-4"/>Reset</Button></div>
@@ -203,7 +203,7 @@ export function WorkforceDashboard({ initialView = "executive" }: { initialView?
     </Card>
 
     <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
-      <div className="flex flex-1 gap-1 overflow-x-auto rounded-xl border border-border bg-card p-1.5 shadow-sm">{views.map((item)=><button key={item.id} onClick={()=>{ setView(item.id); router.replace(`/insights?view=${item.id}`, { scroll: false }) }} className={cn("whitespace-nowrap rounded-lg px-3 py-2 text-xs font-semibold transition-colors",view===item.id?"bg-[#101827] text-white shadow-sm":"text-muted-foreground hover:bg-muted hover:text-foreground")}>{item.label}</button>)}</div>
+      <div className="flex flex-1 gap-1 overflow-x-auto rounded-md border border-border bg-card p-1.5 shadow-none">{views.map((item)=><button key={item.id} onClick={()=>{ setView(item.id); router.replace(`/insights?view=${item.id}`, { scroll: false }) }} className={cn("whitespace-nowrap rounded-lg px-3 py-2 text-xs font-semibold transition-colors",view===item.id?"bg-[#101827] text-white shadow-none":"text-muted-foreground hover:bg-muted hover:text-foreground")}>{item.label}</button>)}</div>
       <div className="flex gap-2"><a href={`${apiBaseUrl}/api/v1/reports?format=pdf&${query}`} className="inline-flex h-9 items-center gap-1.5 rounded-lg border border-border bg-card px-3 text-xs font-medium hover:bg-muted"><Download className="size-3.5"/>PDF</a><a href={`${apiBaseUrl}/api/v1/reports?format=xlsx&${query}`} className="inline-flex h-9 items-center gap-1.5 rounded-lg border border-border bg-card px-3 text-xs font-medium hover:bg-muted"><Download className="size-3.5"/>Excel</a></div>
     </div>
 

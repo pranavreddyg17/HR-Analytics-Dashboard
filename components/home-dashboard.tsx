@@ -2,14 +2,9 @@
 
 import Link from "next/link"
 import {
-  BriefcaseBusiness,
-  CalendarCheck2,
   ChevronRight,
-  GraduationCap,
   Inbox,
-  TrendingDown,
   UserPlus,
-  Users,
 } from "lucide-react"
 
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
@@ -55,7 +50,7 @@ function SummaryMetric({
       <p className="mt-2 text-2xl font-semibold tracking-tight tabular-nums">{value}</p>
       <div className="mt-2 flex items-center justify-between gap-2">
         <p className="text-xs text-muted-foreground">{detail}</p>
-        <ChevronRight className="size-3.5 shrink-0 text-muted-foreground transition-transform group-hover:translate-x-0.5" />
+        <span className="text-[11px] font-medium text-foreground">View</span>
       </div>
     </Link>
   )
@@ -63,10 +58,10 @@ function SummaryMetric({
 
 function StatusLabel({ count }: { count: number }) {
   if (count === 0) {
-    return <span className="inline-flex rounded-md bg-emerald-50 px-2 py-1 text-xs font-medium text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-300">Clear</span>
+    return <span className="text-xs font-medium text-muted-foreground">Clear</span>
   }
 
-  return <span className="inline-flex rounded-md bg-amber-50 px-2 py-1 text-xs font-medium text-amber-800 dark:bg-amber-950/40 dark:text-amber-300">{count} open</span>
+  return <span className="text-xs font-medium text-foreground">{count} open</span>
 }
 
 export function HomeDashboard({ analytics, inbox, people }: HomeDashboardProps) {
@@ -290,21 +285,19 @@ export function HomeDashboard({ analytics, inbox, people }: HomeDashboardProps) 
           </CardHeader>
           <CardContent className="divide-y divide-border p-0">
             {[
-              { icon: CalendarCheck2, label: "Time off", value: `${awayToday.length} away · ${analytics.leave.pending} pending`, href: "/time-off" },
-              { icon: GraduationCap, label: "Learning", value: `${percent.format(analytics.training.completionRate)}% complete`, href: "/learning" },
-              { icon: BriefcaseBusiness, label: "Hiring", value: `${analytics.hiring.activeRequisitions} open roles · ${analytics.hiring.offers} offers`, href: "/hiring" },
-              { icon: TrendingDown, label: "Attrition", value: `${percent.format(analytics.attrition.rate)}% rate · ${analytics.attrition.totalExits} exits`, href: "/attrition" },
-              { icon: Users, label: "People", value: `${analytics.kpis.activeEmployees} active employee records`, href: "/people" },
+              { label: "Time off", value: `${awayToday.length} away · ${analytics.leave.pending} pending`, href: "/time-off" },
+              { label: "Learning", value: `${percent.format(analytics.training.completionRate)}% complete`, href: "/learning" },
+              { label: "Hiring", value: `${analytics.hiring.activeRequisitions} open roles · ${analytics.hiring.offers} offers`, href: "/hiring" },
+              { label: "Attrition", value: `${percent.format(analytics.attrition.rate)}% rate · ${analytics.attrition.totalExits} exits`, href: "/attrition" },
+              { label: "People", value: `${analytics.kpis.activeEmployees} active employee records`, href: "/people" },
             ].map((program) => {
-              const Icon = program.icon
               return (
                 <Link key={program.label} href={program.href} className="group flex items-center gap-3 px-5 py-3.5 transition-colors hover:bg-muted/20">
-                  <span className="flex size-8 shrink-0 items-center justify-center rounded-md border border-border bg-background"><Icon className="size-4 text-muted-foreground" /></span>
                   <span className="min-w-0 flex-1">
                     <span className="block text-sm font-medium">{program.label}</span>
                     <span className="block truncate text-xs text-muted-foreground">{program.value}</span>
                   </span>
-                  <ChevronRight className="size-4 text-muted-foreground transition-transform group-hover:translate-x-0.5" />
+                  <ChevronRight className="size-4 text-muted-foreground transition-transform" />
                 </Link>
               )
             })}

@@ -4,7 +4,7 @@ import Link from "next/link"
 import { useRouter, useSearchParams } from "next/navigation"
 import { useCallback, useEffect, useMemo, useState } from "react"
 import { motion, useReducedMotion } from "motion/react"
-import { Archive, ArrowUpRight, Building2, Database, FilterX, MapPin, Plus, Search, SlidersHorizontal, UsersRound } from "lucide-react"
+import { Archive, FilterX, Plus, Search, SlidersHorizontal } from "lucide-react"
 
 import { Button } from "@/components/ui/button"
 import { Card } from "@/components/ui/card"
@@ -122,12 +122,11 @@ export function PeopleDirectory() {
 
   return (
     <div className="mx-auto flex w-full max-w-[1500px] flex-col gap-5">
-      <section className="rounded-lg border border-border bg-card px-5 py-5 sm:px-6">
+      <header className="border-b border-border pb-5">
         <div className="flex flex-col gap-5 lg:flex-row lg:items-end lg:justify-between">
           <div className="max-w-2xl">
-            <div className="mb-2 flex items-center gap-2 text-xs font-semibold text-primary"><UsersRound className="size-4" />Employee directory</div>
-            <h2 className="text-2xl font-semibold tracking-[-0.02em]">People</h2>
-            <p className="mt-2 max-w-xl text-sm leading-6 text-muted-foreground">View and manage employee profiles, employment details, and lifecycle records.</p>
+            <h1 className="text-2xl font-semibold tracking-tight">People</h1>
+            <p className="mt-1 max-w-xl text-sm text-muted-foreground">Manage employee profiles, reporting lines, and employment records.</p>
           </div>
           <div className="flex flex-wrap items-center gap-2">
             <div className="mr-2 hidden items-center gap-5 border-r border-border pr-5 xl:flex">
@@ -138,25 +137,23 @@ export function PeopleDirectory() {
             <Button size="lg" className="h-10 rounded-md px-4" onClick={() => setDrawerOpen(true)}><Plus className="size-4" />Add employee</Button>
           </div>
         </div>
-      </section>
+      </header>
 
       {demoCount > 0 && (
-        <div className="flex flex-col gap-3 rounded-2xl border border-amber-200/80 bg-amber-50/70 px-4 py-3 dark:border-amber-900/60 dark:bg-amber-950/20 sm:flex-row sm:items-center">
-          <span className="flex size-9 shrink-0 items-center justify-center rounded-xl bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-300"><Database className="size-4" /></span>
-          <div className="flex-1"><p className="text-sm font-semibold">Sample team data is on</p><p className="text-xs leading-relaxed text-muted-foreground">Demo records stay clearly marked, so your team can explore safely before importing or adding real employees.</p></div>
-          <SourcePill source="demo" />
+        <div className="flex flex-col gap-2 rounded-md border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-950 dark:border-amber-900/60 dark:bg-amber-950/20 dark:text-amber-100 sm:flex-row sm:items-center sm:justify-between">
+          <p>Sample employee records are included and identified in the directory.</p>
         </div>
       )}
 
-      <Card className="gap-0 overflow-hidden rounded-[24px] border-border/70 shadow-sm">
+      <Card className="gap-0 overflow-hidden py-0 shadow-none">
         <div className="border-b border-border/70 p-4 sm:p-5">
           <div className="flex flex-col gap-3 lg:flex-row lg:items-center">
             <div className="relative min-w-0 flex-1">
               <Search className="absolute left-3.5 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
-              <Input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search by name, role, email, or employee ID…" className="h-11 rounded-xl border-border/80 bg-muted/30 pl-10 pr-10" />
+              <Input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search name, role, email, or employee ID" className="h-10 bg-background pl-10 pr-10" />
               {query && <button type="button" onClick={() => setQuery("")} aria-label="Clear search" className="absolute right-3 top-1/2 -translate-y-1/2 text-xs font-medium text-muted-foreground hover:text-foreground">Clear</button>}
             </div>
-            <Button variant={showFilters || activeFilterCount ? "secondary" : "outline"} size="lg" className="h-11 rounded-xl px-4" onClick={() => setShowFilters((current) => !current)}><SlidersHorizontal className="size-4" />Filters{activeFilterCount > 0 && <span className="flex size-5 items-center justify-center rounded-full bg-primary text-[10px] text-primary-foreground">{activeFilterCount}</span>}</Button>
+            <Button variant={showFilters || activeFilterCount ? "secondary" : "outline"} size="lg" className="h-10 px-4" onClick={() => setShowFilters((current) => !current)}><SlidersHorizontal className="size-4" />{activeFilterCount > 0 ? `Filters (${activeFilterCount})` : "Filters"}</Button>
           </div>
 
           <motion.div initial={false} animate={{ height: showFilters ? "auto" : 0, opacity: showFilters ? 1 : 0 }} transition={{ duration: reduceMotion ? 0 : 0.2 }} className="overflow-hidden">
@@ -167,7 +164,7 @@ export function PeopleDirectory() {
               <FilterSelect label="Employment" value={filters.employmentType} options={dimensions?.employmentTypes ?? []} allLabel="All types" onChange={(employmentType) => setFilters((current) => ({ ...current, employmentType }))} />
               <FilterSelect label="Tenure" value={filters.tenure} options={tenureOptions} allLabel="All tenure ranges" onChange={updateTenure} />
               <div className="flex items-end gap-2">
-                <button type="button" onClick={() => setFilters((current) => ({ ...current, includeArchived: !current.includeArchived }))} className={cn("flex h-10 items-center gap-2 rounded-xl border px-3 text-xs font-medium transition", filters.includeArchived ? "border-primary/30 bg-primary/10 text-primary" : "border-border bg-background text-muted-foreground hover:text-foreground")}><Archive className="size-3.5" />Archived</button>
+                <button type="button" onClick={() => setFilters((current) => ({ ...current, includeArchived: !current.includeArchived }))} className={cn("flex h-10 items-center gap-2 rounded-md border px-3 text-xs font-medium transition", filters.includeArchived ? "border-primary/30 bg-primary/10 text-primary" : "border-border bg-background text-muted-foreground hover:text-foreground")}><Archive className="size-3.5" />Archived</button>
                 {activeFilterCount > 0 && <Button type="button" variant="ghost" size="icon-lg" aria-label="Clear filters" onClick={clearFilters}><FilterX className="size-4" /></Button>}
               </div>
             </div>
@@ -175,24 +172,24 @@ export function PeopleDirectory() {
         </div>
 
         <div className="flex items-center justify-between gap-3 border-b border-border/60 bg-muted/20 px-4 py-3 sm:px-5">
-          <p className="text-xs text-muted-foreground">{loading && !data ? "Loading your team…" : <><span className="font-semibold text-foreground">{data?.total.toLocaleString() ?? 0}</span> matching {data?.total === 1 ? "person" : "people"}</>}</p>
+          <p className="text-xs text-muted-foreground">{loading && !data ? "Loading employee records" : <><span className="font-semibold text-foreground">{data?.total.toLocaleString() ?? 0}</span> matching {data?.total === 1 ? "employee" : "employees"}</>}</p>
           {(debouncedQuery || activeFilterCount > 0) && <button type="button" onClick={clearFilters} className="text-xs font-semibold text-primary hover:underline">Reset view</button>}
         </div>
 
-        <div className="hidden grid-cols-[minmax(250px,1.4fr)_minmax(170px,1fr)_minmax(130px,.7fr)_90px_120px_36px] gap-4 border-b border-border/60 px-5 py-2.5 text-[10px] font-semibold uppercase tracking-[0.14em] text-muted-foreground md:grid">
-          <span>Employee</span><span>Team</span><span>Location</span><span>Tenure</span><span>Status</span><span />
+        <div className="hidden grid-cols-[minmax(250px,1.4fr)_minmax(170px,1fr)_minmax(130px,.7fr)_90px_120px] gap-4 border-b border-border/60 px-5 py-2.5 text-xs font-medium text-muted-foreground md:grid">
+          <span>Employee</span><span>Department</span><span>Location</span><span>Tenure</span><span>Status</span>
         </div>
 
         <div className="relative min-h-48">
           {loading && data && <div className="absolute inset-x-0 top-0 z-10 h-0.5 overflow-hidden bg-primary/10"><motion.div className="h-full w-1/3 bg-primary" animate={{ x: ["-120%", "340%"] }} transition={{ repeat: Infinity, duration: 1.2, ease: "easeInOut" }} /></div>}
           {!data && loading ? <DirectorySkeleton /> : error ? (
-            <div className="flex min-h-64 flex-col items-center justify-center gap-3 p-6 text-center"><span className="flex size-12 items-center justify-center rounded-2xl bg-destructive/10 text-destructive"><UsersRound className="size-5" /></span><div><p className="font-semibold">We couldn&apos;t load your people</p><p className="mt-1 text-sm text-muted-foreground">{error}</p></div><Button variant="outline" onClick={() => setRetry((current) => current + 1)}>Try again</Button></div>
+            <div className="flex min-h-64 flex-col items-center justify-center gap-3 p-6 text-center"><div><p className="font-semibold">Employee records could not be loaded</p><p className="mt-1 text-sm text-muted-foreground">{error}</p></div><Button variant="outline" onClick={() => setRetry((current) => current + 1)}>Try again</Button></div>
           ) : data?.items.length ? (
-            <motion.div initial="hidden" animate="shown" variants={{ hidden: {}, shown: { transition: { staggerChildren: reduceMotion ? 0 : 0.025 } } }}>
+            <div>
               {data.items.map((employee) => <PersonRow key={employee.employee_id} employee={employee} />)}
-            </motion.div>
+            </div>
           ) : (
-            <div className="flex min-h-72 flex-col items-center justify-center p-6 text-center"><span className="flex size-14 items-center justify-center rounded-2xl bg-primary/10 text-primary"><Search className="size-5" /></span><h3 className="mt-4 font-semibold">No one matches this view</h3><p className="mt-1 max-w-sm text-sm text-muted-foreground">Try a broader search or reset the filters. If this is a new workspace, add your first employee.</p><div className="mt-4 flex gap-2"><Button variant="outline" onClick={clearFilters}>Reset filters</Button><Button onClick={() => setDrawerOpen(true)}><Plus className="size-4" />Add employee</Button></div></div>
+            <div className="flex min-h-72 flex-col items-center justify-center p-6 text-center"><h3 className="font-semibold">No employees found</h3><p className="mt-1 max-w-sm text-sm text-muted-foreground">Change the search or filters, or add an employee record.</p><div className="mt-4 flex gap-2"><Button variant="outline" onClick={clearFilters}>Reset filters</Button><Button onClick={() => setDrawerOpen(true)}><Plus className="size-4" />Add employee</Button></div></div>
           )}
         </div>
 
@@ -212,17 +209,16 @@ export function PeopleDirectory() {
 }
 
 function MiniStat({ value, label }: { value: number; label: string }) {
-  return <div><p className="text-xl font-semibold tracking-tight tabular-nums">{value.toLocaleString()}</p><p className="text-[10px] font-semibold uppercase tracking-[0.13em] text-muted-foreground">{label}</p></div>
+  return <div><p className="text-xl font-semibold tracking-tight tabular-nums">{value.toLocaleString()}</p><p className="text-xs text-muted-foreground">{label}</p></div>
 }
 
 function FilterSelect({ label, value, options, allLabel, onChange }: { label: string; value: string; options: Array<string | { value: string; label: string }>; allLabel: string; onChange: (value: string) => void }) {
-  return <label className="block"><span className="mb-1.5 block text-[11px] font-semibold text-muted-foreground">{label}</span><select value={value} onChange={(event) => onChange(event.target.value)} className="h-10 w-full rounded-xl border border-border bg-background px-3 text-sm text-foreground outline-none transition focus:border-ring focus:ring-2 focus:ring-ring/20"><option value="">{allLabel}</option>{options.map((option) => { const item = typeof option === "string" ? { value: option, label: option } : option; return <option key={item.value} value={item.value}>{item.label}</option> })}</select></label>
+  return <label className="block"><span className="mb-1.5 block text-[11px] font-semibold text-muted-foreground">{label}</span><select value={value} onChange={(event) => onChange(event.target.value)} className="h-10 w-full rounded-md border border-border bg-background px-3 text-sm text-foreground outline-none transition focus:border-ring focus:ring-2 focus:ring-ring/20"><option value="">{allLabel}</option>{options.map((option) => { const item = typeof option === "string" ? { value: option, label: option } : option; return <option key={item.value} value={item.value}>{item.label}</option> })}</select></label>
 }
 
 function PersonRow({ employee }: { employee: ManagedEmployee }) {
   return (
-    <motion.div variants={{ hidden: { opacity: 0, y: 7 }, shown: { opacity: 1, y: 0 } }} transition={{ duration: 0.22 }}>
-      <Link href={`/people/${encodeURIComponent(employee.employee_id)}`} className={cn("group grid gap-3 border-b border-border/55 px-4 py-4 transition-colors last:border-b-0 hover:bg-primary/[0.035] sm:px-5 md:grid-cols-[minmax(250px,1.4fr)_minmax(170px,1fr)_minmax(130px,.7fr)_90px_120px_36px] md:items-center md:gap-4", employee.archived_at && "opacity-65")}>
+      <Link href={`/people/${encodeURIComponent(employee.employee_id)}`} className={cn("group grid gap-3 border-b border-border/55 px-4 py-4 transition-colors last:border-b-0 hover:bg-muted/25 sm:px-5 md:grid-cols-[minmax(250px,1.4fr)_minmax(170px,1fr)_minmax(130px,.7fr)_90px_120px] md:items-center md:gap-4", employee.archived_at && "opacity-65")}>
         <div className="flex min-w-0 items-center gap-3.5">
           <PersonAvatar employeeId={employee.employee_id} initials={employee.initials} size="lg" />
           <div className="min-w-0 flex-1">
@@ -230,13 +226,11 @@ function PersonRow({ employee }: { employee: ManagedEmployee }) {
             <p className="mt-0.5 truncate text-xs text-muted-foreground">{employee.job_title} · {employee.employee_id}</p>
           </div>
         </div>
-        <div className="flex min-w-0 items-center gap-2 text-sm"><span className="flex size-7 shrink-0 items-center justify-center rounded-lg bg-muted text-muted-foreground"><Building2 className="size-3.5" /></span><span className="truncate">{employee.department}</span></div>
-        <div className="flex min-w-0 items-center gap-2 text-sm text-muted-foreground"><MapPin className="size-3.5 shrink-0" /><span className="truncate">{employee.location}</span></div>
+        <div className="truncate text-sm">{employee.department}</div>
+        <div className="truncate text-sm text-muted-foreground">{employee.location}</div>
         <span className="text-sm tabular-nums text-muted-foreground">{employee.tenure_years.toFixed(1)} yrs</span>
         <div className="flex items-center gap-2"><StatusPill status={employee.employment_status} />{employee.archived_at && <Archive className="size-3.5 text-muted-foreground" />}</div>
-        <span className="hidden size-8 items-center justify-center rounded-lg text-muted-foreground transition-all group-hover:translate-x-0.5 group-hover:bg-primary/10 group-hover:text-primary md:flex"><ArrowUpRight className="size-4" /></span>
       </Link>
-    </motion.div>
   )
 }
 
