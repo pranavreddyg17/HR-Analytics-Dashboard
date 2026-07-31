@@ -151,7 +151,6 @@ export function AppSidebar({
                     >
                       <Icon className="size-[18px]" strokeWidth={1.8} />
                       {!collapsed && <span className="truncate">{item.label}</span>}
-                      {active && !collapsed && <span className="ml-auto size-1.5 rounded-full bg-primary" aria-hidden="true" />}
                     </Link>
                   )
                 })}
@@ -167,7 +166,6 @@ export function AppSidebar({
               <span className="min-w-0 flex-1 leading-tight">
                 <span className="block truncate text-sm font-semibold text-sidebar-foreground">{user.displayName}</span>
                 <span className="mt-0.5 flex items-center gap-1.5 truncate text-[11px] text-muted-foreground">
-                  <span className="size-1.5 shrink-0 rounded-full bg-success" />
                   <span className="capitalize">{user.role ?? "member"}</span> · Google
                 </span>
               </span>

@@ -122,14 +122,12 @@ export function PeopleDirectory() {
 
   return (
     <div className="mx-auto flex w-full max-w-[1500px] flex-col gap-5">
-      <section className="relative overflow-hidden rounded-[28px] border border-border/70 bg-card px-5 py-6 shadow-sm sm:px-7 sm:py-7">
-        <div className="pointer-events-none absolute -right-16 -top-32 size-80 rounded-full bg-primary/[0.07] blur-3xl" />
-        <div className="pointer-events-none absolute -bottom-24 left-1/3 size-56 rounded-full bg-emerald-400/[0.06] blur-3xl" />
-        <div className="relative flex flex-col gap-5 lg:flex-row lg:items-end lg:justify-between">
+      <section className="rounded-lg border border-border bg-card px-5 py-5 sm:px-6">
+        <div className="flex flex-col gap-5 lg:flex-row lg:items-end lg:justify-between">
           <div className="max-w-2xl">
-            <div className="mb-3 flex items-center gap-2 text-[11px] font-semibold uppercase tracking-[0.18em] text-primary"><UsersRound className="size-3.5" />People directory</div>
-            <h2 className="text-balance text-3xl font-semibold tracking-[-0.035em] sm:text-4xl">Know your people.<br className="hidden sm:block" /> Support them better.</h2>
-            <p className="mt-3 max-w-xl text-sm leading-relaxed text-muted-foreground sm:text-base">A living home for every employee—from their first day to every role, leave request, and growth milestone.</p>
+            <div className="mb-2 flex items-center gap-2 text-xs font-semibold text-primary"><UsersRound className="size-4" />Employee directory</div>
+            <h2 className="text-2xl font-semibold tracking-[-0.02em]">People</h2>
+            <p className="mt-2 max-w-xl text-sm leading-6 text-muted-foreground">View and manage employee profiles, employment details, and lifecycle records.</p>
           </div>
           <div className="flex flex-wrap items-center gap-2">
             <div className="mr-2 hidden items-center gap-5 border-r border-border pr-5 xl:flex">
@@ -137,7 +135,7 @@ export function PeopleDirectory() {
               <MiniStat value={dimensions?.departments.length ?? 0} label="Teams" />
               <MiniStat value={dimensions?.locations.length ?? 0} label="Locations" />
             </div>
-            <Button size="lg" className="h-11 rounded-xl px-4 shadow-sm" onClick={() => setDrawerOpen(true)}><Plus className="size-4" />Add employee</Button>
+            <Button size="lg" className="h-10 rounded-md px-4" onClick={() => setDrawerOpen(true)}><Plus className="size-4" />Add employee</Button>
           </div>
         </div>
       </section>

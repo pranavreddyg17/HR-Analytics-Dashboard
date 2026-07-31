@@ -194,19 +194,18 @@ function EmployeeDrawerPanel({
             exit={{ x: reduceMotion ? 0 : "100%" }}
             transition={{ type: "spring", damping: 30, stiffness: 320 }}
           >
-            <div className="relative overflow-hidden border-b border-border/70 px-6 pb-5 pt-6">
-              <div className="pointer-events-none absolute -right-16 -top-20 size-56 rounded-full bg-primary/8 blur-3xl" />
-              <div className="relative flex items-start gap-4">
+            <div className="border-b border-border px-6 pb-5 pt-6">
+              <div className="flex items-start gap-4">
                 <PersonAvatar employeeId={form.employee_id || "new-person"} initials={previewInitials} size="lg" />
                 <div className="min-w-0 flex-1">
-                  <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-primary">{mode === "create" ? "New teammate" : "Edit profile"}</p>
-                  <h2 id="employee-drawer-title" className="mt-1 truncate text-xl font-semibold tracking-tight">{mode === "create" ? "Add someone to your team" : previewName}</h2>
-                  <p className="mt-1 text-sm text-muted-foreground">{mode === "create" ? "A simple three-step profile. You can refine it anytime." : "Keep the employee record current and useful."}</p>
+                  <p className="text-xs font-semibold text-primary">{mode === "create" ? "New employee record" : "Edit employee record"}</p>
+                  <h2 id="employee-drawer-title" className="mt-1 truncate text-xl font-semibold tracking-tight">{mode === "create" ? "Add employee" : previewName}</h2>
+                  <p className="mt-1 text-sm text-muted-foreground">{mode === "create" ? "Enter profile and employment details, then review before saving." : "Update the employee profile and employment details."}</p>
                 </div>
                 <Button type="button" variant="ghost" size="icon" aria-label="Close" onClick={onClose} disabled={saving}><X className="size-4" /></Button>
               </div>
 
-              <div className="relative mt-5 grid grid-cols-3 gap-2">
+              <div className="mt-5 grid grid-cols-3 gap-2">
                 {["Basics", "Role", "Review & save"].map((label, index) => (
                   <button key={label} type="button" onClick={() => goToStep(index)} className="group text-left">
                     <span className={cn("mb-2 block h-1 rounded-full transition-colors", index <= step ? "bg-primary" : "bg-muted")} />
@@ -214,7 +213,7 @@ function EmployeeDrawerPanel({
                   </button>
                 ))}
               </div>
-              <div className="relative mt-4 flex items-center gap-2">
+              <div className="mt-4 flex items-center gap-2">
                 {step > 0 && <Button type="button" variant="outline" size="lg" className="rounded-xl" onClick={() => goToStep(step - 1)} disabled={saving}>Back</Button>}
                 <Button type="button" size="lg" className="h-10 flex-1 rounded-xl" disabled={saving} onClick={() => void handlePrimaryAction()}>
                   {saving ? "Saving employee…" : step === 0 ? <>Continue to role <ChevronRight className="size-4" /></> : step === 1 ? <>Continue to review <ChevronRight className="size-4" /></> : mode === "create" ? <><Save className="size-4" />Save employee</> : <><Save className="size-4" />Save changes</>}

@@ -2,7 +2,7 @@
 
 import Link from "next/link"
 import { usePathname, useSearchParams } from "next/navigation"
-import { Bell, Bot, ChevronDown, LogOut, Plus, Search } from "lucide-react"
+import { Bell, ChevronDown, LogOut, Search } from "lucide-react"
 import { signOut } from "next-auth/react"
 
 import { BrandLogo } from "@/components/brand-logo"
@@ -55,23 +55,13 @@ export function Topbar({ user, onOpenPalette }: { user: ShellUser; onOpenPalette
         <p className="truncate text-[11px] text-muted-foreground">{meta.subtitle}</p>
       </div>
 
-      <button type="button" onClick={onOpenPalette} className="topbar-search" aria-label="Search people and navigate">
-        <Search className="size-4" strokeWidth={1.8} />
-        <span className="truncate">Search workspace</span>
-        <kbd>⌘K</kbd>
-      </button>
-
       <div className="ml-auto flex items-center gap-1.5 sm:gap-2">
-        <Link href="/ai-agents" className="topbar-icon-button hidden sm:inline-flex" aria-label="Open AI assistant" title="AI assistant">
-          <Bot className="size-[18px]" strokeWidth={1.8} />
-        </Link>
+        <button type="button" onClick={onOpenPalette} className="topbar-icon-button md:hidden" aria-label="Search people and navigate" title="Search">
+          <Search className="size-[18px]" strokeWidth={1.8} />
+        </button>
         <Link href="/inbox" className="topbar-icon-button" aria-label="Open inbox" title="Inbox">
           <Bell className="size-[18px]" strokeWidth={1.8} />
           <span className="notification-dot" aria-hidden="true" />
-        </Link>
-        <Link href="/people?new=1" className="topbar-add-button">
-          <Plus className="size-4" strokeWidth={2} />
-          <span className="hidden sm:inline">Add employee</span>
         </Link>
 
         <details className="user-menu">

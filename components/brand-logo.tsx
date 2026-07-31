@@ -9,9 +9,7 @@ export function BrandLogo({ compact = false, className }: BrandLogoProps) {
   return (
     <span className={cn("brand-logo", compact && "brand-logo--compact", className)} aria-label="LaidbackHR.AI">
       <span className="brand-logo__mark" aria-hidden="true">
-        <span className="brand-logo__stem" />
-        <span className="brand-logo__seat" />
-        <span className="brand-logo__dot" />
+        <span className="brand-logo__monogram">LH</span>
       </span>
       {!compact && (
         <span className="brand-logo__wordmark">

@@ -105,13 +105,12 @@ export function PeopleProfile({ employeeId }: { employeeId: string }) {
         {loading && <span className="flex items-center gap-2 text-xs text-muted-foreground"><RefreshCcw className="size-3.5 animate-spin" />Refreshing</span>}
       </div>
 
-      <section className="relative overflow-hidden rounded-[28px] border border-border/70 bg-card shadow-sm">
-        <div className="pointer-events-none absolute inset-x-0 top-0 h-40 bg-[radial-gradient(circle_at_80%_-30%,color-mix(in_oklab,var(--primary)_18%,transparent),transparent_60%)]" />
-        <div className="relative flex flex-col gap-5 px-5 pb-6 pt-6 sm:px-7 sm:pt-8 lg:flex-row lg:items-end">
+      <section className="overflow-hidden rounded-lg border border-border bg-card shadow-sm">
+        <div className="flex flex-col gap-5 px-5 pb-6 pt-6 sm:px-6 lg:flex-row lg:items-end">
           <PersonAvatar employeeId={employee.employee_id} initials={employee.initials} size="xl" />
           <div className="min-w-0 flex-1">
             <div className="flex flex-wrap items-center gap-2"><SourcePill source={employee.data_source} />{employee.archived_at && <span className="text-[11px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">Archived {formatDate(employee.archived_at)}</span>}</div>
-            <h2 className="mt-2 truncate text-3xl font-semibold tracking-[-0.035em] sm:text-4xl">{employee.display_name}</h2>
+            <h2 className="mt-2 truncate text-2xl font-semibold tracking-[-0.02em] sm:text-3xl">{employee.display_name}</h2>
             <div className="mt-2 flex flex-wrap items-center gap-x-4 gap-y-2 text-sm text-muted-foreground">
               <span className="flex items-center gap-1.5"><BriefcaseBusiness className="size-3.5" />{employee.job_title}</span>
               <span className="flex items-center gap-1.5"><Building2 className="size-3.5" />{employee.department}</span>
@@ -125,7 +124,7 @@ export function PeopleProfile({ employeeId }: { employeeId: string }) {
           </div>
         </div>
 
-        <div className="relative overflow-x-auto border-t border-border/60 px-3 sm:px-5">
+        <div className="overflow-x-auto border-t border-border/60 px-3 sm:px-5">
           <nav aria-label="Employee profile sections" className="flex min-w-max gap-1">
             {tabs.map((item) => {
               const Icon = item.icon

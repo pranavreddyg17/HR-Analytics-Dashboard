@@ -193,13 +193,12 @@ export function HiringWorkspace({ canRequestHiring }: { canRequestHiring: boolea
 
   return (
     <div className="mx-auto flex w-full max-w-[1520px] flex-col gap-5 pb-10">
-      <section className="relative overflow-hidden rounded-[1.75rem] border border-slate-800 bg-[#0d1424] px-5 py-6 text-white shadow-[0_18px_60px_rgba(15,23,42,0.14)] sm:px-7">
-        <div className="pointer-events-none absolute -right-20 -top-28 size-72 rounded-full bg-sky-400/10 blur-3xl" />
-        <div className="relative flex flex-col gap-5 lg:flex-row lg:items-end lg:justify-between">
-          <div><p className="flex items-center gap-2 text-[10px] font-semibold uppercase tracking-[0.14em] text-sky-300"><BriefcaseBusiness className="size-3.5"/>Hiring workspace</p><h1 className="mt-2 text-3xl font-bold tracking-[-0.05em] sm:text-4xl">Recruiting, without the spreadsheet chase.</h1><p className="mt-2 max-w-2xl text-sm leading-relaxed text-slate-400">Move requisitions forward and understand hiring velocity from the same records stored in your HR database.</p></div>
-          <div className="flex flex-wrap gap-2"><Button nativeButton={false} variant="outline" className="border-slate-700 bg-slate-900 text-white hover:bg-slate-800 hover:text-white" render={<Link href="/inbox?type=hiring"/>}>Review approvals <ArrowRight className="size-4"/></Button>{canRequestHiring && <Button nativeButton={false} className="bg-sky-300 text-slate-950 hover:bg-sky-200" render={<Link href="/inbox?new=hiring"/>}><Plus className="size-4"/>New requisition</Button>}</div>
+      <section className="rounded-lg border border-border bg-card px-5 py-5 sm:px-6">
+        <div className="flex flex-col gap-5 lg:flex-row lg:items-end lg:justify-between">
+          <div><p className="flex items-center gap-2 text-xs font-semibold text-primary"><BriefcaseBusiness className="size-4"/>Recruitment operations</p><h1 className="mt-2 text-2xl font-semibold tracking-[-0.02em]">Hiring</h1><p className="mt-2 max-w-2xl text-sm leading-6 text-muted-foreground">Manage requisitions, track the hiring pipeline, and report on recruiting performance.</p></div>
+          <div className="flex flex-wrap gap-2"><Button nativeButton={false} variant="outline" render={<Link href="/inbox?type=hiring"/>}>Review approvals <ArrowRight className="size-4"/></Button>{canRequestHiring && <Button nativeButton={false} render={<Link href="/inbox?new=hiring"/>}><Plus className="size-4"/>New requisition</Button>}</div>
         </div>
-        <div className="relative mt-6 flex flex-wrap items-center gap-x-5 gap-y-2 border-t border-slate-800 pt-4 text-[10px] text-slate-400"><span className="inline-flex items-center gap-1.5"><Database className="size-3.5 text-sky-300"/>{dataLabel}</span><span>{hiringStatus?.count ?? 0} database records</span><span>Updated {new Date(data.generatedAt).toLocaleString()}</span></div>
+        <div className="mt-5 flex flex-wrap items-center gap-x-5 gap-y-2 border-t border-border pt-4 text-xs text-muted-foreground"><span className="inline-flex items-center gap-1.5"><Database className="size-3.5 text-primary"/>{dataLabel}</span><span>{hiringStatus?.count ?? 0} database records</span><span>Updated {new Date(data.generatedAt).toLocaleString()}</span></div>
       </section>
 
       <Card className="gap-4 border-0 p-4 shadow-sm ring-1 ring-foreground/8 sm:p-5">

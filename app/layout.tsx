@@ -1,16 +1,15 @@
 import type { Metadata, Viewport } from "next"
 import { headers } from "next/headers"
-import "@fontsource-variable/manrope"
 import "./globals.css"
 
 
 const baseMetadata: Metadata = {
   title: {
-    default: "LaidbackHR.AI — People Operations",
+    default: "LaidbackHR.AI — HR Operations",
     template: "%s · LaidbackHR.AI",
   },
   description:
-    "A connected people operations workspace for employee records, hiring, time off, learning, workforce insights, and responsible AI assistance.",
+    "HR operations, workforce reporting, and governed AI tools for employee records, hiring, time off, and learning.",
   applicationName: "LaidbackHR.AI",
   generator: "LaidbackHR.AI",
 }
@@ -28,15 +27,15 @@ export async function generateMetadata(): Promise<Metadata> {
   return {
     ...baseMetadata,
     openGraph: {
-      title: "LaidbackHR.AI — People Operations",
-      description: "People operations and workforce intelligence, clearly connected.",
+      title: "LaidbackHR.AI — HR Operations",
+      description: "HR operations, workforce reporting, and governed AI tools.",
       type: "website",
-      images: [{ url: imageUrl, width: 1672, height: 941, alt: "LaidbackHR.AI — people operations, clearly connected" }],
+      images: [{ url: imageUrl, width: 1672, height: 941, alt: "LaidbackHR.AI HR operations dashboard" }],
     },
     twitter: {
       card: "summary_large_image",
-      title: "LaidbackHR.AI — People Operations",
-      description: "People operations and workforce intelligence, clearly connected.",
+      title: "LaidbackHR.AI — HR Operations",
+      description: "HR operations, workforce reporting, and governed AI tools.",
       images: [imageUrl],
     },
   }
@@ -44,7 +43,7 @@ export async function generateMetadata(): Promise<Metadata> {
 
 export const viewport: Viewport = {
   colorScheme: "light",
-  themeColor: "#0b1020",
+  themeColor: "#0b3155",
 }
 
 export default async function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {
