@@ -50,10 +50,21 @@ export function Topbar({ user, onOpenPalette }: { user: ShellUser; onOpenPalette
         <BrandLogo compact />
       </Link>
 
-      <p className="hidden truncate text-sm font-semibold text-foreground md:block">{title}</p>
+      <p className="topbar__title hidden truncate text-sm font-semibold text-foreground md:block">{title}</p>
+
+      <button
+        type="button"
+        onClick={onOpenPalette}
+        className="topbar-search hidden md:flex"
+        aria-label="Search pages, actions, reports, and people"
+      >
+        <Search className="size-4" strokeWidth={1.8} />
+        <span>Search people, pages, and actions</span>
+        <kbd>⌘ K</kbd>
+      </button>
 
       <div className="ml-auto flex items-center gap-1.5 sm:gap-2">
-        <button type="button" onClick={onOpenPalette} className="topbar-icon-button md:hidden" aria-label="Search people and navigate" title="Search">
+        <button type="button" onClick={onOpenPalette} className="topbar-icon-button md:hidden" aria-label="Search pages, actions, reports, and people" title="Search">
           <Search className="size-[18px]" strokeWidth={1.8} />
         </button>
         <Link href="/inbox" className="topbar-icon-button" aria-label="Open inbox" title="Inbox">

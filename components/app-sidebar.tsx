@@ -13,7 +13,6 @@ import {
   Inbox,
   KeyRound,
   Menu,
-  Search,
   ShieldAlert,
   Umbrella,
   Users,
@@ -93,13 +92,11 @@ export function AppSidebar({
   collapsed,
   user,
   onToggle,
-  onOpenPalette,
   onOpenMobileMore,
 }: {
   collapsed: boolean
   user: ShellUser
   onToggle: () => void
-  onOpenPalette: () => void
   onOpenMobileMore: () => void
 }) {
   const pathname = usePathname()
@@ -119,19 +116,6 @@ export function AppSidebar({
             <BrandLogo compact={collapsed} />
           </Link>
         </div>
-
-        {!collapsed && (
-          <button type="button" onClick={onOpenPalette} className="sidebar-search" aria-label="Search people and navigate">
-            <Search className="size-4" />
-            <span>Search</span>
-            <kbd>⌘ K</kbd>
-          </button>
-        )}
-        {collapsed && (
-          <button type="button" onClick={onOpenPalette} className="sidebar-icon-button mx-auto mt-4" aria-label="Search people and navigate">
-            <Search className="size-[18px]" />
-          </button>
-        )}
 
         <nav className={cn("min-h-0 flex-1 overflow-y-auto py-3", collapsed ? "px-3" : "px-4")} aria-label="Primary navigation">
           {navigationGroups.map((group) => (

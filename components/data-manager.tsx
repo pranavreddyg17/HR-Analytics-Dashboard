@@ -1,7 +1,7 @@
 "use client"
 
 import { useEffect, useState } from "react"
-import { Clipboard, Download, RefreshCw, Upload } from "lucide-react"
+import { Check, Clipboard, Download, RefreshCw, Upload } from "lucide-react"
 
 import { apiBaseUrl } from "@/lib/api"
 import { hrDomains, importFields, type DomainStatus, type HrDomain } from "@/lib/hr-types"
@@ -35,6 +35,29 @@ function parseCsv(text: string): Array<Record<string, string>> {
   return matrix.slice(1).map((values) => Object.fromEntries(headers.map((header, index) => [header, values[index]?.trim() ?? ""])))
 }
 
+async function copyToClipboard(value: string): Promise<void> {
+  if (navigator.clipboard?.writeText) {
+    try {
+      await navigator.clipboard.writeText(value)
+      return
+    } catch {
+      // Some managed browsers block the async clipboard API. Use the
+      // selection-based fallback below for the same user-initiated click.
+    }
+  }
+
+  const textArea = document.createElement("textarea")
+  textArea.value = value
+  textArea.setAttribute("readonly", "")
+  textArea.style.position = "fixed"
+  textArea.style.left = "-9999px"
+  document.body.appendChild(textArea)
+  textArea.select()
+  const copied = document.execCommand("copy")
+  textArea.remove()
+  if (!copied) throw new Error("Copy was blocked by the browser.")
+}
+
 export function DataManager() {
   const [domain, setDomain] = useState<HrDomain>("employees")
   const [rows, setRows] = useState<Array<Record<string, string>>>([])
@@ -45,6 +68,8 @@ export function DataManager() {
   const [statusBusy, setStatusBusy] = useState(false)
   const [message, setMessage] = useState("")
   const [error, setError] = useState("")
+  const [copiedFeed, setCopiedFeed] = useState<HrDomain | null>(null)
+  const [copyError, setCopyError] = useState("")
 
   async function refreshStatus() {
     setStatusBusy(true)
@@ -93,7 +118,19 @@ export function DataManager() {
     finally { setBusy(false) }
   }
 
-  const origin = typeof window === "undefined" ? "" : window.location.origin
+  async function copyPowerBiFeed(item: HrDomain) {
+    const url = `${window.location.origin}${apiBaseUrl}/api/v1/power-bi/${item}`
+    setCopyError("")
+    try {
+      await copyToClipboard(url)
+      setCopiedFeed(item)
+      window.setTimeout(() => setCopiedFeed((current) => current === item ? null : current), 2200)
+    } catch (reason) {
+      setCopiedFeed(null)
+      setCopyError(reason instanceof Error ? reason.message : "The endpoint could not be copied.")
+    }
+  }
+
   const totalRows = status.reduce((sum, item) => sum + item.count, 0)
   const operationalDomains = status.filter((item) => item.mode === "imported").length
   const modeLabel = (mode: DomainStatus["mode"]) => mode === "imported" ? "Operational" : mode === "demo" ? "Sample" : mode === "mixed" ? "Mixed" : "Empty"
@@ -110,7 +147,7 @@ export function DataManager() {
       </Button>
     </header>
 
-    <Card className="gap-0 overflow-hidden py-0 shadow-none">
+    <Card id="data-coverage" className="scroll-mt-24 gap-0 overflow-hidden py-0 shadow-none">
       <div className="flex flex-col gap-3 border-b border-border px-5 py-4 sm:flex-row sm:items-center sm:justify-between">
         <div><CardTitle>Data coverage</CardTitle><CardDescription className="mt-1">Current records available to dashboards and reports</CardDescription></div>
         <div className="flex gap-5 text-sm">
@@ -132,7 +169,7 @@ export function DataManager() {
     </Card>
 
     <div className="grid gap-5 xl:grid-cols-[1.15fr_0.85fr]">
-      <Card className="shadow-none">
+      <Card id="import-records" className="scroll-mt-24 shadow-none">
         <CardHeader className="border-b border-border"><CardTitle>Import records</CardTitle><CardDescription>Select a domain and upload a CSV using the required template.</CardDescription></CardHeader>
         <CardContent className="space-y-5">
           <div className="grid gap-4 sm:grid-cols-2">
@@ -151,7 +188,38 @@ export function DataManager() {
         </CardContent>
       </Card>
 
-      <Card className="h-fit shadow-none"><CardHeader className="border-b border-border"><CardTitle>Power BI feeds</CardTitle><CardDescription>Copy a CSV endpoint for scheduled reporting.</CardDescription></CardHeader><CardContent className="space-y-2">{hrDomains.map((item)=>{const url=`${origin}${apiBaseUrl}/api/v1/power-bi/${item}`;return <button key={item} onClick={()=>void navigator.clipboard.writeText(url)} className="group flex w-full items-center gap-3 rounded-md border border-border p-3 text-left hover:bg-muted"><span className="min-w-0 flex-1"><span className="block text-sm font-medium capitalize">{item}</span><span className="mt-0.5 block truncate font-mono text-[10px] text-muted-foreground">/api/v1/power-bi/{item}</span></span><Clipboard className="size-3.5 text-muted-foreground group-hover:text-primary"/></button>})}<p className="pt-2 text-[11px] leading-5 text-muted-foreground">Use an authenticated Power BI Web connector or gateway for scheduled refreshes.</p></CardContent></Card>
+      <Card id="power-bi-feeds" className="h-fit scroll-mt-24 shadow-none">
+        <CardHeader className="border-b border-border">
+          <CardTitle>Power BI feeds</CardTitle>
+          <CardDescription>Copy a CSV endpoint for scheduled reporting.</CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-2">
+          {hrDomains.map((item) => {
+            const copied = copiedFeed === item
+            return (
+              <button
+                type="button"
+                key={item}
+                onClick={() => void copyPowerBiFeed(item)}
+                className="group flex w-full items-center gap-3 rounded-md border border-border p-3 text-left hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/30"
+                aria-label={`Copy ${item} Power BI endpoint`}
+              >
+                <span className="min-w-0 flex-1">
+                  <span className="block text-sm font-medium capitalize">{item}</span>
+                  <span className="mt-0.5 block truncate font-mono text-[10px] text-muted-foreground">/api/v1/power-bi/{item}</span>
+                </span>
+                <span className={cn("flex items-center gap-1.5 text-xs font-medium", copied ? "text-success" : "text-muted-foreground group-hover:text-primary")}>
+                  {copied ? <Check className="size-3.5" /> : <Clipboard className="size-3.5" />}
+                  {copied ? "Copied" : "Copy"}
+                </span>
+              </button>
+            )
+          })}
+          <p aria-live="polite" className={cn("pt-2 text-[11px] leading-5", copyError ? "text-destructive" : "text-muted-foreground")}>
+            {copyError || "Use an authenticated Power BI Web connector or gateway for scheduled refreshes."}
+          </p>
+        </CardContent>
+      </Card>
     </div>
   </div>
 }

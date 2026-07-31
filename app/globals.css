@@ -279,34 +279,6 @@ aside .brand-logo__ai {
   color: #8bc8ec;
 }
 
-.sidebar-search {
-  display: flex;
-  height: 40px;
-  align-items: center;
-  gap: 9px;
-  margin: 16px 16px 5px;
-  padding-inline: 12px 8px;
-  border: 1px solid var(--sidebar-border);
-  border-radius: 6px;
-  color: #aac0d1;
-  background: #0d2b49;
-  font-size: 12px;
-  text-align: left;
-  transition: border-color 160ms ease, color 160ms ease;
-}
-
-.sidebar-search:hover,
-.sidebar-search:focus-visible {
-  border-color: #5c91b5;
-  color: #ffffff;
-}
-
-.sidebar-search span {
-  min-width: 0;
-  flex: 1;
-}
-
-.sidebar-search kbd,
 .command-input-row kbd,
 .command-footer kbd {
   border: 1px solid var(--border);
@@ -319,12 +291,6 @@ aside .brand-logo__ai {
   line-height: 1;
   padding: 4px 5px;
   white-space: nowrap;
-}
-
-.sidebar-search kbd {
-  border-color: #315879;
-  color: #acc2d3;
-  background: #163c5d;
 }
 
 .sidebar-group-label {
@@ -440,6 +406,55 @@ aside .brand-logo__ai {
   padding-inline: 28px;
   border-bottom: 1px solid var(--border);
   background: #ffffff;
+}
+
+.topbar__title {
+  width: 132px;
+  flex: 0 0 132px;
+}
+
+.topbar-search {
+  width: min(48vw, 580px);
+  height: 38px;
+  align-items: center;
+  gap: 9px;
+  margin-inline: auto;
+  padding-inline: 12px 8px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  color: var(--muted-foreground);
+  background: #f8fafc;
+  font-size: 12px;
+  text-align: left;
+  transition: border-color 160ms ease, background 160ms ease, box-shadow 160ms ease;
+}
+
+.topbar-search:hover,
+.topbar-search:focus-visible {
+  border-color: #9db3c5;
+  background: #ffffff;
+  box-shadow: 0 0 0 3px rgb(20 106 163 / 0.07);
+}
+
+.topbar-search span {
+  min-width: 0;
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.topbar-search kbd {
+  border: 1px solid var(--border);
+  border-radius: 5px;
+  background: #ffffff;
+  color: var(--muted-foreground);
+  font-family: inherit;
+  font-size: 10px;
+  font-weight: 650;
+  line-height: 1;
+  padding: 4px 5px;
+  white-space: nowrap;
 }
 
 .notification-dot {
