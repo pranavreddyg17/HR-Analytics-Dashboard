@@ -1,10 +1,10 @@
 import { redirect } from "next/navigation"
 
-import { auth } from "@/auth"
 import { AppShell } from "@/components/app-shell"
+import { getRequestActor } from "@/lib/server/request-user"
 
 export default async function WorkspaceLayout({ children }: { children: React.ReactNode }) {
-  const session = await auth()
-  if (!session?.user?.email || !session.user.role) redirect("/login")
-  return <AppShell user={{ displayName: session.user.name ?? session.user.email.split("@")[0], email: session.user.email, authenticated: true, role: session.user.role }}>{children}</AppShell>
+  const actor = await getRequestActor()
+  if (!actor) redirect("/login")
+  return <AppShell user={{ displayName: actor.displayName, email: actor.email, authenticated: !actor.localPreview, role: actor.role }}>{children}</AppShell>
 }

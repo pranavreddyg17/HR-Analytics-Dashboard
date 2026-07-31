@@ -1,7 +1,8 @@
 import { redirect } from "next/navigation"
 
-import { auth, signIn } from "@/auth"
+import { signIn } from "@/auth"
 import { BrandLogo } from "@/components/brand-logo"
+import { getRequestActor } from "@/lib/server/request-user"
 
 const modules = [
   { label: "People records", detail: "Profiles, teams, and employment history" },
@@ -10,8 +11,8 @@ const modules = [
 ]
 
 export default async function LoginPage({ searchParams }: { searchParams: Promise<{ error?: string }> }) {
-  const session = await auth()
-  if (session?.user?.role) redirect("/")
+  const actor = await getRequestActor()
+  if (actor) redirect("/")
   const denied = (await searchParams).error === "AccessDenied"
 
   return (

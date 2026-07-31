@@ -1,17 +1,44 @@
 import { auth } from "@/auth"
+import { headers } from "next/headers"
+import { env } from "cloudflare:workers"
 import type { AppRole } from "@/lib/server/access"
 
-export type RequestActor = { email: string; displayName: string; role: AppRole }
+export type RequestActor = {
+  email: string
+  displayName: string
+  role: AppRole
+  localPreview?: boolean
+}
+
+const localPreviewActor: RequestActor = {
+  email: "local-admin@laidbackhr.ai",
+  displayName: "Local HR Admin",
+  role: "admin",
+  localPreview: true,
+}
+
+function isLocalHost(value: string): boolean {
+  const hostname = value.split(",")[0]?.trim().split(":")[0]
+  return hostname === "localhost" || hostname === "127.0.0.1"
+}
+
+async function getLocalPreviewActor(request?: Request): Promise<RequestActor | null> {
+  const previewEnabled = (env as unknown as { LOCAL_UI_PREVIEW?: string }).LOCAL_UI_PREVIEW === "true"
+  if (!previewEnabled) return null
+
+  if (request) return isLocalHost(new URL(request.url).hostname) ? localPreviewActor : null
+
+  const requestHeaders = await headers()
+  const host = requestHeaders.get("x-forwarded-host") ?? requestHeaders.get("host") ?? ""
+  return isLocalHost(host) ? localPreviewActor : null
+}
 
 export async function getRequestActor(request?: Request): Promise<RequestActor | null> {
   const session = await auth()
   const email = session?.user?.email?.toLowerCase()
   const role = session?.user?.role as AppRole | undefined
   if (email && role) return { email, displayName: session?.user?.name ?? email.split("@")[0], role }
-  if (!request) return null
-  const hostname = new URL(request.url).hostname
-  if (hostname === "localhost" || hostname === "127.0.0.1") return { email: "local-admin@laidbackhr.ai", displayName: "Local HR Admin", role: "admin" }
-  return null
+  return getLocalPreviewActor(request)
 }
 
 export async function requireRequestActor(request?: Request): Promise<RequestActor> {

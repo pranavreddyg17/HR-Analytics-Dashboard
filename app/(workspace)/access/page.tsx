@@ -1,9 +1,9 @@
 import { redirect } from "next/navigation"
-import { auth } from "@/auth"
 import { AccessManager } from "@/components/access-manager"
+import { getRequestActor } from "@/lib/server/request-user"
 
 export default async function AccessPage() {
-  const session = await auth()
-  if (session?.user?.role !== "admin") redirect("/")
-  return <AccessManager ownerEmail={session.user.email ?? ""} />
+  const actor = await getRequestActor()
+  if (actor?.role !== "admin") redirect("/")
+  return <AccessManager ownerEmail={actor.email} />
 }
