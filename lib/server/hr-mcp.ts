@@ -110,6 +110,7 @@ export function createHrMcpServer(): McpServer {
         mobilityReviews: analytics.promotions.withoutPromotionOver36Months,
       },
       workflowQueue: workflows,
+      operatingSignals: analytics.operatingSignals,
       executiveObservations: analytics.executiveInsights,
     })
   })

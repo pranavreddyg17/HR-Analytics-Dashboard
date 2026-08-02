@@ -5,14 +5,6 @@ import { getRequestActor } from "@/lib/server/request-user"
 
 export const dynamic = "force-dynamic"
 
-const capabilities = [
-  { label: "Workforce overview", detail: "Headcount, movement, open work, and source status" },
-  { label: "Department comparison", detail: "Hiring, exits, leave, learning, and promotions" },
-  { label: "Attrition analysis", detail: "Observed exits and historical model results" },
-  { label: "People operations", detail: "Hiring, leave, training, and promotion exceptions" },
-  { label: "Employee lookup", detail: "Current employee directory records" },
-]
-
 function workspaceMode(status: Awaited<ReturnType<typeof getWorkforceAnalytics>>["status"]): "Demo" | "Mixed" | "Operational" {
   const modes = new Set(status.filter((item) => item.count > 0).map((item) => item.mode))
   if (modes.size === 1 && modes.has("demo")) return "Demo"
@@ -35,30 +27,14 @@ export default async function AiAgentsPage() {
         <p className="text-xs text-muted-foreground">Data source: <b className="font-semibold text-foreground">{mode}</b></p>
       </header>
 
-      <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_360px]">
-        <section className="flex h-[680px] min-h-0 flex-col overflow-hidden rounded-lg border border-border bg-muted/20">
+      <div>
+        <section className="flex h-[720px] min-h-0 flex-col overflow-hidden rounded-lg border border-border bg-muted/20">
           <div className="border-b border-border bg-card px-5 py-4">
             <h2 className="text-sm font-semibold">Workforce analytics</h2>
             <p className="mt-1 text-xs text-muted-foreground">Answers use workspace records and HR guidance from the knowledge base.</p>
           </div>
           <AgentCopilot dataMode={mode.toLowerCase()} />
         </section>
-
-        <aside>
-          <section className="rounded-lg border border-border bg-card">
-            <div className="border-b border-border px-4 py-3">
-              <h2 className="text-sm font-semibold">Analysis coverage</h2>
-            </div>
-            <div className="divide-y divide-border">
-              {capabilities.map(({ label, detail }) => (
-                <div key={label} className="px-4 py-3">
-                  <p className="text-sm font-medium">{label}</p>
-                  <p className="mt-0.5 text-[11px] leading-5 text-muted-foreground">{detail}</p>
-                </div>
-              ))}
-            </div>
-          </section>
-        </aside>
       </div>
 
       <section>

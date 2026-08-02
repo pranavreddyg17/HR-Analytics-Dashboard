@@ -26,6 +26,11 @@ type AgentAnswer = {
   groundedAt: string
 }
 
+export type AgentHistoryMessage = {
+  role: "user" | "assistant"
+  content: string
+}
+
 type ToolPlan = {
   name: "workforce_overview" | "compare_departments" | "analyze_attrition_signals" | "review_people_operations" | "find_employee_records"
   input: Record<string, unknown>
@@ -75,14 +80,19 @@ function explainTool(toolName: string, data: Record<string, unknown>): string {
     const kpis = (data.kpis ?? {}) as Record<string, unknown>
     const open = (data.openWork ?? {}) as Record<string, unknown>
     const workflows = (data.workflowQueue ?? {}) as Record<string, unknown>
+    const signals = (data.operatingSignals ?? {}) as Record<string, unknown>
+    const managerConcentration = list(signals.managerExitConcentration)[0]
+    const replacementGap = list(signals.replacementCoverage).find((row) => row.status === "Gap")
     return [
       `Current source: ${mode}.`,
       `- ${numberValue(kpis, "activeEmployees")} active employees; ${numberValue(kpis, "hires")} completed hires; ${numberValue(kpis, "attritionRate")}% recorded attrition.`,
       `- ${numberValue(open, "pendingLeaveRequests")} leave requests pending; ${numberValue(open, "activeHiringRequisitions")} active requisitions; ${numberValue(open, "mandatoryTrainingGaps")} mandatory training gaps.`,
       `- ${numberValue(workflows, "openTotal")} persisted workflow requests remain open across leave, hiring, and training.`,
       `- ${numberValue(open, "mobilityReviews")} employees meet the tenure-based mobility review definition.`,
+      managerConcentration ? `- Manager concentration (${String(signals.windowLabel)}): ${String(managerConcentration.manager)} has ${Number(managerConcentration.exits)} recorded exits, including ${Number(managerConcentration.voluntaryExits)} voluntary.` : "",
+      replacementGap ? `- Replacement coverage gap: ${String(replacementGap.department)} recorded ${Number(replacementGap.exits)} exits, ${Number(replacementGap.hires)} hires, and ${Number(replacementGap.openRequisitions)} open requisitions.` : "- No department has a calculated replacement coverage gap in the current operating window.",
       "Recommended next step: review the largest operational queue first, then validate any employee-level action with the underlying record.",
-    ].join("\n")
+    ].filter(Boolean).join("\n")
   }
 
   if (toolName === "compare_departments") {
@@ -195,28 +205,38 @@ function comparisonMetric(message: string): "headcount" | "hires" | "exits" | "l
   return "headcount"
 }
 
-async function inferFilters(message: string): Promise<HrFilters> {
+async function inferFilters(message: string, conversationContext = ""): Promise<HrFilters> {
   const analytics = await getWorkforceAnalytics()
   const lower = message.toLowerCase()
+  const contextLower = conversationContext.toLowerCase()
+  const matchingDimension = (values: string[]) => values.find((value) => lower.includes(value.toLowerCase()))
+    ?? values.find((value) => contextLower.includes(value.toLowerCase()))
   return {
-    department: analytics.dimensions.departments.find((value) => lower.includes(value.toLowerCase())),
-    jobTitle: analytics.dimensions.jobTitles.find((value) => lower.includes(value.toLowerCase())),
-    location: analytics.dimensions.locations.find((value) => lower.includes(value.toLowerCase())),
-    period: /quarter/i.test(message) ? "quarter" : /year|annual/i.test(message) ? "year" : "month",
+    department: matchingDimension(analytics.dimensions.departments),
+    jobTitle: matchingDimension(analytics.dimensions.jobTitles),
+    location: matchingDimension(analytics.dimensions.locations),
+    period: /quarter/i.test(message) ? "quarter" : /year|annual/i.test(message) ? "year" : /quarter/i.test(conversationContext) ? "quarter" : /year|annual/i.test(conversationContext) ? "year" : "month",
   }
 }
 
-async function planTools(message: string): Promise<ToolPlan[]> {
-  const filters = await inferFilters(message)
+function recentUserContext(history: AgentHistoryMessage[]): string {
+  return history.filter((item) => item.role === "user").slice(-3).map((item) => item.content).join("\n")
+}
+
+async function planTools(message: string, history: AgentHistoryMessage[] = []): Promise<ToolPlan[]> {
+  const conversationContext = recentUserContext(history)
+  const planningText = `${message}\n${conversationContext}`
+  const filters = await inferFilters(message, conversationContext)
   const cleanFilters = Object.fromEntries(Object.entries(filters).filter(([, value]) => value !== undefined))
   const plans: ToolPlan[] = []
-  const domain = operationDomain(message)
+  const domain = operationDomain(message) ?? operationDomain(conversationContext)
 
-  if (/attrition|turnover|exit|retention|risk/i.test(message)) {
-    const wantsRecords = /\b(?:list|show|find|pull|which|who|records?|employees?|people)\b/i.test(message)
-    const exitedRecords = /attrition records?|employees? (?:who )?(?:left|exited)|former employees?|departures?|terminations?/i.test(message)
-      || /records? of employees? of attrition/i.test(message)
-    const highRiskRecords = /at[-\s]?risk|high[-\s]?risk|retention risk|likely to leave/i.test(message)
+  if (/attrition|turnover|exit|retention|risk/i.test(planningText)) {
+    const wantsRecords = /\b(?:list|show|find|pull|which|who|records?|employees?|people|them|those)\b/i.test(message)
+      || /\b(?:records?|employees?|people)\b/i.test(conversationContext)
+    const exitedRecords = /attrition records?|employees? (?:who )?(?:left|exited)|former employees?|departures?|terminations?/i.test(planningText)
+      || /records? of employees? of attrition/i.test(planningText)
+    const highRiskRecords = /at[-\s]?risk|high[-\s]?risk|retention risk|likely to leave/i.test(planningText)
     const identifier = message.match(/\b(?:emp|ibm)[-_ ]?\d+\b/i)?.[0]?.replace(/[_ ]/g, "-")
     plans.push({
       name: "analyze_attrition_signals",
@@ -230,8 +250,8 @@ async function planTools(message: string): Promise<ToolPlan[]> {
   if (domain) {
     plans.push({ name: "review_people_operations", input: { ...cleanFilters, domain } })
   }
-  if (/compare|which department|highest|lowest|break down|breakdown|by department/i.test(message)) {
-    plans.push({ name: "compare_departments", input: { ...cleanFilters, metric: comparisonMetric(message) } })
+  if (/compare|which department|highest|lowest|break down|breakdown|by department/i.test(planningText)) {
+    plans.push({ name: "compare_departments", input: { ...cleanFilters, metric: comparisonMetric(message) === "headcount" ? comparisonMetric(conversationContext) : comparisonMetric(message) } })
   }
   const explicitLookup = /\b(?:emp|ibm)[-_ ]?[a-z0-9]+\b/i.test(message)
     || /\b(?:find|lookup|open|show)\b.{0,30}\b(?:employee|person|profile|record)\b/i.test(message)
@@ -243,7 +263,7 @@ async function planTools(message: string): Promise<ToolPlan[]> {
   } else if (/\b(?:list|show|find)\b.{0,20}\bactive employees\b/i.test(message) && !cohortQuestion) {
     plans.push({ name: "find_employee_records", input: { ...cleanFilters, status: "Active", limit: 10 } })
   }
-  if (!plans.length || /executive|summary|brief|overview|company|workforce/i.test(message)) {
+  if (!plans.length || /executive|summary|brief|overview|company|workforce|manager|replacement|coverage|capacity/i.test(planningText)) {
     plans.unshift({ name: "workforce_overview", input: cleanFilters })
   }
   return plans.filter((plan, index, all) => all.findIndex((candidate) => candidate.name === plan.name) === index).slice(0, 2)
@@ -278,13 +298,18 @@ async function loadInProcessMcpTools() {
   }
 }
 
-export async function runHrAgent({ message }: { message: unknown }): Promise<AgentAnswer> {
+export async function runHrAgent({ message, history = [] }: { message: unknown; history?: AgentHistoryMessage[] }): Promise<AgentAnswer> {
   if (typeof message !== "string" || !message.trim() || message.length > 2000) throw new Error("message must contain between 1 and 2,000 characters.")
   const query = message.trim()
-  const { prompt, context } = buildHrSystemPrompt(query)
+  const safeHistory = history
+    .filter((item): item is AgentHistoryMessage => Boolean(item) && (item.role === "user" || item.role === "assistant") && typeof item.content === "string")
+    .slice(-12)
+  const planningContext = recentUserContext(safeHistory)
+  const groundedQuery = planningContext ? `${query}\nPrevious conversation topics:\n${planningContext}` : query
+  const { prompt, context } = buildHrSystemPrompt(groundedQuery)
   const citedContext = context.map(({ source, section }) => ({ source, section }))
 
-  if (!inHrScope(query)) {
+  if (!inHrScope(groundedQuery)) {
     return { answer: outOfScopeResponse, provider: "scope-guard", tools: [], context: citedContext, groundedAt: new Date().toISOString() }
   }
 
@@ -296,7 +321,7 @@ export async function runHrAgent({ message }: { message: unknown }): Promise<Age
       const model = new ChatOpenAI({ apiKey, model: getWorkerSecret("OPENAI_MODEL") ?? "gpt-4.1-mini", temperature: 0 })
       const agent = createAgent({ model, tools: mcp.tools, systemPrompt: prompt })
       const started = Date.now()
-      const response = await agent.invoke({ messages: [{ role: "user", content: query }] })
+      const response = await agent.invoke({ messages: [...safeHistory, { role: "user" as const, content: query }] })
       const usedTools = response.messages.flatMap((item) => {
         if (!("tool_calls" in item) || !Array.isArray(item.tool_calls)) return []
         return item.tool_calls.map((call) => ({ name: call.name, input: call.args && typeof call.args === "object" ? call.args as Record<string, unknown> : {} }))
@@ -312,7 +337,7 @@ export async function runHrAgent({ message }: { message: unknown }): Promise<Age
     }
 
     const evidenceResults: Array<{ tool: string; data: Record<string, unknown> }> = []
-    for (const plan of await planTools(query)) {
+    for (const plan of await planTools(query, safeHistory)) {
       const tool = mcp.tools.find((candidate) => candidate.name === plan.name)
       if (!tool) continue
       const started = Date.now()

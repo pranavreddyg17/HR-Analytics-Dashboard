@@ -40,6 +40,10 @@ test("workforce analytics spans every requested HR domain", async () => {
   assert.ok(Array.isArray(body.promotions.byDepartment))
   assert.ok(Array.isArray(body.employeeAnalytics.byDepartment))
   assert.ok(Array.isArray(body.employeeAnalytics.managerSpan))
+  assert.equal(body.operatingSignals.windowLabel, "Rolling 12 months")
+  assert.ok(Array.isArray(body.operatingSignals.managerExitConcentration))
+  assert.ok(Array.isArray(body.operatingSignals.replacementCoverage))
+  assert.ok(body.operatingSignals.replacementCoverage.every((item) => ["Gap", "Watch", "Covered"].includes(item.status)))
   assert.deepEqual(body.status.map((item) => item.domain), ["employees", "hiring", "attrition", "leave", "training", "promotions"])
 })
 
@@ -114,9 +118,37 @@ test("LangChain agent invokes MCP tools and returns its trace", async () => {
   })
   assert.equal(response.status, 200)
   assert.equal(body.provider, "langchain-mcp-rag-deterministic")
+  assert.match(body.conversationId, /^CONV-/)
   assert.ok(body.tools.some((trace) => trace.tool === "analyze_attrition_signals" && trace.status === "completed"))
   assert.match(body.answer, /recorded exits/)
   assert.ok(body.context.some((item) => item.section === "Attrition and model risk"))
+})
+
+test("analytics assistant persists conversation history and uses it for follow-up filters", async () => {
+  const first = await json("/api/v1/chat", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ message: "Compare attrition across departments" }),
+  })
+  assert.equal(first.response.status, 200)
+  assert.match(first.body.conversationId, /^CONV-/)
+
+  const followUp = await json("/api/v1/chat", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ message: "What about Sales?", conversationId: first.body.conversationId }),
+  })
+  assert.equal(followUp.response.status, 200)
+  assert.ok(followUp.body.tools.some((trace) => trace.tool === "analyze_attrition_signals" && trace.input.department === "Sales"))
+
+  const stored = await json(`/api/v1/chat/conversations/${first.body.conversationId}`)
+  assert.equal(stored.response.status, 200)
+  assert.equal(stored.body.messages.length, 4)
+  assert.deepEqual(stored.body.messages.map((message) => message.role), ["user", "assistant", "user", "assistant"])
+
+  const listed = await json("/api/v1/chat/conversations")
+  assert.equal(listed.response.status, 200)
+  assert.ok(listed.body.conversations.some((conversation) => conversation.id === first.body.conversationId && conversation.messageCount === 4))
 })
 
 test("analytics assistant returns employee records joined to observed attrition", async () => {

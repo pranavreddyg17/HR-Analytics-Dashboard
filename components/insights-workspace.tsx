@@ -136,6 +136,40 @@ export function InsightsWorkspace() {
 
     <div className="grid gap-4 xl:grid-cols-[1.25fr_0.75fr]"><Card className="shadow-none"><CardHeader><CardTitle>Joiners and leavers</CardTitle><CardDescription>Completed hires and recorded exits by {data.filters.period}</CardDescription></CardHeader><CardContent><FlowChart rows={flow}/></CardContent></Card><Card className="shadow-none"><CardHeader><CardTitle>Key findings</CardTitle><CardDescription>Calculated from the selected records</CardDescription></CardHeader><CardContent>{data.executiveInsights.length ? <ul className="space-y-3">{data.executiveInsights.map((insight) => <li key={insight} className="border-b border-border/60 pb-3 text-xs leading-relaxed last:border-0 last:pb-0">{insight}</li>)}</ul> : <div className="rounded-md border border-dashed border-border p-5 text-center text-xs text-muted-foreground">Not enough data in this scope to produce findings.</div>}<Button nativeButton={false} variant="outline" className="mt-4 w-full" render={<Link href="/ai-agents"/>}>Open detailed analysis</Button></CardContent></Card></div>
 
+    <section aria-labelledby="operating-signals-title">
+      <div className="mb-3">
+        <h2 id="operating-signals-title" className="text-base font-semibold">Operating signals</h2>
+        <p className="mt-0.5 text-xs text-muted-foreground">Manager exit concentration and replacement coverage for {data.operatingSignals.windowLabel.toLowerCase()}.</p>
+      </div>
+      <div className="grid gap-4 xl:grid-cols-2">
+        <Card className="gap-0 overflow-hidden py-0 shadow-none">
+          <CardHeader className="border-b border-border py-4"><CardTitle>Manager exit concentration</CardTitle><CardDescription>Shows where recorded exits cluster; it is not a manager performance score.</CardDescription></CardHeader>
+          <CardContent className="px-0 pb-0">
+            <div className="overflow-x-auto">
+              <table className="w-full min-w-[640px] text-left text-xs">
+                <thead className="bg-muted/50"><tr>{["Manager", "Department", "Active team", "Exits", "Voluntary", "Dept. share"].map((heading) => <th key={heading} className="px-4 py-3 font-medium text-muted-foreground">{heading}</th>)}</tr></thead>
+                <tbody>{data.operatingSignals.managerExitConcentration.slice(0, 8).map((row) => <tr key={`${row.managerId ?? row.manager}-${row.department}`} className="border-t border-border/60"><td className="px-4 py-3 font-medium">{row.manager}</td><td className="px-4 py-3 text-muted-foreground">{row.department}</td><td className="px-4 py-3 tabular-nums">{row.activeTeamSize}</td><td className="px-4 py-3 font-semibold tabular-nums">{row.exits}</td><td className="px-4 py-3 tabular-nums">{row.voluntaryExits}</td><td className="px-4 py-3 tabular-nums">{row.shareOfDepartmentExits}%</td></tr>)}</tbody>
+              </table>
+              {!data.operatingSignals.managerExitConcentration.length && <div className="p-8 text-center text-xs text-muted-foreground">No manager-level exit concentration is recorded in this window.</div>}
+            </div>
+          </CardContent>
+        </Card>
+
+        <Card className="gap-0 overflow-hidden py-0 shadow-none">
+          <CardHeader className="border-b border-border py-4"><CardTitle>Replacement coverage</CardTitle><CardDescription>Compares exits with completed hires and the current requisition pipeline.</CardDescription></CardHeader>
+          <CardContent className="px-0 pb-0">
+            <div className="overflow-x-auto">
+              <table className="w-full min-w-[660px] text-left text-xs">
+                <thead className="bg-muted/50"><tr>{["Department", "Hires", "Exits", "Open roles", "Net", "Avg. hire time", "Status"].map((heading) => <th key={heading} className="px-4 py-3 font-medium text-muted-foreground">{heading}</th>)}</tr></thead>
+                <tbody>{data.operatingSignals.replacementCoverage.map((row) => <tr key={row.department} className="border-t border-border/60"><td className="px-4 py-3"><button type="button" onClick={() => setFilters({ ...filters, department: row.department })} className="font-medium hover:text-primary hover:underline">{row.department}</button></td><td className="px-4 py-3 tabular-nums">{row.hires}</td><td className="px-4 py-3 tabular-nums">{row.exits}</td><td className="px-4 py-3 tabular-nums">{row.openRequisitions}</td><td className="px-4 py-3 font-semibold tabular-nums">{row.netMovement > 0 ? "+" : ""}{row.netMovement}</td><td className="px-4 py-3 tabular-nums">{row.averageTimeToHire ? `${row.averageTimeToHire} days` : "—"}</td><td className="px-4 py-3"><span className={cn("text-[10px] font-medium", row.status === "Gap" ? "text-rose-700 dark:text-rose-300" : row.status === "Watch" ? "text-amber-700 dark:text-amber-300" : "text-emerald-700 dark:text-emerald-300")}>{row.status}</span></td></tr>)}</tbody>
+              </table>
+              {!data.operatingSignals.replacementCoverage.length && <div className="p-8 text-center text-xs text-muted-foreground">No workforce movement is recorded in this window.</div>}
+            </div>
+          </CardContent>
+        </Card>
+      </div>
+    </section>
+
     <section aria-labelledby="department-title"><div className="mb-3"><h2 id="department-title" className="text-base font-semibold">Department review</h2><p className="mt-0.5 text-xs text-muted-foreground">Headcount, workforce movement, leave, learning, and promotions by department.</p></div><Card className="gap-0 overflow-hidden py-0 shadow-none"><CardContent className="px-0 pb-0"><div className="overflow-x-auto"><table className="w-full min-w-[980px] text-left text-xs"><thead className="bg-muted/50"><tr>{["Department", "Active", "Hires", "Exits", "Leave days", "Learning hours", "Promotions", "Exception"].map((heading) => <th key={heading} className="px-4 py-3 font-medium text-muted-foreground">{heading}</th>)}</tr></thead><tbody>{departmentRows.map((row) => { const signal = reviewSignal(row); return <tr key={row.department} className="border-t border-border/60 hover:bg-muted/20"><td className="px-4 py-3"><button type="button" onClick={() => setFilters({ ...filters, department: row.department })} className="font-medium hover:text-primary hover:underline">{row.department}</button></td><td className="px-4 py-3 tabular-nums">{row.active}</td><td className="px-4 py-3 tabular-nums">{row.hires}</td><td className="px-4 py-3 tabular-nums">{row.exits}</td><td className="px-4 py-3 tabular-nums">{row.leaveDays}</td><td className="px-4 py-3 tabular-nums">{row.learningHours}</td><td className="px-4 py-3 tabular-nums">{row.promotions}</td><td className="px-4 py-3"><span className={cn("text-[10px] font-medium", signal.className)}>{signal.label}</span></td></tr>})}</tbody></table>{!departmentRows.length && <div className="p-10 text-center text-sm text-muted-foreground">No departments match the selected filters.</div>}</div><div className="border-t border-border bg-muted/20 px-4 py-2.5 text-[10px] text-muted-foreground">Select a department name to filter the report.</div></CardContent></Card></section>
 
     <section aria-labelledby="program-title"><div className="mb-3"><h2 id="program-title" className="text-base font-semibold">Workforce programs</h2><p className="mt-0.5 text-xs text-muted-foreground">Leave, learning, and internal mobility measures.</p></div><div className="grid gap-3 md:grid-cols-3"><Programme href="/time-off" label="Leaves" metric={`${new Set(data.leave.currentlyAway.map((row) => row.employee_id)).size} away today`} detail={`${data.leave.pending} pending requests · ${data.leave.totalDays} approved days`}/><Programme href="/learning" label="Assign Courses" metric={`${data.training.completionRate}% complete`} detail={`${data.training.requiringMandatoryTraining} mandatory gaps · ${data.training.totalHours} assigned hours`}/><Programme href="/people?tenure=mobility" label="Internal mobility" metric={`${data.promotions.rate}% promotion rate`} detail={`${data.promotions.total} promotions · ${data.promotions.withoutPromotionOver36Months} employees due for review`}/></div></section>

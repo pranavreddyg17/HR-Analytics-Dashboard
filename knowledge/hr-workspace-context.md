@@ -28,6 +28,10 @@ Training completion is based on persisted assignments. Mandatory gaps include in
 
 Promotion rate compares recorded promotions with active headcount. Employees with at least three years of tenure and no recorded promotion are a review cohort, not a conclusion that progression is unfair or stalled. Check career ladders, lateral moves, data completeness, and employee preference before action.
 
+## Operating signals
+
+Manager exit concentration counts recorded exits under the same manager during the selected date range, or the rolling 12 months when no range is selected. It is a prompt to inspect team conditions and exit reasons, not a manager performance score. Replacement coverage compares exits with completed hires and current open requisitions by department. A gap means exits exceed completed hires plus the open pipeline; it is an operational staffing condition, not a prediction or replacement-cost estimate.
+
 ## Workflow actions
 
 LaidbackHR.AI may plan a calendar event using active operational employee records with work email addresses. The plan resolves named employees or supported cohorts from persisted employee and promotion records, then shows the participants, timing, agenda, and evidence before execution. Only after the signed-in HR user explicitly confirms may the app create the event in that user's Google Calendar and send attendee invitations. Synthetic IBM-linked demo profiles cannot be used as recipients. The assistant never approves leave or makes employment decisions on its own.

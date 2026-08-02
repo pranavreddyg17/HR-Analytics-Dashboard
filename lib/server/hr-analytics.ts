@@ -146,6 +146,11 @@ export async function getWorkforceAnalytics(filters: HrFilters = {}): Promise<Wo
   const activeHiring = requisitions.filter((record) => ["requested", "open", "offer"].includes(record.recruitment_status.toLowerCase()))
   const approvedLeave = leave.filter((record) => record.approval_status.toLowerCase() === "approved")
   const today = dateInTimeZone("America/Los_Angeles")
+  const operatingTo = normalizedFilters.to ?? today
+  const rollingStartDate = new Date(`${operatingTo}T12:00:00Z`)
+  rollingStartDate.setUTCFullYear(rollingStartDate.getUTCFullYear() - 1)
+  const operatingFrom = normalizedFilters.from ?? rollingStartDate.toISOString().slice(0, 10)
+  const operatingWindowLabel = normalizedFilters.from || normalizedFilters.to ? "Selected date range" : "Rolling 12 months"
   const currentlyAway = approvedLeave.filter((record) => record.start_date <= today && record.end_date >= today)
   const upcomingLeave = leave.filter((record) => ["approved", "pending"].includes(record.approval_status.toLowerCase()) && record.start_date >= today).sort((left, right) => left.start_date.localeCompare(right.start_date))
   const completedTraining = training.filter((record) => record.completion_status.toLowerCase() === "completed")
@@ -206,6 +211,64 @@ export async function getWorkforceAnalytics(filters: HrFilters = {}): Promise<Wo
     const name = manager ? `${manager.preferred_name || manager.first_name || manager.employee_id} ${manager.last_name || ""}`.trim() : managerId
     return { label: name, value: count }
   }).sort((left, right) => right.value - left.value)
+
+  const inOperatingWindow = (date: string | null) => Boolean(date && date >= operatingFrom && date <= operatingTo)
+  const operatingAttrition = allAttrition.filter((record) => isIncluded(record)
+    && inOperatingWindow(record.exit_date)
+    && matchesEmployee(employeeMap.get(record.employee_id), normalizedFilters)
+    && (!normalizedFilters.department || record.department === normalizedFilters.department))
+  const operatingHires = hiringByDimensions.filter((record) => record.recruitment_status.toLowerCase() === "hired"
+    && inOperatingWindow(record.hiring_date))
+  const openRequisitions = hiringByDimensions.filter((record) => ["requested", "open", "offer"].includes(record.recruitment_status.toLowerCase()))
+  const operatingExitByDepartment = new Map(groupBy(operatingAttrition, (record) => record.department).map((row) => [row.label, row.value]))
+  const operatingHireByDepartment = new Map(groupBy(operatingHires, (record) => record.department).map((row) => [row.label, row.value]))
+  const openRequisitionByDepartment = new Map(groupBy(openRequisitions, (record) => record.department).map((row) => [row.label, row.value]))
+  const activeByDepartment = new Map(groupBy(activeEmployees, (record) => record.department).map((row) => [row.label, row.value]))
+  const mobilityByDepartment = new Map(groupBy(activeEmployees.filter((employee) => employee.tenure_years >= 3 && !promotedIds.has(employee.employee_id)), (record) => record.department).map((row) => [row.label, row.value]))
+  const operatingDepartments = unique([
+    ...activeEmployees.map((record) => record.department),
+    ...operatingAttrition.map((record) => record.department),
+    ...operatingHires.map((record) => record.department),
+    ...openRequisitions.map((record) => record.department),
+  ])
+  const replacementCoverage: WorkforceAnalytics["operatingSignals"]["replacementCoverage"] = operatingDepartments.map((department) => {
+    const departmentHires = operatingHires.filter((record) => record.department === department)
+    const hires = operatingHireByDepartment.get(department) ?? 0
+    const exits = operatingExitByDepartment.get(department) ?? 0
+    const requisitions = openRequisitionByDepartment.get(department) ?? 0
+    const netMovement = hires - exits
+    const status: "Gap" | "Watch" | "Covered" = exits > hires + requisitions ? "Gap" : exits > hires ? "Watch" : "Covered"
+    return {
+      department,
+      activeEmployees: activeByDepartment.get(department) ?? 0,
+      hires,
+      exits,
+      openRequisitions: requisitions,
+      netMovement,
+      averageTimeToHire: average(departmentHires.map((record) => record.time_to_hire_days)),
+      mobilityReviewCount: mobilityByDepartment.get(department) ?? 0,
+      status,
+    }
+  }).sort((left, right) => {
+    const rank = { Gap: 0, Watch: 1, Covered: 2 }
+    return rank[left.status] - rank[right.status] || left.netMovement - right.netMovement || right.exits - left.exits
+  })
+
+  const managerGroups = new Map<string, { managerId: string | null; manager: string; department: string; exits: number; voluntaryExits: number }>()
+  for (const exit of operatingAttrition) {
+    const employee = employeeMap.get(exit.employee_id)
+    if (!employee?.manager || /^(none|not specified|n\/a)$/i.test(employee.manager)) continue
+    const key = employee.manager_id || `${employee.manager}::${employee.department}`
+    const current = managerGroups.get(key) ?? { managerId: employee.manager_id, manager: employee.manager, department: employee.department, exits: 0, voluntaryExits: 0 }
+    current.exits += 1
+    if (exit.exit_type.toLowerCase() === "voluntary") current.voluntaryExits += 1
+    managerGroups.set(key, current)
+  }
+  const managerExitConcentration: WorkforceAnalytics["operatingSignals"]["managerExitConcentration"] = [...managerGroups.values()].map((row) => {
+    const activeTeamSize = activeEmployees.filter((employee) => row.managerId ? employee.manager_id === row.managerId : employee.manager === row.manager && employee.department === row.department).length
+    const departmentExits = operatingExitByDepartment.get(row.department) ?? 0
+    return { ...row, activeTeamSize, shareOfDepartmentExits: percent(row.exits, departmentExits) }
+  }).sort((left, right) => right.exits - left.exits || right.voluntaryExits - left.voluntaryExits || left.manager.localeCompare(right.manager)).slice(0, 10)
 
   const insights: string[] = []
   if (attritionByDepartment[0]) insights.push(`${attritionByDepartment[0].label} recorded the most exits (${attritionByDepartment[0].value}) in the selected period; compare exit reasons and manager cohorts before intervening.`)
@@ -314,6 +377,11 @@ export async function getWorkforceAnalytics(filters: HrFilters = {}): Promise<Wo
       trend: trend(promotions, (record) => record.promotion_date, normalizedFilters.period),
       byDepartment: promotionByDepartment,
       rows: promotions.slice(0, 250),
+    },
+    operatingSignals: {
+      windowLabel: operatingWindowLabel,
+      managerExitConcentration,
+      replacementCoverage,
     },
     employees: employees.slice(0, 500),
     directoryEmployees: directoryEmployees.slice(0, 500),

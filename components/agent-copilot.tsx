@@ -1,17 +1,25 @@
 "use client"
 
-import { useRef, useState } from "react"
+import { useEffect, useRef, useState } from "react"
 import { ArrowUp, LoaderCircle } from "lucide-react"
 
 import { Button } from "@/components/ui/button"
 import { cn } from "@/lib/utils"
 
 type ChatMessage = {
+  id?: string
   role: "user" | "assistant"
   content: string
   tools?: Array<{ tool: string; status: string }>
   context?: Array<{ source: string; section: string }>
   dataMode?: string
+}
+
+type ConversationSummary = {
+  id: string
+  title: string
+  messageCount: number
+  updatedAt: string
 }
 
 const toolLabels: Record<string, string> = {
@@ -24,26 +32,75 @@ const toolLabels: Record<string, string> = {
 
 const suggestedPrompts = [
   "Summarize the current workforce and open HR work",
-  "Compare attrition across departments",
-  "Which mandatory training needs follow-up?",
+  "Where are exits concentrated by manager?",
+  "Which departments have a replacement coverage gap?",
   "Which active employees meet the mobility review criteria?",
 ]
 
+function welcomeMessage(dataMode: string): ChatMessage {
+  return {
+    role: "assistant",
+    content: "Ask about workforce data or operational HR work. Follow-up questions will use this conversation until you start a new one.",
+    dataMode,
+  }
+}
+
 export function AgentCopilot({ dataMode }: { dataMode: string }) {
-  const [messages, setMessages] = useState<ChatMessage[]>([
-    {
-      role: "assistant",
-      content: "Ask a question about workforce data, HR operations, or model results. I will use the current workspace records and identify the source mode in the answer.",
-      dataMode,
-    },
-  ])
+  const [messages, setMessages] = useState<ChatMessage[]>([welcomeMessage(dataMode)])
+  const [conversations, setConversations] = useState<ConversationSummary[]>([])
+  const [conversationId, setConversationId] = useState("")
   const [input, setInput] = useState("")
   const [thinking, setThinking] = useState(false)
+  const [loadingHistory, setLoadingHistory] = useState(true)
   const scrollRef = useRef<HTMLDivElement>(null)
+
+  async function refreshConversations(preferredId?: string) {
+    const response = await fetch("/api/v1/chat/conversations", { cache: "no-store" })
+    if (!response.ok) throw new Error("Conversation history is unavailable.")
+    const body = await response.json() as { conversations?: ConversationSummary[] }
+    const rows = body.conversations ?? []
+    setConversations(rows)
+    return preferredId ?? rows[0]?.id ?? ""
+  }
+
+  async function loadConversation(id: string) {
+    if (!id) return
+    setLoadingHistory(true)
+    try {
+      const response = await fetch(`/api/v1/chat/conversations/${encodeURIComponent(id)}`, { cache: "no-store" })
+      if (!response.ok) throw new Error("This conversation could not be loaded.")
+      const body = await response.json() as { messages?: ChatMessage[] }
+      setConversationId(id)
+      setMessages(body.messages?.length ? body.messages : [welcomeMessage(dataMode)])
+    } catch (error) {
+      setConversationId("")
+      setMessages([{ role: "assistant", content: error instanceof Error ? error.message : "Conversation history is unavailable." }])
+    } finally {
+      setLoadingHistory(false)
+    }
+  }
+
+  useEffect(() => {
+    let active = true
+    refreshConversations()
+      .then((latestId) => active && latestId ? loadConversation(latestId) : undefined)
+      .catch(() => undefined)
+      .finally(() => { if (active) setLoadingHistory(false) })
+    return () => { active = false }
+    // The data mode is fixed for the page lifetime.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+
+  function newConversation() {
+    if (thinking) return
+    setConversationId("")
+    setMessages([welcomeMessage(dataMode)])
+    setInput("")
+  }
 
   async function send(text: string) {
     const trimmed = text.trim()
-    if (!trimmed || thinking) return
+    if (!trimmed || thinking || loadingHistory) return
     setMessages((current) => [...current, { role: "user", content: trimmed }])
     setInput("")
     setThinking(true)
@@ -51,7 +108,7 @@ export function AgentCopilot({ dataMode }: { dataMode: string }) {
       const response = await fetch("/api/v1/chat", {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ message: trimmed }),
+        body: JSON.stringify({ message: trimmed, conversationId: conversationId || undefined }),
       })
       const body = await response.json() as {
         answer?: string
@@ -59,8 +116,11 @@ export function AgentCopilot({ dataMode }: { dataMode: string }) {
         tools?: ChatMessage["tools"]
         context?: ChatMessage["context"]
         dataMode?: string
+        conversationId?: string
       }
       if (!response.ok) throw new Error(body.detail ?? "The assistant is unavailable.")
+      const nextConversationId = body.conversationId ?? conversationId
+      setConversationId(nextConversationId)
       setMessages((current) => [...current, {
         role: "assistant",
         content: body.answer ?? "No answer was returned.",
@@ -68,6 +128,7 @@ export function AgentCopilot({ dataMode }: { dataMode: string }) {
         context: body.context,
         dataMode: body.dataMode,
       }])
+      await refreshConversations(nextConversationId)
     } catch (error) {
       setMessages((current) => [...current, {
         role: "assistant",
@@ -81,9 +142,28 @@ export function AgentCopilot({ dataMode }: { dataMode: string }) {
 
   return (
     <div className="flex h-full min-h-0 flex-col">
+      <div className="flex items-center gap-2 border-b border-border bg-card px-4 py-2.5">
+        <label className="min-w-0 flex-1 text-[10px] font-medium text-muted-foreground">
+          Conversation
+          <select
+            value={conversationId}
+            onChange={(event) => { if (event.target.value) void loadConversation(event.target.value); else newConversation() }}
+            disabled={thinking || loadingHistory}
+            className="ml-2 h-8 max-w-[420px] rounded-md border border-border bg-background px-2 text-xs font-normal text-foreground"
+            aria-label="Select a recent conversation"
+          >
+            <option value="">New conversation</option>
+            {conversations.map((conversation) => <option key={conversation.id} value={conversation.id}>{conversation.title}</option>)}
+          </select>
+        </label>
+        <Button type="button" size="sm" variant="outline" onClick={newConversation} disabled={thinking || loadingHistory}>Reset context</Button>
+      </div>
+
       <div ref={scrollRef} className="min-h-0 flex-1 space-y-5 overflow-y-auto px-5 py-5">
-        {messages.map((message, index) => (
-          <article key={index} className={cn("flex", message.role === "user" && "justify-end")}>
+        {loadingHistory ? (
+          <div className="flex h-full items-center justify-center gap-2 text-sm text-muted-foreground"><LoaderCircle className="size-4 animate-spin"/>Loading conversation</div>
+        ) : messages.map((message, index) => (
+          <article key={message.id ?? index} className={cn("flex", message.role === "user" && "justify-end")}>
             <div className="max-w-[88%]">
               <div className={cn(
                 "whitespace-pre-wrap rounded-md px-3.5 py-3 text-sm leading-6",
@@ -131,9 +211,9 @@ export function AgentCopilot({ dataMode }: { dataMode: string }) {
             placeholder="Ask a workforce analytics question"
             className="max-h-32 min-h-9 flex-1 resize-none bg-transparent py-2 text-sm outline-none placeholder:text-muted-foreground"
           />
-          <Button type="submit" size="icon" disabled={!input.trim() || thinking} aria-label="Send question"><ArrowUp className="size-4" /></Button>
+          <Button type="submit" size="icon" disabled={!input.trim() || thinking || loadingHistory} aria-label="Send question"><ArrowUp className="size-4" /></Button>
         </form>
-        <p className="mt-2 text-[10px] text-muted-foreground">Decision support only. Confirm employee-level actions through normal HR review.</p>
+        <p className="mt-2 text-[10px] text-muted-foreground">Context is stored for your account. Start a new conversation to clear it. Employee actions still require human review.</p>
       </div>
     </div>
   )

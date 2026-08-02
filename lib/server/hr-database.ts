@@ -47,8 +47,14 @@ const createStatements = [
   "CREATE TABLE IF NOT EXISTS ai_workflow_drafts (id TEXT PRIMARY KEY, type TEXT NOT NULL, title TEXT NOT NULL, status TEXT NOT NULL DEFAULT 'ready', employee_ids_json TEXT NOT NULL DEFAULT '[]', details_json TEXT NOT NULL DEFAULT '{}', created_by_email TEXT NOT NULL, opened_at TEXT, created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP, updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP)",
   "CREATE INDEX IF NOT EXISTS ai_workflow_creator_idx ON ai_workflow_drafts(created_by_email)",
   "CREATE INDEX IF NOT EXISTS ai_workflow_status_idx ON ai_workflow_drafts(status)",
+  "CREATE TABLE IF NOT EXISTS ai_conversations (id TEXT PRIMARY KEY, user_email TEXT NOT NULL, title TEXT NOT NULL, created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP, updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP)",
+  "CREATE INDEX IF NOT EXISTS ai_conversations_user_updated_idx ON ai_conversations(user_email, updated_at)",
+  "CREATE TABLE IF NOT EXISTS ai_conversation_messages (id TEXT PRIMARY KEY, conversation_id TEXT NOT NULL, position INTEGER NOT NULL, role TEXT NOT NULL, content TEXT NOT NULL, tools_json TEXT, context_json TEXT, data_mode TEXT, provider TEXT, created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP)",
+  "CREATE INDEX IF NOT EXISTS ai_conversation_messages_conversation_created_idx ON ai_conversation_messages(conversation_id, created_at)",
+  "CREATE INDEX IF NOT EXISTS ai_conversation_messages_conversation_position_idx ON ai_conversation_messages(conversation_id, position)",
   "CREATE TABLE IF NOT EXISTS app_users (email TEXT PRIMARY KEY, display_name TEXT NOT NULL DEFAULT '', role TEXT NOT NULL DEFAULT 'viewer', status TEXT NOT NULL DEFAULT 'active', invited_by TEXT NOT NULL, created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP, updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP, last_login_at TEXT)",
   "CREATE TABLE IF NOT EXISTS access_audit (id TEXT PRIMARY KEY, actor_email TEXT NOT NULL, action TEXT NOT NULL, target_email TEXT NOT NULL, details_json TEXT, created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP)",
+  "PRAGMA optimize",
 ]
 
 let readyDatabase: Database | null = null

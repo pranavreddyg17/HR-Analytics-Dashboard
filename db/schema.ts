@@ -204,3 +204,29 @@ export const aiWorkflowDrafts = sqliteTable("ai_workflow_drafts", {
   index("ai_workflow_creator_idx").on(table.createdByEmail),
   index("ai_workflow_status_idx").on(table.status),
 ])
+
+export const aiConversations = sqliteTable("ai_conversations", {
+  id: text("id").primaryKey(),
+  userEmail: text("user_email").notNull(),
+  title: text("title").notNull(),
+  createdAt: text("created_at").notNull().default(sql`CURRENT_TIMESTAMP`),
+  updatedAt: text("updated_at").notNull().default(sql`CURRENT_TIMESTAMP`),
+}, (table) => [
+  index("ai_conversations_user_updated_idx").on(table.userEmail, table.updatedAt),
+])
+
+export const aiConversationMessages = sqliteTable("ai_conversation_messages", {
+  id: text("id").primaryKey(),
+  conversationId: text("conversation_id").notNull(),
+  position: integer("position").notNull(),
+  role: text("role").notNull(),
+  content: text("content").notNull(),
+  toolsJson: text("tools_json"),
+  contextJson: text("context_json"),
+  dataMode: text("data_mode"),
+  provider: text("provider"),
+  createdAt: text("created_at").notNull().default(sql`CURRENT_TIMESTAMP`),
+}, (table) => [
+  index("ai_conversation_messages_conversation_created_idx").on(table.conversationId, table.createdAt),
+  index("ai_conversation_messages_conversation_position_idx").on(table.conversationId, table.position),
+])

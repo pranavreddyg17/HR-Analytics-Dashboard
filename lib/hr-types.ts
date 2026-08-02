@@ -246,6 +246,29 @@ export type WorkforceAnalytics = {
     byDepartment: BreakdownPoint[]
     rows: PromotionRecord[]
   }
+  operatingSignals: {
+    windowLabel: string
+    managerExitConcentration: Array<{
+      managerId: string | null
+      manager: string
+      department: string
+      activeTeamSize: number
+      exits: number
+      voluntaryExits: number
+      shareOfDepartmentExits: number
+    }>
+    replacementCoverage: Array<{
+      department: string
+      activeEmployees: number
+      hires: number
+      exits: number
+      openRequisitions: number
+      netMovement: number
+      averageTimeToHire: number
+      mobilityReviewCount: number
+      status: "Gap" | "Watch" | "Covered"
+    }>
+  }
   employees: EmployeeRecord[]
   directoryEmployees: EmployeeRecord[]
   executiveInsights: string[]

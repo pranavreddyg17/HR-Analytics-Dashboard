@@ -43,6 +43,13 @@
       "when": 1785641335336,
       "tag": "0005_soft_scourge",
       "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "6",
+      "when": 1785643389620,
+      "tag": "0006_youthful_robin_chapel",
+      "breakpoints": true
     }
   ]
 }
