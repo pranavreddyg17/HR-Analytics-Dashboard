@@ -89,27 +89,3 @@ export type HiringOperations = {
     source: string
   }>
 }
-
-export type HiringCandidateInput = {
-  requisitionId: string
-  fullName: string
-  email: string
-  source: string
-  ownerEmail?: string
-  notes?: string
-}
-
-export type HiringCandidateUpdate = {
-  stage: HiringCandidateStage
-  nextStep?: string
-  nextStepDueAt?: string | null
-  notes?: string
-  rejectedReason?: string
-}
-
-export type HiringRequisitionUpdate = {
-  action: "follow_up" | "close"
-  nextAction?: string
-  dueDate?: string
-  note?: string
-}

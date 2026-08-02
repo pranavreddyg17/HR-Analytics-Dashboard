@@ -24,23 +24,3 @@ class PredictionRequest(BaseModel):
         if not value:
             raise ValueError("must not be empty")
         return value
-
-
-class ChatRequest(BaseModel):
-    model_config = ConfigDict(extra="forbid")
-
-    message: str = Field(min_length=1, max_length=2000)
-
-
-class ActionUpdateRequest(BaseModel):
-    model_config = ConfigDict(extra="forbid")
-
-    status: str
-
-    @field_validator("status")
-    @classmethod
-    def valid_status(cls, value: str) -> str:
-        allowed = {"pending", "running", "completed", "needs_approval", "dismissed"}
-        if value not in allowed:
-            raise ValueError(f"status must be one of: {', '.join(sorted(allowed))}")
-        return value

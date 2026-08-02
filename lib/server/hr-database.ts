@@ -4,7 +4,7 @@ import { generateCorrelatedDemoData, type CorrelatedDemoData } from "@/lib/serve
 import { getEmployees, getModelMetadata } from "@/lib/server/runtime"
 import { hrDomains, importFields, type HrDomain } from "@/lib/hr-types"
 
-export type Statement = {
+type Statement = {
   bind(...values: unknown[]): Statement
   run(): Promise<{ success?: boolean }>
   all<T>(): Promise<{ results?: T[] }>
@@ -61,6 +61,8 @@ const createStatements = [
   "CREATE INDEX IF NOT EXISTS ai_conversation_messages_conversation_position_idx ON ai_conversation_messages(conversation_id, position)",
   "CREATE TABLE IF NOT EXISTS app_users (email TEXT PRIMARY KEY, display_name TEXT NOT NULL DEFAULT '', role TEXT NOT NULL DEFAULT 'viewer', status TEXT NOT NULL DEFAULT 'active', invited_by TEXT NOT NULL, created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP, updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP, last_login_at TEXT)",
   "CREATE TABLE IF NOT EXISTS access_audit (id TEXT PRIMARY KEY, actor_email TEXT NOT NULL, action TEXT NOT NULL, target_email TEXT NOT NULL, details_json TEXT, created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP)",
+  "CREATE INDEX IF NOT EXISTS access_audit_created_idx ON access_audit(created_at)",
+  "CREATE INDEX IF NOT EXISTS access_audit_target_idx ON access_audit(target_email)",
   "PRAGMA optimize",
 ]
 
@@ -80,11 +82,11 @@ function correlatedDemo(): CorrelatedDemoData {
   return cachedDemo
 }
 
-export function generateDemoDataset(): Dataset {
+function generateDemoDataset(): Dataset {
   return correlatedDemo().dataset
 }
 
-export function generateDemoModelProfiles() {
+function generateDemoModelProfiles() {
   return correlatedDemo().modelProfiles
 }
 
@@ -784,8 +786,4 @@ export async function readAttritionModelProfiles(): Promise<Array<Record<string,
   if (!database) return generateDemoModelProfiles()
   const result = await database.prepare("SELECT * FROM attrition_model_profiles ORDER BY risk_score DESC LIMIT 10000").all<Record<string, unknown>>()
   return result.results ?? []
-}
-
-export function getDomainTable(domain: HrDomain): string {
-  return tableByDomain[domain]
 }

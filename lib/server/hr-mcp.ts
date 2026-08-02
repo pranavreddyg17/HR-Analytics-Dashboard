@@ -125,7 +125,7 @@ async function employeePromotionContext(employeeIds: string[]) {
   })
 }
 
-export const mcpToolCatalog = [
+const mcpToolCatalog = [
   {
     name: "workforce_overview",
     title: "Workforce overview",

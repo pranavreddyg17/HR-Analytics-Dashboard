@@ -20,7 +20,7 @@ const calendarScopes = new Set([
   "https://www.googleapis.com/auth/calendar",
 ])
 
-export const { handlers, auth, signIn, signOut } = NextAuth({
+export const { handlers, auth } = NextAuth({
   providers: [
     Credentials({
       id: "google-id-token",

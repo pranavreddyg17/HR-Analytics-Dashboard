@@ -1,6 +1,6 @@
 export type RiskLevel = "high" | "medium" | "low"
 
-export type Kpi = {
+type Kpi = {
   label: string
   value: string
   delta: number
@@ -8,7 +8,7 @@ export type Kpi = {
   positiveIsGood: boolean
 }
 
-export type TrendPoint = {
+type TrendPoint = {
   month: string
   actual: number | null
   predicted: number
@@ -16,7 +16,7 @@ export type TrendPoint = {
   count?: number
 }
 
-export type DeptRisk = {
+type DeptRisk = {
   department: string
   headcount: number
   attrition: number
@@ -24,24 +24,24 @@ export type DeptRisk = {
   riskScore: number
 }
 
-export type LeaveReason = {
+type LeaveReason = {
   reason: string
   share: number
   trend: "up" | "down" | "flat"
 }
 
-export type Feature = {
+type Feature = {
   feature: string
   importance: number
 }
 
-export type ModelMetric = {
+type ModelMetric = {
   label: string
   value: string
   hint: string
 }
 
-export type RiskBucket = {
+type RiskBucket = {
   band: string
   count: number
   level: RiskLevel
@@ -69,18 +69,6 @@ export type Employee = {
   observedAttrition: string
 }
 
-export type AgentActionStatus = "pending" | "running" | "completed" | "needs_approval" | "dismissed"
-
-export type AgentAction = {
-  id: string
-  title: string
-  detail: string
-  agent: string
-  impact: string
-  status: AgentActionStatus
-  confidence: number
-}
-
 export type DashboardData = {
   dailyBrief: string
   kpis: Kpi[]
@@ -102,16 +90,7 @@ export type EmployeesResponse = {
   items: Employee[]
 }
 
-export type ActionsResponse = {
-  items: AgentAction[]
-  stats: {
-    actions: number
-    awaitingApproval: number
-    completed: number
-  }
-}
-
-export type NumericRange = {
+type NumericRange = {
   min: number
   max: number
   median: number

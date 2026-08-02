@@ -71,6 +71,13 @@
       "when": 1785699794119,
       "tag": "0009_wooden_zarek",
       "breakpoints": true
+    },
+    {
+      "idx": 10,
+      "version": "6",
+      "when": 1785708749823,
+      "tag": "0010_hard_sunfire",
+      "breakpoints": true
     }
   ]
 }

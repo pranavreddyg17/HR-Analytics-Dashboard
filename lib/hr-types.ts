@@ -1,7 +1,7 @@
 export const hrDomains = ["employees", "hiring", "attrition", "leave", "training", "promotions"] as const
 
 export type HrDomain = (typeof hrDomains)[number]
-export type TrendPeriod = "month" | "quarter" | "year"
+type TrendPeriod = "month" | "quarter" | "year"
 
 export type HrFilters = {
   from?: string

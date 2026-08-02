@@ -20,18 +20,7 @@ def main() -> None:
     categorical_pipeline = preprocessor.named_transformers_["categorical"]
     one_hot = categorical_pipeline.named_steps["onehot"]
 
-    actions = runtime.actions()
-    default_statuses = {
-        "A-01": "needs_approval",
-        "A-02": "pending",
-        "A-03": "pending",
-        "A-04": "completed",
-    }
-    for action in actions:
-        action["status"] = default_statuses[action["id"]]
-
     data = {
-        "brand": "LaidbackHR.AI",
         "sourceSha256": hashlib.sha256(runtime.data.to_csv(index=False).encode("utf-8")).hexdigest(),
         "metadata": runtime.metadata,
         "schema": {
@@ -42,18 +31,14 @@ def main() -> None:
         },
         "dashboard": runtime.dashboard(),
         "employees": runtime.employees(),
-        "actions": actions,
         "dataDictionary": runtime.data_dictionary(),
         "predictionModel": {
             "numericColumns": runtime.metadata["numeric_columns"],
             "categoricalColumns": runtime.metadata["categorical_columns"],
-            "featureNames": preprocessor.get_feature_names_out().tolist(),
             "coefficients": classifier.coef_[0].tolist(),
             "intercept": float(classifier.intercept_[0]),
-            "numericMedians": numeric_pipeline.named_steps["imputer"].statistics_.tolist(),
             "numericMeans": numeric_pipeline.named_steps["scaler"].mean_.tolist(),
             "numericScales": numeric_pipeline.named_steps["scaler"].scale_.tolist(),
-            "categoricalModes": categorical_pipeline.named_steps["imputer"].statistics_.tolist(),
             "categoricalValues": [values.tolist() for values in one_hot.categories_],
         },
     }

@@ -1,9 +1,9 @@
 import { ensureHrDatabase, getHrDatabase, type Database } from "@/lib/server/hr-database"
 
-export const roles = ["admin", "hr", "manager", "viewer"] as const
+const roles = ["admin", "hr", "manager", "viewer"] as const
 export type AppRole = (typeof roles)[number]
 export type AccessUser = { email: string; display_name: string; role: AppRole; status: "active" | "disabled"; created_at: string; updated_at: string; last_login_at: string | null }
-export const ownerEmail = "pranavreddyg17@gmail.com"
+const ownerEmail = "pranavreddyg17@gmail.com"
 
 function normalizedEmail(value: string) { return value.trim().toLowerCase() }
 function validRole(value: string): value is AppRole { return roles.includes(value as AppRole) }

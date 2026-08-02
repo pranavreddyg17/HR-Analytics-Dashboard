@@ -304,15 +304,6 @@
   padding: 20px 24px 40px;
 }
 
-.page-stack {
-  display: flex;
-  width: 100%;
-  max-width: 1520px;
-  margin-inline: auto;
-  flex-direction: column;
-  gap: 20px;
-}
-
 .workspace-page {
   display: flex;
   width: 100%;
@@ -431,32 +422,6 @@
   .workspace-metric:first-child {
     border-top: 0;
   }
-}
-
-.eyebrow {
-  color: var(--primary);
-  font-size: 12px;
-  font-weight: 600;
-  line-height: 16px;
-  letter-spacing: 0;
-}
-
-.page-title {
-  margin-top: 4px;
-  font-family: inherit;
-  font-size: 24px;
-  font-weight: 600;
-  line-height: 32px;
-  letter-spacing: 0;
-}
-
-.page-description {
-  max-width: 720px;
-  margin-top: 10px;
-  color: var(--muted-foreground);
-  font-size: 13px;
-  font-weight: 400;
-  line-height: 20px;
 }
 
 [data-slot="card"] {
@@ -585,7 +550,6 @@ aside .brand-logo__ai {
   color: #ffffff;
 }
 
-.sidebar-icon-button,
 .topbar-icon-button {
   position: relative;
   display: inline-flex;
@@ -600,32 +564,10 @@ aside .brand-logo__ai {
   transition: color 160ms ease, background 160ms ease, border-color 160ms ease;
 }
 
-.sidebar-icon-button:hover,
 .topbar-icon-button:hover {
   color: var(--foreground);
   background: #f7f9fb;
   border-color: #b9c7d4;
-}
-
-.sidebar-collapse-button {
-  display: flex;
-  width: 100%;
-  min-height: 34px;
-  align-items: center;
-  gap: 8px;
-  margin-top: 8px;
-  padding-inline: 9px;
-  border-radius: 6px;
-  color: #92abc0;
-  font-size: 11px;
-  font-weight: 600;
-  line-height: 16px;
-  transition: color 180ms ease, background 180ms ease;
-}
-
-.sidebar-collapse-button:hover {
-  color: #ffffff;
-  background: var(--sidebar-accent);
 }
 
 .avatar-soft {
@@ -700,17 +642,6 @@ aside .brand-logo__ai {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-}
-
-.notification-dot {
-  position: absolute;
-  top: 7px;
-  right: 7px;
-  width: 6px;
-  height: 6px;
-  border: 1.5px solid #fff;
-  border-radius: 999px;
-  background: #c55353;
 }
 
 .user-menu {
@@ -991,15 +922,6 @@ textarea:focus {
     color: var(--primary);
     border-color: rgb(20 106 163 / 0.25);
     background: #e7f1f8;
-  }
-
-  .mobile-more-link__icon {
-    display: flex;
-    width: 34px;
-    height: 34px;
-    align-items: center;
-    justify-content: center;
-    color: var(--muted-foreground);
   }
 
   .command-panel {

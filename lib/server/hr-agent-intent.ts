@@ -1,8 +1,8 @@
 import type { HrFilters } from "@/lib/hr-types"
 
-export type HrToolName = "workforce_overview" | "compare_departments" | "analyze_attrition_signals" | "review_people_operations" | "find_employee_records"
+type HrToolName = "workforce_overview" | "compare_departments" | "analyze_attrition_signals" | "review_people_operations" | "find_employee_records"
 
-export type StoredToolContext = {
+type StoredToolContext = {
   tool: string
   status: string
   input?: Record<string, unknown>
@@ -18,7 +18,7 @@ export type AgentHistoryMessage = {
   tools?: StoredToolContext[]
 }
 
-export type PlanPurpose =
+type PlanPurpose =
   | "workforce_summary"
   | "manager_concentration"
   | "replacement_coverage"
@@ -48,7 +48,7 @@ type Dimensions = {
   locations: string[]
 }
 
-export type ResolvedHrIntent = {
+type ResolvedHrIntent = {
   plans: ToolPlan[]
   inScope: boolean
   isFollowUp: boolean

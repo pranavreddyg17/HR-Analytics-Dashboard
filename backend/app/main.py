@@ -3,10 +3,9 @@ from __future__ import annotations
 from fastapi import Depends, FastAPI, HTTPException, Query
 from fastapi.middleware.cors import CORSMiddleware
 
-from .ai_service import AnalyticsAssistant
 from .config import settings
-from .schemas import ActionUpdateRequest, ChatRequest, PredictionRequest
-from .services import ModelRuntime, action_store, get_runtime
+from .schemas import PredictionRequest
+from .services import ModelRuntime, get_runtime
 
 app = FastAPI(
     title=settings.app_name,
@@ -84,37 +83,6 @@ def employees(
             if needle in f"{row['id']} {row['name']} {row['department']} {row['role']}".lower()
         ]
     return {"total": len(rows), "items": rows[offset : offset + limit]}
-
-
-@app.get(f"{settings.api_prefix}/actions")
-def actions(runtime: ModelRuntime = Depends(get_runtime)) -> dict[str, object]:
-    items = runtime.actions()
-    return {
-        "items": items,
-        "stats": {
-            "actions": len(items),
-            "awaitingApproval": sum(item["status"] == "needs_approval" for item in items),
-            "completed": sum(item["status"] == "completed" for item in items),
-        },
-    }
-
-
-@app.post(f"{settings.api_prefix}/actions/{{action_id}}")
-def update_action(
-    action_id: str,
-    payload: ActionUpdateRequest,
-    runtime: ModelRuntime = Depends(get_runtime),
-) -> dict[str, object]:
-    valid_ids = {item["id"] for item in runtime.actions()} | {"A-01", "A-02", "A-03", "A-04"}
-    if action_id not in valid_ids:
-        raise HTTPException(status_code=404, detail="Action not found")
-    action_store.set(action_id, payload.status)
-    return {"id": action_id, "status": payload.status}
-
-
-@app.post(f"{settings.api_prefix}/chat")
-async def chat(payload: ChatRequest, runtime: ModelRuntime = Depends(get_runtime)) -> dict[str, object]:
-    return await AnalyticsAssistant(runtime).answer(payload.message)
 
 
 @app.get(f"{settings.api_prefix}/data-dictionary")

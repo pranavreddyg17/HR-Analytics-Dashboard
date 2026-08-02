@@ -1,7 +1,7 @@
 "use client"
 
 import Link from "next/link"
-import { useCallback, useEffect, useMemo, useState } from "react"
+import { useCallback, useEffect, useState } from "react"
 import { AnimatePresence, motion, useReducedMotion } from "motion/react"
 import {
   Archive,
@@ -14,7 +14,6 @@ import {
   History,
   Mail,
   Pencil,
-  Phone,
   RefreshCcw,
   ShieldAlert,
   TrendingUp,

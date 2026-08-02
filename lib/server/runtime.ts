@@ -1,7 +1,6 @@
 import runtimeJson from "./runtime-data.json"
 
 import type {
-  AgentAction,
   DashboardData,
   DataDictionary,
   Employee,
@@ -17,24 +16,19 @@ import type {
 type PredictionModel = {
   numericColumns: Array<keyof PredictionInput>
   categoricalColumns: Array<keyof PredictionInput>
-  featureNames: string[]
   coefficients: number[]
   intercept: number
-  numericMedians: number[]
   numericMeans: number[]
   numericScales: number[]
-  categoricalModes: string[]
   categoricalValues: string[][]
 }
 
 type RuntimeData = {
-  brand: string
   sourceSha256: string
   metadata: ModelMetadata
   schema: PredictionSchema
   dashboard: DashboardData
   employees: Employee[]
-  actions: AgentAction[]
   dataDictionary: DataDictionary
   predictionModel: PredictionModel
 }
@@ -68,10 +62,6 @@ export function getPredictionSchema(): PredictionSchema {
 
 export function getDataDictionary(): DataDictionary {
   return runtime.dataDictionary
-}
-
-export function getActionTemplates(): AgentAction[] {
-  return runtime.actions
 }
 
 export function getHealth() {
@@ -246,32 +236,4 @@ export function predict(value: unknown): PredictionResult {
     recommendation: recommendation(topDrivers[0].feature as keyof PredictionInput),
     disclaimer: "This is a statistical estimate for human review. Do not use it as the sole basis for an employment decision.",
   }
-}
-
-export function answerAnalytics(message: unknown): { answer: string; provider: string } {
-  if (typeof message !== "string" || !message.trim() || message.length > 2000) {
-    throw new RequestValidationError("message must contain between 1 and 2,000 characters.")
-  }
-  const text = message.toLowerCase()
-  const dashboard = runtime.dashboard
-  const hotspot = dashboard.departmentRisk[0]
-  const metrics = Object.fromEntries(dashboard.modelMetrics.map((item) => [item.label, item.value]))
-  const drivers = dashboard.leaveReasons
-    .slice(0, 4)
-    .map((item) => `${item.reason} (${item.share.toFixed(1)}%)`)
-    .join(", ")
-  let answer: string
-
-  if (text.includes("department") || text.includes("highest") || text.includes("sales")) {
-    answer = `${hotspot.department} has the highest average predicted risk at ${hotspot.riskScore.toFixed(1)}%. It contains ${hotspot.headcount} historical records, ${hotspot.atRisk} above the review threshold, and an observed attrition rate of ${hotspot.attrition.toFixed(1)}%.`
-  } else if (["model", "accuracy", "auc", "performance"].some((term) => text.includes(term))) {
-    answer = `The deployed model is ${metrics.Model}. Its 5-fold out-of-fold ROC-AUC is ${metrics["ROC-AUC"]}, precision is ${metrics.Precision}, and recall is ${metrics.Recall}. Age and marital status are excluded from training. The model is a review aid, not an automated employment decision system.`
-  } else if (["driver", "why", "reason"].some((term) => text.includes(term))) {
-    answer = `The strongest global model signals are ${drivers}. These are associations learned from the historical dataset, not proven causes of attrition.`
-  } else if (["risk", "summary", "brief"].some((term) => text.includes(term))) {
-    answer = dashboard.dailyBrief + " Model outputs require human review."
-  } else {
-    answer = dashboard.dailyBrief + " Ask about the highest-risk department, model performance, global risk drivers, or the review threshold."
-  }
-  return { answer, provider: "grounded-analytics-engine" }
 }

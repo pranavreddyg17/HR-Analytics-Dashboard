@@ -4,7 +4,7 @@ LaidbackHR.AI is a people-operations workspace for employee records, hiring, tim
 
 It deliberately distinguishes two kinds of data:
 
-- Live HR records stored in D1 and managed through People, Inbox, Data Hub, and Insights.
+- Live HR records stored in D1 and managed through People, Inbox, Import / export data, and Insights.
 - A correlated synthetic workforce generated from the supplied 1,470-row IBM sample. Stable demo employee IDs join model profiles to hiring, exits, leave, training, promotions, and reporting lines.
 
 ## Production architecture
@@ -29,12 +29,12 @@ The deployed application is a single Cloudflare-compatible web runtime:
 - `/people/{id}` — profile, reporting line, time off, growth, and attributable activity
 - `/inbox` — leave approvals plus hiring, training, and human-review follow-ups
 - `/hiring` — requisition approvals, accountable recruiting work, and a persisted candidate pipeline
-- `/time-off` — leave decisions, upcoming absences, and department coverage
-- `/learning` — training assignment, completion tracking, and compliance follow-up
+- `/leaves` — leave decisions, upcoming absences, and department coverage
+- `/courses` — training assignment, completion tracking, and compliance follow-up
 - `/insights` — employee, hiring, attrition, leave, training, promotion, and executive analytics
 - `/attrition` and `/risk-review` — governed historical model diagnostics and clearly labelled synthetic employee review rows
-- `/ai-agents` — grounded LangChain + MCP copilot with a visible tool trace
-- `/data` — imports, templates, data readiness, and Power BI feeds
+- `/assistant` — grounded LangChain + MCP copilot with a visible tool trace
+- `/imports` — imports, templates, data readiness, and Power BI feeds
 
 ## Data truth
 
@@ -54,7 +54,7 @@ pnpm install
 pnpm dev
 ```
 
-Open `http://localhost:3000`.
+Open the local URL printed by the development server.
 
 Copy `.env.local.example` to `.env.local` for local authentication and optional model-synthesis settings. The web application uses its same-origin API; the FastAPI service is retained only as the model-training and reference implementation.
 

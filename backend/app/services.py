@@ -2,10 +2,8 @@ from __future__ import annotations
 
 import json
 import math
-import sqlite3
 from dataclasses import dataclass
 from functools import lru_cache
-from pathlib import Path
 from typing import Any
 
 import joblib
@@ -335,56 +333,6 @@ class ModelRuntime:
             "datasetNotes": self.metadata["notes"],
         }
 
-    def actions(self) -> list[dict[str, Any]]:
-        dashboard = self.dashboard()
-        department = dashboard["departmentRisk"][0]
-        high = [employee for employee in self.employees() if employee["riskLevel"] == "high"]
-        low_satisfaction = int((self.scored["JobSatisfaction"] <= 2).sum())
-        poor_balance = int((self.scored["WorkLifeBalance"] <= 2).sum())
-        base = [
-            {
-                "id": "A-01",
-                "title": f"Review top {min(25, len(high))} model-flagged records",
-                "detail": "Prepare human-reviewed stay-interview briefs using the strongest model drivers.",
-                "agent": "Retention Review",
-                "impact": f"Covers {min(25, len(high))} of {len(high)} high-risk records",
-                "status": "needs_approval",
-                "confidence": round(self.metadata["metrics"]["roc_auc"] * 100),
-            },
-            {
-                "id": "A-02",
-                "title": f"Investigate {department['department']} hotspot",
-                "detail": f"Compare satisfaction, income, commute, and tenure distributions for this {department['headcount']}-record cohort.",
-                "agent": "Cohort Analysis",
-                "impact": f"{department['atRisk']} records above threshold",
-                "status": "pending",
-                "confidence": round(self.metadata["metrics"]["roc_auc"] * 100),
-            },
-            {
-                "id": "A-03",
-                "title": "Create low-satisfaction follow-up cohort",
-                "detail": "Generate a review list for records with job satisfaction of 1 or 2 out of 4.",
-                "agent": "Experience Review",
-                "impact": f"{low_satisfaction} records qualify",
-                "status": "pending",
-                "confidence": 100,
-            },
-            {
-                "id": "A-04",
-                "title": "Review work-life balance risk signals",
-                "detail": "Compare attrition outcomes for records with work-life balance of 1 or 2.",
-                "agent": "Workload Analysis",
-                "impact": f"{poor_balance} records qualify",
-                "status": "completed",
-                "confidence": 100,
-            },
-        ]
-        statuses = action_store.get_all()
-        for action in base:
-            if action["id"] in statuses:
-                action["status"] = statuses[action["id"]]
-        return [action for action in base if action["status"] != "dismissed"]
-
     def data_dictionary(self) -> dict[str, Any]:
         definitions = {
             "Age": "Employee age in years. Retained for descriptive analysis but excluded from the model.",
@@ -417,36 +365,6 @@ class ModelRuntime:
             "numericRanges": self.metadata["numeric_ranges"],
             "notes": self.metadata["notes"],
         }
-
-
-class ActionStore:
-    def __init__(self, path: Path) -> None:
-        path.parent.mkdir(parents=True, exist_ok=True)
-        self.path = path
-        with self._connect() as connection:
-            connection.execute(
-                "CREATE TABLE IF NOT EXISTS action_status (action_id TEXT PRIMARY KEY, status TEXT NOT NULL)"
-            )
-
-    def _connect(self) -> sqlite3.Connection:
-        return sqlite3.connect(self.path)
-
-    def get_all(self) -> dict[str, str]:
-        with self._connect() as connection:
-            rows = connection.execute("SELECT action_id, status FROM action_status").fetchall()
-        return {action_id: status for action_id, status in rows}
-
-    def set(self, action_id: str, status: str) -> None:
-        with self._connect() as connection:
-            connection.execute(
-                "INSERT INTO action_status(action_id, status) VALUES (?, ?) "
-                "ON CONFLICT(action_id) DO UPDATE SET status=excluded.status",
-                (action_id, status),
-            )
-            connection.commit()
-
-
-action_store = ActionStore(settings.database_path)
 
 
 @lru_cache(maxsize=1)

@@ -1,12 +1,6 @@
 import { sql } from "drizzle-orm"
 import { index, integer, real, sqliteTable, text, uniqueIndex } from "drizzle-orm/sqlite-core"
 
-export const actionStatus = sqliteTable("action_status", {
-  actionId: text("action_id").primaryKey(),
-  status: text("status").notNull(),
-  updatedAt: text("updated_at").notNull().default(sql`CURRENT_TIMESTAMP`),
-})
-
 export const employees = sqliteTable("employees", {
   employeeId: text("employee_id").primaryKey(),
   firstName: text("first_name").notNull().default(""),
@@ -279,4 +273,27 @@ export const aiConversationMessages = sqliteTable("ai_conversation_messages", {
 }, (table) => [
   index("ai_conversation_messages_conversation_created_idx").on(table.conversationId, table.createdAt),
   index("ai_conversation_messages_conversation_position_idx").on(table.conversationId, table.position),
+])
+
+export const appUsers = sqliteTable("app_users", {
+  email: text("email").primaryKey(),
+  displayName: text("display_name").notNull().default(""),
+  role: text("role").notNull().default("viewer"),
+  status: text("status").notNull().default("active"),
+  invitedBy: text("invited_by").notNull(),
+  createdAt: text("created_at").notNull().default(sql`CURRENT_TIMESTAMP`),
+  updatedAt: text("updated_at").notNull().default(sql`CURRENT_TIMESTAMP`),
+  lastLoginAt: text("last_login_at"),
+})
+
+export const accessAudit = sqliteTable("access_audit", {
+  id: text("id").primaryKey(),
+  actorEmail: text("actor_email").notNull(),
+  action: text("action").notNull(),
+  targetEmail: text("target_email").notNull(),
+  detailsJson: text("details_json"),
+  createdAt: text("created_at").notNull().default(sql`CURRENT_TIMESTAMP`),
+}, (table) => [
+  index("access_audit_created_idx").on(table.createdAt),
+  index("access_audit_target_idx").on(table.targetEmail),
 ])

@@ -18,10 +18,6 @@ class Settings:
         ).split(",")
         if origin.strip()
     )
-    azure_openai_endpoint: str | None = os.getenv("AZURE_OPENAI_ENDPOINT")
-    azure_openai_api_key: str | None = os.getenv("AZURE_OPENAI_API_KEY")
-    azure_openai_deployment: str | None = os.getenv("AZURE_OPENAI_DEPLOYMENT")
-
     @property
     def data_path(self) -> Path:
         return self.root_dir / "data" / "attrition.csv"
@@ -33,10 +29,5 @@ class Settings:
     @property
     def metadata_path(self) -> Path:
         return self.root_dir / "model" / "model_metadata.json"
-
-    @property
-    def database_path(self) -> Path:
-        return self.root_dir / "runtime" / "actions.db"
-
 
 settings = Settings()

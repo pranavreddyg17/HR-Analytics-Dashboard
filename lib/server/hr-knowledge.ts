@@ -53,7 +53,7 @@ function chunksFromMarkdown(source: string, markdown: string): KnowledgeChunk[] 
 
 const knowledgeChunks = chunksFromMarkdown("HR workspace context", workspaceContextMarkdown)
 
-export function retrieveHrContext(query: string, limit = 3): KnowledgeMatch[] {
+function retrieveHrContext(query: string, limit = 3): KnowledgeMatch[] {
   const queryTerms = terms(query)
   const ranked = knowledgeChunks
     .map((chunk) => {

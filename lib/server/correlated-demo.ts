@@ -4,7 +4,7 @@ import type { Employee as ScoredEmployee } from "@/lib/types"
 type DemoRow = Record<string, string | number | null>
 type DemoDataset = Record<HrDomain, DemoRow[]>
 
-export type DemoModelProfile = {
+type DemoModelProfile = {
   employee_id: string
   observed_attrition: "Yes" | "No"
   risk_score: number
@@ -126,7 +126,6 @@ function roleTraining(department: string): { program: string; hours: number } {
 }
 
 export function generateCorrelatedDemoData(sourceEmployees: ScoredEmployee[], modelVersion: string): CorrelatedDemoData {
-  const modelById = new Map(sourceEmployees.map((employee) => [employee.id, employee]))
   const internal = sourceEmployees.map((employee) => {
     const seed = employeeNumber(employee.id)
     const exited = employee.observedAttrition === "Yes"
@@ -253,7 +252,6 @@ export function generateCorrelatedDemoData(sourceEmployees: ScoredEmployee[], mo
   const promotions: DemoRow[] = []
 
   for (const employee of internal) {
-    const row = employeeById.get(employee.source.id)!
     const recentStart = laterDate(employee.hireDate, addDays(employee.employmentEnd, -700))
     const leaveCount = Math.min(4, 1 + Math.floor(Math.max(0, employee.source.yearsAtCompany) / 4))
     for (let index = 0; index < leaveCount; index += 1) {
