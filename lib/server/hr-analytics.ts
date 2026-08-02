@@ -158,6 +158,20 @@ export async function getWorkforceAnalytics(filters: HrFilters = {}): Promise<Wo
   const attritionRate = percent(attrition.length, activeEmployees.length + attrition.length)
   const promotedIds = new Set(allPromotions.filter(isIncluded).map((promotion) => promotion.employee_id))
   const withoutPromotion = activeEmployees.filter((employee) => employee.tenure_years >= 3 && !promotedIds.has(employee.employee_id)).length
+  const mobilityReview = activeEmployees
+    .filter((employee) => employee.tenure_years >= 3 && !promotedIds.has(employee.employee_id))
+    .sort((left, right) => right.tenure_years - left.tenure_years || left.employee_id.localeCompare(right.employee_id))
+    .slice(0, 100)
+    .map((employee) => ({
+      employeeId: employee.employee_id,
+      name: [employee.preferred_name || employee.first_name, employee.last_name].filter(Boolean).join(" ").trim() || employee.employee_id,
+      department: employee.department,
+      jobTitle: employee.job_title,
+      location: employee.location,
+      employmentStatus: employee.employment_status,
+      tenureYears: employee.tenure_years,
+      dataSource: employee.data_source,
+    }))
   const exitByEmployee = new Map(attrition.map((record) => [record.employee_id, record]))
   const joinedModelRecords: AttritionEmployeeRecord[] = allModelProfiles
     .filter(isIncluded)
@@ -337,6 +351,7 @@ export async function getWorkforceAnalytics(filters: HrFilters = {}): Promise<Wo
       involuntary: attrition.filter((record) => record.exit_type.toLowerCase() === "involuntary").length,
       trend: trend(attrition, (record) => record.exit_date, normalizedFilters.period),
       byDepartment: attritionByDepartment,
+      byExitReason: groupBy(attrition, (record) => record.exit_reason),
       byRole: groupBy(attrition, (record) => employeeMap.get(record.employee_id)?.job_title ?? "Unknown"),
       byTenure: groupBy(attrition, (record) => record.tenure_years < 1 ? "< 1 year" : record.tenure_years < 3 ? "1–2 years" : record.tenure_years < 5 ? "3–4 years" : "5+ years"),
       highRiskEmployees,
@@ -376,6 +391,7 @@ export async function getWorkforceAnalytics(filters: HrFilters = {}): Promise<Wo
       withoutPromotionOver36Months: withoutPromotion,
       trend: trend(promotions, (record) => record.promotion_date, normalizedFilters.period),
       byDepartment: promotionByDepartment,
+      mobilityReview,
       rows: promotions.slice(0, 250),
     },
     operatingSignals: {

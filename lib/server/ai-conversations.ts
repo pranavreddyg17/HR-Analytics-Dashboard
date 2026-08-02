@@ -5,7 +5,7 @@ export type ConversationMessage = {
   id: string
   role: "user" | "assistant"
   content: string
-  tools?: Array<{ tool: string; status: string }>
+  tools?: Array<{ tool: string; status: string; input?: Record<string, unknown> }>
   context?: Array<{ source: string; section: string }>
   dataMode?: string
   provider?: string
@@ -109,7 +109,7 @@ export async function getConversation(actor: RequestActor, conversationId: strin
       id: row.id,
       role: row.role,
       content: row.content,
-      tools: parseArray<{ tool: string; status: string }>(row.tools_json),
+      tools: parseArray<{ tool: string; status: string; input?: Record<string, unknown> }>(row.tools_json),
       context: parseArray<{ source: string; section: string }>(row.context_json),
       dataMode: row.data_mode ?? undefined,
       provider: row.provider ?? undefined,
@@ -122,13 +122,13 @@ export async function getConversation(actor: RequestActor, conversationId: strin
   }
 }
 
-export async function getConversationContext(actor: RequestActor, conversationId: string): Promise<Array<{ role: "user" | "assistant"; content: string }>> {
+export async function getConversationContext(actor: RequestActor, conversationId: string): Promise<Array<{ role: "user" | "assistant"; content: string; tools?: Array<{ tool: string; status: string; input?: Record<string, unknown> }> }>> {
   const { messages } = await getConversation(actor, conversationId)
   let characters = 0
-  const selected: Array<{ role: "user" | "assistant"; content: string }> = []
+  const selected: Array<{ role: "user" | "assistant"; content: string; tools?: Array<{ tool: string; status: string; input?: Record<string, unknown> }> }> = []
   for (const message of messages.slice().reverse()) {
     if (selected.length >= 12 || characters + message.content.length > 12_000) break
-    selected.unshift({ role: message.role, content: message.content })
+    selected.unshift({ role: message.role, content: message.content, tools: message.tools })
     characters += message.content.length
   }
   return selected

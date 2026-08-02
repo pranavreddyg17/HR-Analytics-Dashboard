@@ -205,6 +205,7 @@ export type WorkforceAnalytics = {
     involuntary: number
     trend: TimePoint[]
     byDepartment: BreakdownPoint[]
+    byExitReason: BreakdownPoint[]
     byRole: BreakdownPoint[]
     byTenure: BreakdownPoint[]
     highRiskEmployees: Array<{ id: string; department: string; role: string; riskScore: number; topDriver: string }>
@@ -244,6 +245,16 @@ export type WorkforceAnalytics = {
     withoutPromotionOver36Months: number
     trend: TimePoint[]
     byDepartment: BreakdownPoint[]
+    mobilityReview: Array<{
+      employeeId: string
+      name: string
+      department: string
+      jobTitle: string
+      location: string
+      employmentStatus: string
+      tenureYears: number
+      dataSource: string
+    }>
     rows: PromotionRecord[]
   }
   operatingSignals: {

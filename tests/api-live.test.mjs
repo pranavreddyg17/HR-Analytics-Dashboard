@@ -117,7 +117,7 @@ test("LangChain agent invokes MCP tools and returns its trace", async () => {
     body: JSON.stringify({ message: "Which department has the highest predicted risk?" }),
   })
   assert.equal(response.status, 200)
-  assert.equal(body.provider, "langchain-mcp-rag-deterministic")
+  assert.equal(body.provider, "langchain-mcp-deterministic-orchestrator")
   assert.match(body.conversationId, /^CONV-/)
   assert.ok(body.tools.some((trace) => trace.tool === "analyze_attrition_signals" && trace.status === "completed"))
   assert.match(body.answer, /recorded exits/)
@@ -151,6 +151,82 @@ test("analytics assistant persists conversation history and uses it for follow-u
   assert.ok(listed.body.conversations.some((conversation) => conversation.id === first.body.conversationId && conversation.messageCount === 4))
 })
 
+test("analytics assistant resolves focused follow-ups without topic contamination", async () => {
+  const first = await json("/api/v1/chat", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ message: "Top 5 employees with attrition risk" }),
+  })
+  assert.equal(first.response.status, 200)
+  assert.equal(first.body.tools.length, 1)
+  assert.equal(first.body.tools[0].tool, "analyze_attrition_signals")
+  assert.equal(first.body.tools[0].input.recordScope, "high_risk")
+  assert.equal(first.body.tools[0].input.limit, 5)
+  assert.equal((first.body.answer.match(/Demo Employee/g) ?? []).length, 5)
+
+  const limited = await json("/api/v1/chat", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ message: "Just top 5", conversationId: first.body.conversationId }),
+  })
+  assert.equal(limited.response.status, 200)
+  assert.equal(limited.body.tools.length, 1)
+  assert.equal(limited.body.tools[0].input.recordScope, "high_risk")
+  assert.equal(limited.body.tools[0].input.limit, 5)
+  assert.equal((limited.body.answer.match(/Demo Employee/g) ?? []).length, 5)
+
+  const explanation = await json("/api/v1/chat", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ message: "Give me some analysis on why", conversationId: first.body.conversationId }),
+  })
+  assert.equal(explanation.response.status, 200)
+  assert.equal(explanation.body.tools.length, 1)
+  assert.equal(explanation.body.tools[0].input.recordScope, "summary")
+  assert.match(explanation.body.answer, /Observed exit reasons/)
+  assert.match(explanation.body.answer, /Model-associated signals/)
+  assert.doesNotMatch(explanation.body.answer, /Demo Employee/)
+
+  const managers = await json("/api/v1/chat", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ message: "Where are exits concentrated by manager?", conversationId: first.body.conversationId }),
+  })
+  assert.equal(managers.response.status, 200)
+  assert.deepEqual(managers.body.tools.map((trace) => trace.tool), ["workforce_overview"])
+  assert.match(managers.body.answer, /Manager exit concentration/)
+  assert.doesNotMatch(managers.body.answer, /Historical model review/)
+
+  const summary = await json("/api/v1/chat", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ message: "Summarize the current workforce and open HR work", conversationId: first.body.conversationId }),
+  })
+  assert.equal(summary.response.status, 200)
+  assert.deepEqual(summary.body.tools.map((trace) => trace.tool), ["workforce_overview"])
+  assert.match(summary.body.answer, /Workforce summary/)
+  assert.doesNotMatch(summary.body.answer, /joined synthetic employee records/)
+
+  const replacement = await json("/api/v1/chat", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ message: "Which departments have a replacement coverage gap?", conversationId: first.body.conversationId }),
+  })
+  assert.equal(replacement.response.status, 200)
+  assert.deepEqual(replacement.body.tools.map((trace) => trace.tool), ["workforce_overview"])
+  assert.match(replacement.body.answer, /Replacement coverage/)
+
+  const mobility = await json("/api/v1/chat", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ message: "Which active employees meet the mobility review criteria?", conversationId: first.body.conversationId }),
+  })
+  assert.equal(mobility.response.status, 200)
+  assert.deepEqual(mobility.body.tools.map((trace) => trace.tool), ["review_people_operations"])
+  assert.equal(mobility.body.tools[0].input.domain, "promotions")
+  assert.match(mobility.body.answer, /Mobility review/)
+})
+
 test("analytics assistant returns employee records joined to observed attrition", async () => {
   const { response, body } = await json("/api/v1/chat", {
     method: "POST",
@@ -160,8 +236,8 @@ test("analytics assistant returns employee records joined to observed attrition"
   assert.equal(response.status, 200)
   assert.ok(body.tools.some((trace) => trace.tool === "analyze_attrition_signals" && trace.status === "completed"))
   assert.match(body.answer, /Demo Employee/)
-  assert.match(body.answer, /exited \d{4}-\d{2}-\d{2}/)
-  assert.match(body.answer, /synthetic demo profiles/)
+  assert.match(body.answer, /recorded exit \d{4}-\d{2}-\d{2}/)
+  assert.match(body.answer, /synthetic demonstration profiles/)
 })
 
 test("MCP server lists and calls the HR tools", async () => {

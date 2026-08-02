@@ -40,6 +40,25 @@ function employeeName(employee: WorkforceAnalytics["employees"][number]): string
   return [employee.preferred_name || employee.first_name, employee.last_name].filter(Boolean).join(" ").trim() || employee.employee_id
 }
 
+function normalizedRiskDriver(value: string): string {
+  if (/job satisfaction/i.test(value)) return "Job satisfaction"
+  if (/environment/i.test(value)) return "Environment satisfaction"
+  if (/work[- ]?life/i.test(value)) return "Work-life balance"
+  if (/commute|distance/i.test(value)) return "Commute distance"
+  if (/income|compensation/i.test(value)) return "Monthly income"
+  if (/prior compan|companies worked/i.test(value)) return "Prior company count"
+  if (/tenure|years at company/i.test(value)) return "Tenure"
+  if (/education/i.test(value)) return "Education profile"
+  if (/department/i.test(value)) return "Department pattern"
+  return value || "Other model signal"
+}
+
+function countLabels(values: string[]): Array<{ label: string; value: number }> {
+  const counts = new Map<string, number>()
+  for (const value of values) counts.set(value, (counts.get(value) ?? 0) + 1)
+  return [...counts.entries()].map(([label, value]) => ({ label, value })).sort((left, right) => right.value - left.value || left.label.localeCompare(right.label))
+}
+
 async function workflowSnapshot() {
   const database = await ensureHrDatabase()
   if (!database) return { openTotal: 0, byType: [], byStatus: [] }
@@ -160,11 +179,27 @@ export function createHrMcpServer(): McpServer {
     annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false },
   }, async ({ recordScope = "summary", query = "", limit = 10, ...filters }: FilterArgs & { recordScope?: "summary" | "exited" | "high_risk" | "all"; query?: string; limit?: number }) => {
     const analytics = await getWorkforceAnalytics(filters)
+    const activeModelRecords = analytics.attrition.employeeRecords.filter((record) => !/terminated/i.test(record.employmentStatus))
+    const activeHighRiskRecords = activeModelRecords.filter((record) => record.riskLevel === "high")
     const riskDistribution = {
       high: analytics.attrition.employeeRecords.filter((record) => record.riskLevel === "high").length,
       medium: analytics.attrition.employeeRecords.filter((record) => record.riskLevel === "medium").length,
       low: analytics.attrition.employeeRecords.filter((record) => record.riskLevel === "low").length,
     }
+    const riskDepartments = new Map<string, { totalRisk: number; recordCount: number; highRiskCount: number }>()
+    for (const record of activeModelRecords) {
+      const current = riskDepartments.get(record.department) ?? { totalRisk: 0, recordCount: 0, highRiskCount: 0 }
+      current.totalRisk += record.riskScore
+      current.recordCount += 1
+      if (record.riskLevel === "high") current.highRiskCount += 1
+      riskDepartments.set(record.department, current)
+    }
+    const riskByDepartment = [...riskDepartments.entries()].map(([department, values]) => ({
+      department,
+      averageRisk: Number((values.totalRisk / Math.max(1, values.recordCount)).toFixed(1)),
+      recordCount: values.recordCount,
+      highRiskCount: values.highRiskCount,
+    })).sort((left, right) => right.averageRisk - left.averageRisk || right.highRiskCount - left.highRiskCount)
     const terms = query.toLowerCase().split(/[^a-z0-9-]+/).filter((term) => term.length > 1)
     const scopedRecords = analytics.attrition.employeeRecords.filter((record) => {
       if (recordScope === "summary") return false
@@ -181,6 +216,7 @@ export function createHrMcpServer(): McpServer {
         voluntary: analytics.attrition.voluntary,
         involuntary: analytics.attrition.involuntary,
         byDepartment: analytics.attrition.byDepartment,
+        byExitReason: analytics.attrition.byExitReason,
         byTenure: analytics.attrition.byTenure,
         trend: analytics.attrition.trend,
       },
@@ -188,6 +224,9 @@ export function createHrMcpServer(): McpServer {
         totalScoredRecords: Object.values(riskDistribution).reduce((sum, count) => sum + count, 0),
         riskDistribution,
         recordsAboveReviewThreshold: riskDistribution.high,
+        activeHighRiskCount: activeHighRiskRecords.length,
+        topRiskDrivers: countLabels(activeHighRiskRecords.map((record) => normalizedRiskDriver(record.topDriver))),
+        riskByDepartment,
         scope: "The IBM validation rows are joined only to clearly labelled synthetic demo employee profiles with the same stable IDs. Imported operational employees are not assigned IBM model scores.",
       },
       recordScope,
@@ -270,21 +309,7 @@ export function createHrMcpServer(): McpServer {
       })
     }
 
-    const promotedIds = new Set(analytics.promotions.rows.map((row) => row.employee_id))
-    const mobilityReview = analytics.employees
-      .filter((employee) => employee.tenure_years >= 3 && /^active$/i.test(employee.employment_status) && !promotedIds.has(employee.employee_id))
-      .sort((left, right) => right.tenure_years - left.tenure_years || left.employee_id.localeCompare(right.employee_id))
-      .slice(0, 25)
-      .map((employee) => ({
-        employeeId: employee.employee_id,
-        name: employeeName(employee),
-        department: employee.department,
-        jobTitle: employee.job_title,
-        location: employee.location,
-        employmentStatus: employee.employment_status,
-        tenureYears: employee.tenure_years,
-        dataSource: employee.data_source,
-      }))
+    const mobilityReview = analytics.promotions.mobilityReview.slice(0, 25)
     return result({
       ...common,
       summary: {

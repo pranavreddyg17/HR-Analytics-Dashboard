@@ -24,7 +24,7 @@ export async function POST(request: Request) {
     await appendConversationMessage(actor, conversation.id, {
       role: "assistant",
       content: answer.answer,
-      tools: answer.tools.map(({ tool, status }) => ({ tool, status })),
+      tools: answer.tools.map(({ tool, status, input }) => ({ tool, status, input })),
       context: answer.context,
       dataMode: answer.dataMode,
       provider: answer.provider,
