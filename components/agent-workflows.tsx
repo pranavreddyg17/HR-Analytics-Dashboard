@@ -240,7 +240,6 @@ export function AgentWorkflows({ canPrepare }: { canPrepare: boolean }) {
                   <div className="mt-4 rounded-md bg-muted/45 p-3">
                     <p className="text-[10px] font-medium text-foreground">Evidence used</p>
                     <p className="mt-1 text-[11px] leading-5 text-muted-foreground">{plan.evidence}</p>
-                    <p className="mt-1 text-[10px] text-muted-foreground">Source: {plan.sourceMode}</p>
                   </div>
                 </div>
               </div>

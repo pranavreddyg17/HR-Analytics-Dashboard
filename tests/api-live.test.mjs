@@ -47,6 +47,29 @@ test("workforce analytics spans every requested HR domain", async () => {
   assert.deepEqual(body.status.map((item) => item.domain), ["employees", "hiring", "attrition", "leave", "training", "promotions"])
 })
 
+test("operational workspaces contain actionable software-company workflows", async () => {
+  const [inbox, workforce] = await Promise.all([
+    json("/api/v1/hr/inbox"),
+    json("/api/v1/workforce?dataMode=live"),
+  ])
+  assert.equal(inbox.response.status, 200)
+  assert.equal(workforce.response.status, 200)
+
+  const items = Array.isArray(inbox.body) ? inbox.body : inbox.body.items
+  assert.ok(items.filter((item) => item.type === "leave").length >= 6)
+  assert.ok(items.filter((item) => item.type === "hiring").length >= 5)
+  assert.ok(items.filter((item) => item.type === "training").length >= 10)
+  assert.ok(items.filter((item) => item.actionable).length >= 15)
+
+  assert.ok(workforce.body.leave.pending >= 6)
+  assert.ok(workforce.body.leave.currentlyAway.length > 0)
+  assert.ok(workforce.body.leave.upcoming.length > 0)
+  assert.ok(workforce.body.hiring.rows.some((row) => row.position === "Security Engineer"))
+  assert.ok(workforce.body.hiring.rows.some((row) => row.position === "Senior Backend Engineer"))
+  assert.ok(workforce.body.training.rows.some((row) => row.training_program === "Secure Coding Fundamentals"))
+  assert.ok(workforce.body.training.rows.some((row) => row.training_program === "Incident Response Tabletop"))
+})
+
 test("grounded data endpoints expose the real dataset", async () => {
   const [dashboard, model, schema, employees, dictionary] = await Promise.all([
     json("/api/v1/dashboard"),

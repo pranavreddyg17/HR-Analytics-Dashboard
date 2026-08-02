@@ -19,12 +19,11 @@ export default async function AiAgentsPage() {
 
   return (
     <div className="mx-auto flex w-full max-w-[1520px] flex-col gap-6 pb-10">
-      <header className="flex flex-col gap-4 border-b border-border pb-5 sm:flex-row sm:items-end sm:justify-between">
+      <header className="border-b border-border pb-5">
         <div>
           <h1 className="text-2xl font-semibold tracking-tight">AI Assistant</h1>
           <p className="mt-1 max-w-2xl text-sm text-muted-foreground">Analyze workforce records and create reviewed calendar actions.</p>
         </div>
-        <p className="text-xs text-muted-foreground">Data source: <b className="font-semibold text-foreground">{mode}</b></p>
       </header>
 
       <div>

@@ -119,10 +119,7 @@ export function SelectEmployee({ value, people, onChange }: { value: string; peo
   const filteredPeople = useMemo(() => {
     const normalizedQuery = query.trim().toLowerCase()
     return [...people]
-      .sort((left, right) => {
-        const sourceOrder = Number(left.data_source === "demo") - Number(right.data_source === "demo")
-        return sourceOrder || left.display_name.localeCompare(right.display_name)
-      })
+      .sort((left, right) => left.display_name.localeCompare(right.display_name))
       .filter((person) => !normalizedQuery || [person.display_name, person.employee_id, person.department, person.job_title, person.location]
         .some((field) => field?.toLowerCase().includes(normalizedQuery)))
   }, [people, query])
@@ -169,7 +166,7 @@ export function SelectEmployee({ value, people, onChange }: { value: string; peo
               >
                 <span className="flex size-8 shrink-0 items-center justify-center rounded-md bg-secondary text-[11px] font-semibold text-secondary-foreground">{person.initials}</span>
                 <span className="min-w-0 flex-1">
-                  <span className="flex items-center gap-2"><span className="truncate text-sm font-medium">{person.display_name}</span>{person.data_source === "demo" && <span className="shrink-0 text-[9px] font-medium text-muted-foreground">Sample</span>}</span>
+                  <span className="truncate text-sm font-medium">{person.display_name}</span>
                   <span className="block truncate text-[11px] text-muted-foreground">{person.employee_id} · {person.job_title} · {person.department}</span>
                 </span>
                 {person.employee_id === value && <Check className="size-4 shrink-0 text-primary" />}

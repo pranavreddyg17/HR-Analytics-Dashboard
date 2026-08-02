@@ -322,6 +322,144 @@ async function seedTrainingWorkflowExamplesOnce(database: Database): Promise<voi
   await database.prepare("INSERT INTO workspace_settings(key, value, updated_at) VALUES ('training_workflow_examples_v1', 'true', CURRENT_TIMESTAMP) ON CONFLICT(key) DO UPDATE SET value='true', updated_at=CURRENT_TIMESTAMP").run()
 }
 
+type SoftwareWorkflowEmployee = {
+  employee_id: string
+  department: string
+}
+
+async function seedSoftwareCompanyWorkflowsOnce(database: Database): Promise<void> {
+  const settingKey = "software_company_workflows_v1"
+  const initialized = await database.prepare("SELECT value FROM workspace_settings WHERE key = ?")
+    .bind(settingKey).first<{ value: string }>()
+  if (initialized) return
+
+  const result = await database.prepare("SELECT employee_id, department FROM employees WHERE archived_at IS NULL AND LOWER(employment_status) <> 'terminated' AND LOWER(COALESCE(work_email, '')) <> 'pranavreddyg17@gmail.com' ORDER BY employee_id LIMIT 48")
+    .all<SoftwareWorkflowEmployee>()
+  const employees = result.results ?? []
+  if (!employees.length) return
+
+  const statements: Statement[] = []
+  const leaveExamples = [
+    { type: "Annual", start: -150, days: 4, status: "Approved" },
+    { type: "Sick", start: -118, days: 2, status: "Approved" },
+    { type: "Personal", start: -91, days: 1, status: "Approved" },
+    { type: "Annual", start: -63, days: 5, status: "Approved" },
+    { type: "Caregiver", start: -34, days: 3, status: "Approved" },
+    { type: "Annual", start: -16, days: 3, status: "Approved" },
+    { type: "Sick", start: -2, days: 4, status: "Approved" },
+    { type: "Personal", start: 0, days: 1, status: "Approved" },
+    { type: "Annual", start: 6, days: 5, status: "Approved" },
+    { type: "Caregiver", start: 12, days: 2, status: "Pending" },
+    { type: "Annual", start: 19, days: 5, status: "Pending" },
+    { type: "Personal", start: 27, days: 1, status: "Pending" },
+    { type: "Parental", start: 36, days: 15, status: "Approved" },
+    { type: "Annual", start: 48, days: 4, status: "Pending" },
+    { type: "Unpaid", start: 58, days: 3, status: "Pending" },
+    { type: "Annual", start: 72, days: 5, status: "Pending" },
+    { type: "Personal", start: -45, days: 2, status: "Rejected" },
+    { type: "Annual", start: -25, days: 7, status: "Rejected" },
+  ] as const
+
+  leaveExamples.forEach((example, index) => {
+    const employee = employees[index % employees.length]
+    const id = `LEV-SOFTWARE-${String(index + 1).padStart(3, "0")}`
+    const startDate = dateFromToday(example.start)
+    const endDate = dateFromToday(example.start + example.days - 1)
+    const details = JSON.stringify({ leaveType: example.type, startDate, endDate, days: example.days, note: "Team coverage confirmed in the delivery plan.", origin: "software_company_workspace" })
+    const pending = example.status === "Pending"
+    statements.push(
+      database.prepare("INSERT OR IGNORE INTO leave_records(id, employee_id, leave_type, start_date, end_date, leave_days, approval_status, department, data_source, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'workflow', CURRENT_TIMESTAMP)")
+        .bind(id, employee.employee_id, example.type, startDate, endDate, example.days, example.status, employee.department),
+      database.prepare("INSERT OR IGNORE INTO workflow_requests(id, type, employee_id, title, status, details_json, requested_by_email, resolved_by_email, resolved_at, created_at, updated_at) VALUES (?, 'leave', ?, ?, ?, ?, 'people-ops@laidbackhr.cloud', ?, ?, ?, CURRENT_TIMESTAMP)")
+        .bind(id, employee.employee_id, `${example.type} leave request`, example.status, details, pending ? null : "people-ops@laidbackhr.cloud", pending ? null : dateFromToday(example.start - 3), dateFromToday(example.start - 12)),
+      database.prepare("INSERT OR IGNORE INTO employee_activity(id, employee_id, event_type, summary, changes_json, actor_email, created_at) VALUES (?, ?, ?, ?, ?, 'people-ops@laidbackhr.cloud', ?)")
+        .bind(`ACT-${id}`, employee.employee_id, pending ? "leave_requested" : "leave_decision", pending ? `Submitted a ${example.type.toLowerCase()} leave request` : `${example.status} ${example.type.toLowerCase()} leave`, details, dateFromToday(pending ? example.start - 12 : example.start - 3)),
+    )
+  })
+
+  const trainingExamples = [
+    { program: "Secure Coding Fundamentals", due: -140, hours: 3, status: "Completed", completed: -144, score: 94 },
+    { program: "Data Privacy for Engineers", due: -112, hours: 2, status: "Completed", completed: -114, score: 91 },
+    { program: "Incident Response Tabletop", due: -84, hours: 4, status: "Completed", completed: -85, score: 88 },
+    { program: "Cloud Security Essentials", due: -61, hours: 3, status: "Completed", completed: -64, score: 93 },
+    { program: "Accessibility for Product Teams", due: -43, hours: 2, status: "Completed", completed: -44, score: 90 },
+    { program: "Engineering Manager Essentials", due: -31, hours: 6, status: "Completed", completed: -35, score: 86 },
+    { program: "Kubernetes Reliability", due: -22, hours: 5, status: "Completed", completed: -24, score: 89 },
+    { program: "SOC 2 Control Ownership", due: -12, hours: 2, status: "Completed", completed: -14, score: 96 },
+    { program: "Responsible AI and Data Handling", due: -7, hours: 2, status: "Incomplete", completed: null, score: null },
+    { program: "Secure Coding Fundamentals", due: -3, hours: 3, status: "Incomplete", completed: null, score: null },
+    { program: "Cloud Security Essentials", due: 2, hours: 3, status: "Incomplete", completed: null, score: null },
+    { program: "Incident Response Tabletop", due: 5, hours: 4, status: "Incomplete", completed: null, score: null },
+    { program: "Data Privacy for Engineers", due: 8, hours: 2, status: "Incomplete", completed: null, score: null },
+    { program: "Accessibility for Product Teams", due: 12, hours: 2, status: "Incomplete", completed: null, score: null },
+    { program: "Technical Interviewing", due: 16, hours: 3, status: "Incomplete", completed: null, score: null },
+    { program: "Engineering Manager Essentials", due: 21, hours: 6, status: "Incomplete", completed: null, score: null },
+    { program: "Kubernetes Reliability", due: 26, hours: 5, status: "Incomplete", completed: null, score: null },
+    { program: "Product Analytics Foundations", due: 31, hours: 4, status: "Incomplete", completed: null, score: null },
+    { program: "SOC 2 Control Ownership", due: 37, hours: 2, status: "Incomplete", completed: null, score: null },
+    { program: "Responsible AI and Data Handling", due: 42, hours: 2, status: "Incomplete", completed: null, score: null },
+  ] as const
+
+  trainingExamples.forEach((example, index) => {
+    const employee = employees[(index + 18) % employees.length]
+    const id = `TRN-SOFTWARE-${String(index + 1).padStart(3, "0")}`
+    const dueDate = dateFromToday(example.due)
+    const completionDate = example.completed === null ? null : dateFromToday(example.completed)
+    const completed = example.status === "Completed"
+    const details = JSON.stringify({ program: example.program, dueDate, hours: example.hours, note: "Complete through the company learning portal.", origin: "software_company_workspace" })
+    statements.push(
+      database.prepare("INSERT OR IGNORE INTO training_records(id, training_program, employee_id, completion_status, completion_date, training_hours, assessment_score, department, data_source, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'workflow', CURRENT_TIMESTAMP)")
+        .bind(id, example.program, employee.employee_id, example.status, completionDate, example.hours, example.score, employee.department),
+      database.prepare("INSERT OR IGNORE INTO workflow_requests(id, type, employee_id, title, status, details_json, requested_by_email, resolved_by_email, resolved_at, created_at, updated_at) VALUES (?, 'training', ?, ?, ?, ?, 'learning@laidbackhr.cloud', ?, ?, ?, CURRENT_TIMESTAMP)")
+        .bind(id, employee.employee_id, `${example.program} assignment`, completed ? "Completed" : "Assigned", details, completed ? "learning@laidbackhr.cloud" : null, completionDate, dateFromToday(example.due - 21)),
+      database.prepare("INSERT OR IGNORE INTO employee_activity(id, employee_id, event_type, summary, changes_json, actor_email, created_at) VALUES (?, ?, ?, ?, ?, 'learning@laidbackhr.cloud', ?)")
+        .bind(`ACT-${id}`, employee.employee_id, completed ? "training_completed" : "training_assigned", completed ? `Completed ${example.program}` : `Assigned ${example.program}`, details, completionDate ?? dateFromToday(example.due - 21)),
+    )
+  })
+
+  const hiringExamples = [
+    { position: "Senior Backend Engineer", department: "Research & Development", location: "Austin", source: "Employee referral", opened: -72, status: "Hired", days: 41 },
+    { position: "Product Designer", department: "Research & Development", location: "Remote", source: "LinkedIn", opened: -63, status: "Hired", days: 36 },
+    { position: "Site Reliability Engineer", department: "Research & Development", location: "San Francisco", source: "Employee referral", opened: -57, status: "Hired", days: 44 },
+    { position: "Customer Success Engineer", department: "Sales", location: "New York", source: "Careers site", opened: -49, status: "Hired", days: 32 },
+    { position: "Technical Recruiter", department: "Human Resources", location: "Remote", source: "LinkedIn", opened: -44, status: "Hired", days: 29 },
+    { position: "Staff Frontend Engineer", department: "Research & Development", location: "Austin", source: "Manager request", opened: -28, status: "Open", days: null },
+    { position: "Security Engineer", department: "Research & Development", location: "Remote", source: "Manager request", opened: -24, status: "Open", days: null },
+    { position: "QA Automation Engineer", department: "Research & Development", location: "London", source: "Manager request", opened: -19, status: "Open", days: null },
+    { position: "Technical Product Manager", department: "Research & Development", location: "New York", source: "Manager request", opened: -17, status: "Open", days: null },
+    { position: "Solutions Architect", department: "Sales", location: "Singapore", source: "Manager request", opened: -14, status: "Open", days: null },
+    { position: "Data Platform Engineer", department: "Research & Development", location: "Remote", source: "Agency", opened: -21, status: "Offer", days: null },
+    { position: "Developer Experience Engineer", department: "Research & Development", location: "Austin", source: "Employee referral", opened: -18, status: "Offer", days: null },
+    { position: "Enterprise Account Executive", department: "Sales", location: "San Francisco", source: "LinkedIn", opened: -16, status: "Offer", days: null },
+    { position: "Engineering Manager", department: "Research & Development", location: "London", source: "Manager request", opened: -8, status: "Requested", days: null },
+    { position: "Mobile Engineer", department: "Research & Development", location: "Remote", source: "Manager request", opened: -6, status: "Requested", days: null },
+    { position: "Product Data Analyst", department: "Research & Development", location: "Austin", source: "Manager request", opened: -5, status: "Requested", days: null },
+    { position: "Customer Success Manager", department: "Sales", location: "New York", source: "Manager request", opened: -3, status: "Requested", days: null },
+    { position: "People Operations Partner", department: "Human Resources", location: "Remote", source: "Manager request", opened: -2, status: "Requested", days: null },
+  ] as const
+
+  hiringExamples.forEach((example, index) => {
+    const id = `HIR-SOFTWARE-${String(index + 1).padStart(3, "0")}`
+    const applicationDate = dateFromToday(example.opened)
+    const hired = example.status === "Hired"
+    const hiringDate = hired && example.days !== null ? dateFromToday(example.opened + example.days) : null
+    const details = JSON.stringify({ employmentType: "Full-time", justification: `Approved headcount plan for ${example.position}.`, origin: "software_company_workspace" })
+    const resolved = !["Requested", "Offer"].includes(example.status)
+    statements.push(
+      database.prepare("INSERT OR IGNORE INTO hiring_records(id, position, department, application_date, hiring_date, hiring_source, time_to_hire_days, recruitment_status, location, data_source, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'workflow', CURRENT_TIMESTAMP)")
+        .bind(id, example.position, example.department, applicationDate, hiringDate, example.source, example.days, example.status, example.location),
+      database.prepare("INSERT OR IGNORE INTO workflow_requests(id, type, employee_id, title, status, details_json, requested_by_email, resolved_by_email, resolved_at, created_at, updated_at) VALUES (?, 'hiring', NULL, ?, ?, ?, 'talent@laidbackhr.cloud', ?, ?, ?, CURRENT_TIMESTAMP)")
+        .bind(id, `New ${example.position} requisition`, example.status, details, resolved ? "talent@laidbackhr.cloud" : null, resolved ? dateFromToday(example.opened + 2) : null, applicationDate),
+    )
+  })
+
+  for (let index = 0; index < statements.length; index += 80) {
+    await database.batch(statements.slice(index, index + 80))
+  }
+  await database.prepare("INSERT INTO workspace_settings(key, value, updated_at) VALUES (?, 'true', CURRENT_TIMESTAMP) ON CONFLICT(key) DO UPDATE SET value='true', updated_at=CURRENT_TIMESTAMP")
+    .bind(settingKey).run()
+}
+
 export async function ensureHrDatabase(): Promise<Database | null> {
   const database = getHrDatabase()
   if (!database) return null
@@ -338,6 +476,7 @@ export async function ensureHrDatabase(): Promise<Database | null> {
     await backfillDemoProfiles(database)
     await seedLeaveWorkflowExamplesOnce(database)
     await seedTrainingWorkflowExamplesOnce(database)
+    await seedSoftwareCompanyWorkflowsOnce(database)
     await database.prepare("INSERT OR IGNORE INTO app_users(email, display_name, role, status, invited_by) VALUES ('pranavreddyg17@gmail.com', 'Pranav Reddy', 'admin', 'active', 'system')").run()
   })()
   try {

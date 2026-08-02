@@ -3,6 +3,8 @@
 import { useCallback, useEffect, useState } from "react"
 import { Loader2, Plus, Trash2, X } from "lucide-react"
 
+import { formatWorkspaceDateTime } from "@/lib/date-format"
+
 type User = { email: string; display_name: string; role: string; status: string; created_at: string; last_login_at: string | null }
 type Audit = { id: string; actor_email: string; action: string; target_email: string; created_at: string }
 
@@ -137,7 +139,7 @@ export function AccessManager({ ownerEmail }: { ownerEmail: string }) {
           {audit.length ? audit.slice(0, 12).map((item) => (
             <div key={item.id} className="grid gap-1 px-5 py-3 text-xs sm:grid-cols-[minmax(0,1fr)_auto] sm:items-center">
               <span className="min-w-0 truncate"><b>{item.actor_email}</b> {item.action.replaceAll("_", " ")} for <b>{item.target_email}</b></span>
-              <time className="text-muted-foreground">{new Date(item.created_at).toLocaleString()}</time>
+              <time className="text-muted-foreground">{formatWorkspaceDateTime(item.created_at)}</time>
             </div>
           )) : <p className="px-5 py-8 text-center text-sm text-muted-foreground">No access changes recorded.</p>}
         </div>

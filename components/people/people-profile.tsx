@@ -26,10 +26,11 @@ import {
 import { Button } from "@/components/ui/button"
 import { Card } from "@/components/ui/card"
 import { EmployeeDrawer } from "@/components/people/employee-drawer"
-import { PersonAvatar, SourcePill, StatusPill, formatDate, plural } from "@/components/people/people-ui"
+import { PersonAvatar, StatusPill, formatDate, plural } from "@/components/people/people-ui"
 import { apiBaseUrl } from "@/lib/api"
 import type { EmployeeActivity, EmployeeDirectoryResponse, EmployeeProfileResponse, ManagedEmployee } from "@/lib/people-types"
 import { cn } from "@/lib/utils"
+import { formatWorkspaceDateTime } from "@/lib/date-format"
 
 type ProfileTab = "overview" | "job" | "time-off" | "growth" | "activity"
 
@@ -89,8 +90,6 @@ export function PeopleProfile({ employeeId }: { employeeId: string }) {
   )
 
   const employee = data.employee
-  const demoRecord = employee.data_source === "demo"
-
   return (
     <div className="mx-auto flex w-full max-w-[1500px] flex-col gap-5">
       <div className="flex items-center justify-between gap-3">
@@ -102,8 +101,8 @@ export function PeopleProfile({ employeeId }: { employeeId: string }) {
         <div className="flex flex-col gap-5 px-5 pb-6 pt-6 sm:px-6 lg:flex-row lg:items-end">
           <PersonAvatar employeeId={employee.employee_id} initials={employee.initials} size="xl" />
           <div className="min-w-0 flex-1">
-            <div className="flex flex-wrap items-center gap-2"><SourcePill source={employee.data_source} />{employee.archived_at && <span className="text-[11px] font-medium text-muted-foreground">Archived {formatDate(employee.archived_at)}</span>}</div>
-            <h2 className="mt-2 truncate text-2xl font-semibold tracking-[-0.02em] sm:text-3xl">{employee.display_name}</h2>
+            {employee.archived_at && <div className="mb-2 text-[11px] font-medium text-muted-foreground">Archived {formatDate(employee.archived_at)}</div>}
+            <h2 className="truncate text-2xl font-semibold tracking-[-0.02em] sm:text-3xl">{employee.display_name}</h2>
             <p className="mt-2 text-sm text-muted-foreground">{employee.job_title} · {employee.department} · {employee.location}</p>
           </div>
           <div className="flex flex-wrap items-center gap-2">
@@ -122,8 +121,6 @@ export function PeopleProfile({ employeeId }: { employeeId: string }) {
           </nav>
         </div>
       </section>
-
-      {demoRecord && <div className="border border-amber-200 bg-amber-50 px-4 py-3 text-xs text-amber-950 dark:border-amber-900/60 dark:bg-amber-950/20 dark:text-amber-100">This is a sample employee record.</div>}
 
       <div>
           {tab === "overview" && <OverviewTab data={data} />}
@@ -230,7 +227,7 @@ function ActivityTab({ data }: { data: EmployeeProfileResponse }) {
   return <div className="grid gap-5 xl:grid-cols-[1.2fr_.8fr]">
     <Card className="gap-0 overflow-hidden rounded-lg border-border/70 shadow-none"><SectionHeader title="Change history" detail="Recorded profile and workflow changes" icon={History} /><div className="p-5">{data.activity.length ? <Timeline activity={data.activity} /> : <EmptyState icon={History} title="No activity recorded" detail="Profile and workflow changes will appear here." />}</div></Card>
     <div className="space-y-5">
-      <InfoCard title="Record details" icon={ShieldAlert}><InfoLine label="Source" value={data.employee.data_source === "demo" ? "Sample workspace data" : "HR-managed record"} /><InfoLine label="Version" value={`v${data.employee.version}`} /><InfoLine label="Last updated" value={data.employee.updated_at ? new Date(data.employee.updated_at).toLocaleString() : "Not recorded"} /></InfoCard>
+      <InfoCard title="Record details" icon={ShieldAlert}><InfoLine label="Version" value={`v${data.employee.version}`} /><InfoLine label="Last updated" value={data.employee.updated_at ? formatWorkspaceDateTime(data.employee.updated_at) : "Not recorded"} /></InfoCard>
       {data.attritionModel && <InfoCard title="Historical model context" icon={Gauge}>
         <InfoLine label="Risk band" value={`${data.attritionModel.risk_level} · ${Number(data.attritionModel.risk_score).toFixed(1)}%`} />
         <InfoLine label="Observed outcome" value={data.attritionModel.observed_attrition === "Yes" ? "Recorded exit" : "No recorded exit"} />
@@ -272,7 +269,7 @@ function RecordStatus({ status }: { status: string }) {
 function Timeline({ activity, compact = false }: { activity: EmployeeActivity[]; compact?: boolean }) {
   return <div className="divide-y divide-border">{activity.map((item) => {
     const changedFields = parseChangedFields(item.changes_json)
-    return <div key={item.id} className="py-3 first:pt-0 last:pb-0"><p className="text-sm font-medium leading-relaxed">{item.summary}</p><p className="mt-1 text-[11px] text-muted-foreground">{new Date(item.created_at).toLocaleString()} · {item.actor_email}</p>{!compact && changedFields.length > 0 && <p className="mt-2 text-[10px] text-muted-foreground">Fields changed: {changedFields.map(friendlyField).join(", ")}</p>}</div>
+    return <div key={item.id} className="py-3 first:pt-0 last:pb-0"><p className="text-sm font-medium leading-relaxed">{item.summary}</p><p className="mt-1 text-[11px] text-muted-foreground">{formatWorkspaceDateTime(item.created_at)} · {item.actor_email}</p>{!compact && changedFields.length > 0 && <p className="mt-2 text-[10px] text-muted-foreground">Fields changed: {changedFields.map(friendlyField).join(", ")}</p>}</div>
   })}</div>
 }
 

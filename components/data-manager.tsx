@@ -8,6 +8,7 @@ import { hrDomains, importFields, type DomainStatus, type HrDomain } from "@/lib
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { cn } from "@/lib/utils"
+import { formatWorkspaceDateTime } from "@/lib/date-format"
 
 function parseCsv(text: string): Array<Record<string, string>> {
   const matrix: string[][] = []
@@ -132,14 +133,11 @@ export function DataManager() {
   }
 
   const totalRows = status.reduce((sum, item) => sum + item.count, 0)
-  const operationalDomains = status.filter((item) => item.mode === "imported").length
-  const modeLabel = (mode: DomainStatus["mode"]) => mode === "imported" ? "Operational" : mode === "demo" ? "Sample" : mode === "mixed" ? "Mixed" : "Empty"
-
   return <div className="mx-auto flex w-full max-w-[1520px] flex-col gap-5 pb-10">
     <header className="flex flex-col gap-4 border-b border-border pb-5 sm:flex-row sm:items-end sm:justify-between">
       <div>
         <h1 className="text-2xl font-semibold tracking-[-0.02em]">Import / Export Data</h1>
-        <p className="mt-1 max-w-2xl text-sm leading-6 text-muted-foreground">Import HR records, review source coverage, and connect reporting feeds.</p>
+        <p className="mt-1 max-w-2xl text-sm leading-6 text-muted-foreground">Import HR records, download templates, and connect reporting feeds.</p>
       </div>
       <Button type="button" variant="outline" onClick={() => void refreshStatus()} disabled={statusBusy}>
         <RefreshCw className={cn("size-4", statusBusy && "animate-spin")} />
@@ -152,17 +150,16 @@ export function DataManager() {
         <div><CardTitle>Data coverage</CardTitle><CardDescription className="mt-1">Current records available to dashboards and reports</CardDescription></div>
         <div className="flex gap-5 text-sm">
           <div><span className="block text-[10px] text-muted-foreground">Total records</span><b className="font-semibold tabular-nums">{totalRows.toLocaleString()}</b></div>
-          <div><span className="block text-[10px] text-muted-foreground">Operational domains</span><b className="font-semibold tabular-nums">{operationalDomains} of {hrDomains.length}</b></div>
+          <div><span className="block text-[10px] text-muted-foreground">Data domains</span><b className="font-semibold tabular-nums">{hrDomains.length}</b></div>
         </div>
       </div>
       <div className="overflow-x-auto">
         <table className="w-full min-w-[680px] text-left text-sm">
-          <thead className="bg-muted/45 text-xs text-muted-foreground"><tr><th className="px-5 py-3 font-medium">Domain</th><th className="px-5 py-3 font-medium">Records</th><th className="px-5 py-3 font-medium">Source</th><th className="px-5 py-3 font-medium">Last import</th></tr></thead>
+          <thead className="bg-muted/45 text-xs text-muted-foreground"><tr><th className="px-5 py-3 font-medium">Domain</th><th className="px-5 py-3 font-medium">Records</th><th className="px-5 py-3 font-medium">Last import</th></tr></thead>
           <tbody>{status.map((item) => <tr key={item.domain} className="border-t border-border/70">
             <td className="px-5 py-3 font-medium capitalize">{item.domain}</td>
             <td className="px-5 py-3 tabular-nums">{item.count.toLocaleString()}</td>
-            <td className="px-5 py-3"><span className="text-xs text-muted-foreground">{modeLabel(item.mode)}</span></td>
-            <td className="px-5 py-3 text-xs text-muted-foreground">{item.lastImport ? new Date(item.lastImport).toLocaleString() : "No import recorded"}</td>
+            <td className="px-5 py-3 text-xs text-muted-foreground">{item.lastImport ? formatWorkspaceDateTime(item.lastImport) : "—"}</td>
           </tr>)}</tbody>
         </table>
       </div>

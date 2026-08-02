@@ -24,6 +24,7 @@ import type { BreakdownPoint, HiringRecord, TimePoint, WorkforceAnalytics } from
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { cn } from "@/lib/utils"
+import { formatWorkspaceDateTime } from "@/lib/date-format"
 
 type Filters = { from: string; to: string; department: string; jobTitle: string; location: string; period: "month" | "quarter" | "year" }
 const emptyFilters: Filters = { from: "", to: "", department: "", jobTitle: "", location: "", period: "month" }
@@ -141,13 +142,12 @@ function HiringRecords({ rows }: { rows: HiringRecord[] }) {
       <CardContent className="px-0 pb-0">
         <div className="max-h-[480px] overflow-auto">
           <table className="w-full min-w-[900px] text-left text-xs">
-            <thead className="sticky top-0 z-10 bg-muted"><tr>{["Role", "Department", "Opened", "Location", "Source", "Time to hire", "Status", "Data"].map((heading) => <th key={heading} className="px-4 py-3 font-semibold text-muted-foreground">{heading}</th>)}</tr></thead>
+            <thead className="sticky top-0 z-10 bg-muted"><tr>{["Role", "Department", "Opened", "Location", "Recruitment source", "Time to hire", "Status"].map((heading) => <th key={heading} className="px-4 py-3 font-semibold text-muted-foreground">{heading}</th>)}</tr></thead>
             <tbody>{visible.map((row) => <tr key={row.id} className="border-t border-border/60 transition hover:bg-muted/25">
               <td className="px-4 py-3"><p className="font-semibold">{row.position}</p><p className="mt-0.5 text-[10px] text-muted-foreground">{row.id}</p></td>
               <td className="px-4 py-3">{row.department}</td><td className="px-4 py-3 whitespace-nowrap">{formatDate(row.application_date)}</td><td className="px-4 py-3">{row.location}</td><td className="px-4 py-3">{row.hiring_source}</td>
               <td className="px-4 py-3 tabular-nums">{row.time_to_hire_days === null ? "—" : `${row.time_to_hire_days} days`}</td>
               <td className="px-4 py-3"><span className={cn("text-[11px] font-medium", statusTone(row.recruitment_status))}>{row.recruitment_status}</span></td>
-              <td className="px-4 py-3"><span className="text-[11px] capitalize text-muted-foreground">{row.data_source === "demo" ? "sample" : row.data_source}</span></td>
             </tr>)}</tbody>
           </table>
           {!visible.length && <div className="p-10 text-center text-sm text-muted-foreground">No hiring records match your search.</div>}
@@ -179,7 +179,6 @@ export function HiringWorkspace({ canRequestHiring }: { canRequestHiring: boolea
   if (!data) return <Card><CardContent className="p-6 text-sm text-destructive">{error || "Hiring data could not be loaded."}</CardContent></Card>
 
   const hiringStatus = data.status.find((item) => item.domain === "hiring")
-  const dataLabel = hiringStatus?.mode === "demo" ? "Sample hiring dataset" : hiringStatus?.mode === "mixed" ? "Live workflows + sample records" : hiringStatus?.mode === "empty" ? "No hiring records" : "Live workspace data"
   const topSource = data.hiring.sourceStats[0]
 
   return (
@@ -189,7 +188,7 @@ export function HiringWorkspace({ canRequestHiring }: { canRequestHiring: boolea
           <div><h1 className="text-2xl font-semibold tracking-tight">Hiring</h1><p className="mt-1 max-w-2xl text-sm text-muted-foreground">Manage requisitions and review recruiting performance.</p></div>
           <div className="flex flex-wrap gap-2"><Button nativeButton={false} variant="outline" render={<Link href="/inbox?type=hiring"/>}>Review approvals</Button>{canRequestHiring && <Button nativeButton={false} render={<Link href="/inbox?new=hiring"/>}><Plus className="size-4"/>New requisition</Button>}</div>
         </div>
-        <div className="mt-3 flex flex-wrap gap-x-5 gap-y-1 text-xs text-muted-foreground"><span>{dataLabel}</span><span>{hiringStatus?.count ?? 0} records</span><span>Updated {new Date(data.generatedAt).toLocaleString()}</span></div>
+        <div className="mt-3 flex flex-wrap gap-x-5 gap-y-1 text-xs text-muted-foreground"><span>{hiringStatus?.count ?? 0} records</span><span>Updated {formatWorkspaceDateTime(data.generatedAt)}</span></div>
       </header>
 
       <Card className="gap-4 p-4 shadow-none sm:p-5">

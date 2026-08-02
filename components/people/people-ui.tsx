@@ -34,12 +34,6 @@ export function StatusPill({ status }: { status: string }) {
   return <Badge variant="outline" className={cn("h-6 px-2.5", className)}>{status}</Badge>
 }
 
-export function SourcePill({ source }: { source: string }) {
-  return source === "demo"
-    ? <span className="text-[10px] font-medium text-amber-700 dark:text-amber-300">Sample record</span>
-    : <span className="text-[10px] font-medium text-muted-foreground">Operational record</span>
-}
-
 export function formatDate(value: string | null | undefined): string {
   if (!value) return "Not recorded"
   const date = new Date(`${value.slice(0, 10)}T00:00:00`)

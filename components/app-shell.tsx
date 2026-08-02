@@ -53,7 +53,7 @@ const pageDetails: Record<string, string> = {
   "/insights": "Workforce metrics and department review",
   "/attrition": "Retention signals and model analysis",
   "/ai-agents": "Grounded workforce analytics",
-  "/data": "Imports, source coverage, and reporting feeds",
+  "/data": "Imports, record coverage, and reporting feeds",
   "/access": "Accounts, roles, and access history",
 }
 
@@ -74,7 +74,7 @@ const featureDestinationDefinitions: Array<Omit<SearchDestination, "icon">> = [
   { id: "leave-coverage", href: "/time-off", label: "Leave coverage", detail: "Review schedules, leave mix, and department coverage", keywords: "away today coming up approved days annual sick absence", section: "Reports" },
   { id: "learning-compliance", href: "/learning", label: "Learning compliance", detail: "Review incomplete and completed training", keywords: "mandatory overdue assessment programme participation", section: "Reports" },
   { id: "attrition-analysis", href: "/attrition", label: "Attrition analysis", detail: "Review exits, tenure cohorts, and retention priorities", keywords: "turnover resignation voluntary involuntary department risk", section: "Reports" },
-  { id: "data-coverage", href: "/data#data-coverage", label: "Data coverage", detail: "Review record counts and source classifications", keywords: "database imported demo mixed operational status domains", section: "Reports" },
+  { id: "data-coverage", href: "/data#data-coverage", label: "Data coverage", detail: "Review record counts by HR domain", keywords: "database records status domains", section: "Reports" },
 ]
 
 const featureDestinations: SearchDestination[] = featureDestinationDefinitions

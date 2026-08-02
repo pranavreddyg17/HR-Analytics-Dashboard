@@ -13,6 +13,7 @@ import type { BreakdownPoint, TimePoint, WorkforceAnalytics } from "@/lib/hr-typ
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { cn } from "@/lib/utils"
+import { formatWorkspaceDateTime } from "@/lib/date-format"
 
 type Filters = {
   from: string
@@ -20,7 +21,6 @@ type Filters = {
   department: string
   location: string
   period: "month" | "quarter" | "year"
-  dataMode: "all" | "live"
 }
 
 type DepartmentRow = {
@@ -33,7 +33,7 @@ type DepartmentRow = {
   promotions: number
 }
 
-const defaultFilters: Filters = { from: "", to: "", department: "", location: "", period: "month", dataMode: "all" }
+const defaultFilters: Filters = { from: "", to: "", department: "", location: "", period: "month" }
 
 function queryFor(filters: Filters): string {
   const params = new URLSearchParams()
@@ -77,13 +77,6 @@ function reviewSignal(row: DepartmentRow): { label: string; className: string } 
   return { label: "None", className: "text-muted-foreground" }
 }
 
-function sourceLabel(mode: string): string {
-  if (mode === "demo") return "Simulated"
-  if (mode === "mixed") return "Mixed sources"
-  if (mode === "imported") return "Operational"
-  return "No records"
-}
-
 export function InsightsWorkspace() {
   const [filters, setFilters] = useState<Filters>(defaultFilters)
   const [data, setData] = useState<WorkforceAnalytics | null>(null)
@@ -122,11 +115,9 @@ export function InsightsWorkspace() {
   ]
 
   return <div className="mx-auto flex w-full max-w-[1520px] flex-col gap-5 pb-10">
-    <header className="flex flex-col gap-4 border-b border-border pb-5 lg:flex-row lg:items-end lg:justify-between"><div><h1 className="text-2xl font-semibold tracking-tight">Workforce insights</h1><p className="mt-1 max-w-2xl text-sm text-muted-foreground">Company workforce metrics, open HR work, and department exceptions.</p><p className="mt-2 text-[11px] text-muted-foreground">Last refreshed {new Date(data.generatedAt).toLocaleString()}</p></div><div className="flex flex-wrap gap-2"><a href={`${apiBaseUrl}/api/v1/reports?format=pdf&${requestQuery}`} className="inline-flex h-9 items-center gap-2 rounded-md border border-border bg-background px-3 text-xs font-medium hover:bg-muted"><Download className="size-3.5"/>PDF summary</a><a href={`${apiBaseUrl}/api/v1/reports?format=xlsx&${requestQuery}`} className="inline-flex h-9 items-center gap-2 rounded-md bg-foreground px-3 text-xs font-medium text-background hover:opacity-90"><Download className="size-3.5"/>Export data</a></div></header>
+    <header className="flex flex-col gap-4 border-b border-border pb-5 lg:flex-row lg:items-end lg:justify-between"><div><h1 className="text-2xl font-semibold tracking-tight">Workforce insights</h1><p className="mt-1 max-w-2xl text-sm text-muted-foreground">Company workforce metrics, open HR work, and department exceptions.</p><p className="mt-2 text-[11px] text-muted-foreground">Last refreshed {formatWorkspaceDateTime(data.generatedAt)}</p></div><div className="flex flex-wrap gap-2"><a href={`${apiBaseUrl}/api/v1/reports?format=pdf&${requestQuery}`} className="inline-flex h-9 items-center gap-2 rounded-md border border-border bg-background px-3 text-xs font-medium hover:bg-muted"><Download className="size-3.5"/>PDF summary</a><a href={`${apiBaseUrl}/api/v1/reports?format=xlsx&${requestQuery}`} className="inline-flex h-9 items-center gap-2 rounded-md bg-foreground px-3 text-xs font-medium text-background hover:opacity-90"><Download className="size-3.5"/>Export data</a></div></header>
 
-    {filters.dataMode === "all" && <div className="flex flex-col gap-2 border border-amber-200 bg-amber-50 px-4 py-3 text-xs text-amber-950 dark:border-amber-900/40 dark:bg-amber-950/20 dark:text-amber-200 sm:flex-row sm:items-center"><p className="flex-1">Results include sample and operational records.</p><button type="button" onClick={() => setFilters({ ...filters, dataMode: "live" })} className="font-medium underline underline-offset-2">Show operational records only</button></div>}
-
-    <Card className="gap-4 p-4 shadow-none"><div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between"><p className="text-sm font-medium">Filters</p><Button size="sm" variant="ghost" onClick={() => setFilters(defaultFilters)}><FilterX className="size-4"/>Reset</Button></div><div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-6"><Filter label="From"><input type="date" value={filters.from} onChange={(event) => setFilters({ ...filters, from: event.target.value })}/></Filter><Filter label="To"><input type="date" value={filters.to} onChange={(event) => setFilters({ ...filters, to: event.target.value })}/></Filter><Filter label="Department"><select value={filters.department} onChange={(event) => setFilters({ ...filters, department: event.target.value })}><option value="">All departments</option>{data.dimensions.departments.map((item) => <option key={item}>{item}</option>)}</select></Filter><Filter label="Location"><select value={filters.location} onChange={(event) => setFilters({ ...filters, location: event.target.value })}><option value="">All locations</option>{data.dimensions.locations.map((item) => <option key={item}>{item}</option>)}</select></Filter><Filter label="Reporting interval"><select value={filters.period} onChange={(event) => setFilters({ ...filters, period: event.target.value as Filters["period"] })}><option value="month">Monthly</option><option value="quarter">Quarterly</option><option value="year">Yearly</option></select></Filter><Filter label="Data source"><select value={filters.dataMode} onChange={(event) => setFilters({ ...filters, dataMode: event.target.value as Filters["dataMode"] })}><option value="all">All stored records</option><option value="live">Operational only</option></select></Filter></div>{loading && <div className="h-1 overflow-hidden rounded-full bg-muted"><div className="h-full w-2/3 animate-pulse rounded-full bg-primary"/></div>}</Card>
+    <Card className="gap-4 p-4 shadow-none"><div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between"><p className="text-sm font-medium">Filters</p><Button size="sm" variant="ghost" onClick={() => setFilters(defaultFilters)}><FilterX className="size-4"/>Reset</Button></div><div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-5"><Filter label="From"><input type="date" value={filters.from} onChange={(event) => setFilters({ ...filters, from: event.target.value })}/></Filter><Filter label="To"><input type="date" value={filters.to} onChange={(event) => setFilters({ ...filters, to: event.target.value })}/></Filter><Filter label="Department"><select value={filters.department} onChange={(event) => setFilters({ ...filters, department: event.target.value })}><option value="">All departments</option>{data.dimensions.departments.map((item) => <option key={item}>{item}</option>)}</select></Filter><Filter label="Location"><select value={filters.location} onChange={(event) => setFilters({ ...filters, location: event.target.value })}><option value="">All locations</option>{data.dimensions.locations.map((item) => <option key={item}>{item}</option>)}</select></Filter><Filter label="Reporting interval"><select value={filters.period} onChange={(event) => setFilters({ ...filters, period: event.target.value as Filters["period"] })}><option value="month">Monthly</option><option value="quarter">Quarterly</option><option value="year">Yearly</option></select></Filter></div>{loading && <div className="h-1 overflow-hidden rounded-full bg-muted"><div className="h-full w-2/3 animate-pulse rounded-full bg-primary"/></div>}</Card>
 
     {error && <div className="rounded-md border border-rose-200 bg-rose-50 px-4 py-3 text-xs text-rose-800 dark:border-rose-900/40 dark:bg-rose-950/20 dark:text-rose-200">{error}</div>}
 
@@ -174,7 +165,6 @@ export function InsightsWorkspace() {
 
     <section aria-labelledby="program-title"><div className="mb-3"><h2 id="program-title" className="text-base font-semibold">Workforce programs</h2><p className="mt-0.5 text-xs text-muted-foreground">Leave, learning, and internal mobility measures.</p></div><div className="grid gap-3 md:grid-cols-3"><Programme href="/time-off" label="Leaves" metric={`${new Set(data.leave.currentlyAway.map((row) => row.employee_id)).size} away today`} detail={`${data.leave.pending} pending requests · ${data.leave.totalDays} approved days`}/><Programme href="/learning" label="Assign Courses" metric={`${data.training.completionRate}% complete`} detail={`${data.training.requiringMandatoryTraining} mandatory gaps · ${data.training.totalHours} assigned hours`}/><Programme href="/people?tenure=mobility" label="Internal mobility" metric={`${data.promotions.rate}% promotion rate`} detail={`${data.promotions.total} promotions · ${data.promotions.withoutPromotionOver36Months} employees due for review`}/></div></section>
 
-    <Card className="shadow-none"><CardHeader><CardTitle>Data sources</CardTitle><CardDescription>Record counts and classification by domain</CardDescription></CardHeader><CardContent><div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-3">{data.status.map((item) => <div key={item.domain} className="grid grid-cols-[minmax(0,1fr)_100px_48px] items-center gap-3 rounded-md border border-border px-3 py-2.5"><span className="text-xs font-medium capitalize">{item.domain}</span><span className="text-[10px] text-muted-foreground">{sourceLabel(item.mode)}</span><span className="text-right text-xs font-semibold tabular-nums">{item.count}</span></div>)}</div><p className="mt-4 text-[11px] text-muted-foreground">Use operational records and human review for employee-level decisions.</p></CardContent></Card>
   </div>
 }
 

@@ -8,6 +8,7 @@ import {
 } from "lucide-react"
 
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
+import { formatWorkspaceDateTime } from "@/lib/date-format"
 import type { WorkforceAnalytics } from "@/lib/hr-types"
 import type { InboxItem, ManagedEmployee } from "@/lib/people-types"
 
@@ -70,10 +71,6 @@ export function HomeDashboard({ analytics, inbox, people }: HomeDashboardProps) 
   const hiringItems = inbox.filter((item) => item.type === "hiring").length
   const incompleteTraining = analytics.training.requiringMandatoryTraining
   const mobilityReviews = analytics.promotions.withoutPromotionOver36Months
-  const nonLiveDomains = analytics.status
-    .filter((item) => item.mode === "demo" || item.mode === "mixed")
-    .map((item) => item.domain)
-
   const peopleById = new Map(people.map((person) => [person.employee_id, person]))
   const activePeople = people.filter((person) => person.employment_status.toLowerCase() !== "terminated")
   const newStarters = [...activePeople]
@@ -123,7 +120,7 @@ export function HomeDashboard({ analytics, inbox, people }: HomeDashboardProps) 
           <h1 className="text-2xl font-semibold tracking-tight">Home</h1>
           <p className="mt-1 text-sm text-muted-foreground">Current workforce status and work requiring attention.</p>
           <p className="mt-2 text-xs text-muted-foreground">
-            Updated {new Intl.DateTimeFormat("en", { month: "short", day: "numeric", year: "numeric", hour: "numeric", minute: "2-digit" }).format(generatedAt)}
+            Updated {formatWorkspaceDateTime(generatedAt)}
           </p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
@@ -137,16 +134,6 @@ export function HomeDashboard({ analytics, inbox, people }: HomeDashboardProps) 
           </Link>
         </div>
       </header>
-
-      {nonLiveDomains.length > 0 && (
-        <div className="flex flex-col gap-2 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-950 dark:border-amber-900/50 dark:bg-amber-950/25 dark:text-amber-100 sm:flex-row sm:items-center sm:justify-between">
-          <p>
-            <span className="font-medium">Presentation data is enabled.</span>{" "}
-            {nonLiveDomains.join(", ")} include simulated or mixed records.
-          </p>
-          <Link href="/data" className="shrink-0 text-xs font-semibold underline-offset-4 hover:underline">Review data sources</Link>
-        </div>
-      )}
 
       <section aria-labelledby="workforce-summary-heading">
         <div className="mb-3">

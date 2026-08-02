@@ -10,7 +10,7 @@ import { Button } from "@/components/ui/button"
 import { Card } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
 import { EmployeeDrawer } from "@/components/people/employee-drawer"
-import { PersonAvatar, SourcePill, StatusPill, plural } from "@/components/people/people-ui"
+import { PersonAvatar, StatusPill, plural } from "@/components/people/people-ui"
 import { apiBaseUrl } from "@/lib/api"
 import type { EmployeeDirectoryResponse, ManagedEmployee } from "@/lib/people-types"
 import { cn } from "@/lib/utils"
@@ -96,8 +96,6 @@ export function PeopleDirectory() {
   const dimensions = data?.dimensions
   const loading = loadedRequest !== `${searchString}:${retry}`
   const activeFilterCount = Object.entries(filters).filter(([key, value]) => key === "includeArchived" ? value : Boolean(value)).length
-  const demoCount = data?.items.filter((employee) => employee.data_source === "demo").length ?? 0
-
   function clearFilters() {
     setQuery("")
     setFilters(initialFilters)
@@ -138,12 +136,6 @@ export function PeopleDirectory() {
           </div>
         </div>
       </header>
-
-      {demoCount > 0 && (
-        <div className="flex flex-col gap-2 rounded-md border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-950 dark:border-amber-900/60 dark:bg-amber-950/20 dark:text-amber-100 sm:flex-row sm:items-center sm:justify-between">
-          <p>Sample employee records are included and identified in the directory.</p>
-        </div>
-      )}
 
       <Card className="gap-0 overflow-hidden py-0 shadow-none">
         <div className="border-b border-border/70 p-4 sm:p-5">
@@ -222,7 +214,7 @@ function PersonRow({ employee }: { employee: ManagedEmployee }) {
         <div className="flex min-w-0 items-center gap-3.5">
           <PersonAvatar employeeId={employee.employee_id} initials={employee.initials} size="lg" />
           <div className="min-w-0 flex-1">
-            <div className="flex flex-wrap items-center gap-2"><p className="truncate text-sm font-semibold tracking-tight group-hover:text-primary">{employee.display_name}</p>{employee.data_source === "demo" && <SourcePill source="demo" />}</div>
+            <p className="truncate text-sm font-semibold tracking-tight group-hover:text-primary">{employee.display_name}</p>
             <p className="mt-0.5 truncate text-xs text-muted-foreground">{employee.job_title} · {employee.employee_id}</p>
           </div>
         </div>

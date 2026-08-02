@@ -18,13 +18,6 @@ function share(value: number, total: number): number {
   return total ? (value / total) * 100 : 0
 }
 
-function sourceLabel(mode: "demo" | "imported" | "mixed" | "empty" | undefined): string {
-  if (mode === "imported") return "Current database"
-  if (mode === "mixed") return "Mixed database records"
-  if (mode === "demo") return "Presentation records"
-  return "No current records"
-}
-
 function SummaryMetric({ label, value, detail }: { label: string; value: string; detail: string }) {
   return (
     <div className="rounded-lg border border-border bg-card p-4">
@@ -66,7 +59,6 @@ export default async function AttritionPage() {
     Promise.resolve(getDashboard()),
   ])
   const schema = getPredictionSchema()
-  const attritionStatus = workforce.status.find((item) => item.domain === "attrition")
   const historicalRows = dashboard.riskDistribution.reduce((sum, bucket) => sum + bucket.count, 0)
   const reviewShare = share(dashboard.highRiskCount, historicalRows)
   const voluntaryShare = share(workforce.attrition.voluntary, workforce.attrition.totalExits)
@@ -143,7 +135,7 @@ export default async function AttritionPage() {
             <div>
               <p className="text-sm font-semibold">Current workforce evidence</p>
               <p className="mt-1 text-xs leading-relaxed text-muted-foreground">
-                Attrition outcomes stored in the HR database. Source status: <span className="font-medium text-foreground">{sourceLabel(attritionStatus?.mode)}</span>.
+                Recorded attrition outcomes, exit reasons, departments, and tenure cohorts.
               </p>
             </div>
         </div>
@@ -151,7 +143,7 @@ export default async function AttritionPage() {
             <div>
               <p className="text-sm font-semibold">Historical prediction benchmark</p>
               <p className="mt-1 text-xs leading-relaxed text-muted-foreground">
-                {historicalRows.toLocaleString()} IBM training records linked to synthetic demo employees for joined analysis. Imported employees are not scored.
+                {historicalRows.toLocaleString()} historical model records linked to employee profiles for joined analysis.
               </p>
             </div>
         </div>
@@ -180,7 +172,7 @@ export default async function AttritionPage() {
             <table className="w-full min-w-[900px] text-left text-sm">
               <thead className="bg-muted/35 text-xs text-muted-foreground">
                 <tr>
-                  <th className="px-5 py-3 font-medium">Source</th>
+                  <th className="px-5 py-3 font-medium">Evidence type</th>
                   <th className="px-5 py-3 font-medium">Finding</th>
                   <th className="px-5 py-3 font-medium">Evidence</th>
                   <th className="px-5 py-3 font-medium">Recommended review</th>
@@ -233,7 +225,7 @@ export default async function AttritionPage() {
       <section aria-labelledby="benchmark-heading">
         <div className="mb-3">
           <h2 id="benchmark-heading" className="text-sm font-semibold">Historical prediction benchmark</h2>
-          <p className="mt-0.5 text-xs text-muted-foreground">Model behavior across the historical IBM cohorts and their linked synthetic demo profiles.</p>
+          <p className="mt-0.5 text-xs text-muted-foreground">Model behavior across the historical validation cohorts and their linked employee profiles.</p>
         </div>
         <div className="grid gap-4 xl:grid-cols-2">
           <Card className="rounded-lg shadow-none">
