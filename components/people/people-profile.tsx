@@ -31,6 +31,7 @@ import type { EmployeeActivity, EmployeeDirectoryResponse, EmployeeProfileRespon
 import { cn } from "@/lib/utils"
 import { formatWorkspaceDateTime } from "@/lib/date-format"
 import { WorkspacePage } from "@/components/workspace-ui"
+import { safeReturnTo } from "@/lib/navigation"
 
 type ProfileTab = "overview" | "job" | "time-off" | "growth" | "activity"
 
@@ -42,7 +43,7 @@ const tabs: Array<{ id: ProfileTab; label: string }> = [
   { id: "activity", label: "Activity" },
 ]
 
-export function PeopleProfile({ employeeId }: { employeeId: string }) {
+export function PeopleProfile({ employeeId, returnTo }: { employeeId: string; returnTo?: string }) {
   const [data, setData] = useState<EmployeeProfileResponse | null>(null)
   const [managerPool, setManagerPool] = useState<ManagedEmployee[]>([])
   const [revision, setRevision] = useState(0)
@@ -90,10 +91,11 @@ export function PeopleProfile({ employeeId }: { employeeId: string }) {
   )
 
   const employee = data.employee
+  const backHref = safeReturnTo(returnTo, "/people")
   return (
     <WorkspacePage>
       <div className="flex items-center justify-between gap-3">
-        <Button nativeButton={false} variant="ghost" size="sm" className="-ml-2 text-muted-foreground" render={<Link href="/people" />}><ArrowLeft className="size-4" />All people</Button>
+        <Button nativeButton={false} variant="ghost" size="sm" className="-ml-2 text-muted-foreground" render={<Link href={backHref} />}><ArrowLeft className="size-4" />{backHref === "/people" ? "All people" : "Back to results"}</Button>
         {loading && <span className="flex items-center gap-2 text-xs text-muted-foreground"><RefreshCcw className="size-3.5 animate-spin" />Refreshing</span>}
       </div>
 
@@ -101,7 +103,7 @@ export function PeopleProfile({ employeeId }: { employeeId: string }) {
         <div className="flex flex-col gap-4 px-4 py-4 sm:px-5 lg:flex-row lg:items-end">
           <PersonAvatar employeeId={employee.employee_id} initials={employee.initials} size="xl" />
           <div className="min-w-0 flex-1">
-            {employee.archived_at && <div className="mb-2 text-meta font-medium text-muted-foreground">Archived {formatDate(employee.archived_at)}</div>}
+            {employee.archived_at && <div className="mb-2 text-meta font-semibold text-muted-foreground">Archived {formatDate(employee.archived_at)}</div>}
             <h1 className="truncate text-page font-semibold">{employee.display_name}</h1>
             <p className="mt-1 text-sm text-muted-foreground">{employee.job_title} · {employee.department} · {employee.location}</p>
           </div>
@@ -116,7 +118,7 @@ export function PeopleProfile({ employeeId }: { employeeId: string }) {
           <nav aria-label="Employee profile sections" className="flex min-w-max gap-1">
             {tabs.map((item) => {
               const active = tab === item.id
-              return <button key={item.id} type="button" onClick={() => setTab(item.id)} className={cn("-mb-px border-b-2 px-3 py-2.5 text-sm font-medium", active ? "border-primary text-foreground" : "border-transparent text-muted-foreground hover:text-foreground")}>{item.label}</button>
+              return <button key={item.id} type="button" onClick={() => setTab(item.id)} className={cn("-mb-px border-b-2 px-3 py-2.5 text-sm font-semibold", active ? "border-primary text-foreground" : "border-transparent text-muted-foreground hover:text-foreground")}>{item.label}</button>
             })}
           </nav>
         </div>
@@ -195,7 +197,7 @@ function JobTab({ data }: { data: EmployeeProfileResponse }) {
     </Card>
     <Card className="gap-0 overflow-hidden rounded-lg border-border/70 shadow-none xl:col-span-2">
       <SectionHeader title="Promotion history" detail="Recorded job-title changes" icon={TrendingUp} />
-      {data.promotions.length ? <div className="divide-y divide-border/60">{data.promotions.map((promotion) => <div key={promotion.id} className="grid gap-2 px-5 py-4 sm:grid-cols-[130px_1fr_auto] sm:items-center"><p className="text-xs font-medium text-muted-foreground">{formatDate(promotion.promotion_date)}</p><div className="flex flex-wrap items-center gap-2 text-sm"><span className="text-muted-foreground">{promotion.previous_title}</span><ArrowUpRight className="size-3.5 text-primary" /><span className="font-semibold">{promotion.new_title}</span></div><span className="text-xs text-muted-foreground">After {promotion.months_since_previous_promotion} months</span></div>)}</div> : <div className="p-8"><EmptyState icon={TrendingUp} title="No promotions recorded" detail="Promotion records will appear here." /></div>}
+      {data.promotions.length ? <div className="divide-y divide-border/60">{data.promotions.map((promotion) => <div key={promotion.id} className="grid gap-2 px-5 py-4 sm:grid-cols-[130px_1fr_auto] sm:items-center"><p className="text-xs font-semibold text-muted-foreground">{formatDate(promotion.promotion_date)}</p><div className="flex flex-wrap items-center gap-2 text-sm"><span className="text-muted-foreground">{promotion.previous_title}</span><ArrowUpRight className="size-3.5 text-primary" /><span className="font-semibold">{promotion.new_title}</span></div><span className="text-xs text-muted-foreground">After {promotion.months_since_previous_promotion} months</span></div>)}</div> : <div className="p-8"><EmptyState icon={TrendingUp} title="No promotions recorded" detail="Promotion records will appear here." /></div>}
     </Card>
   </div>
 }
@@ -218,7 +220,7 @@ function GrowthTab({ data }: { data: EmployeeProfileResponse }) {
     <div className="grid gap-4 sm:grid-cols-3"><MetricCard label="Completed" value={`${completed.length}/${data.training.length}`} detail="Assigned programmes" /><MetricCard label="Learning hours" value={totalHours.toLocaleString()} detail="Total assigned time" /><MetricCard label="Average score" value={averageScore === null ? "—" : `${averageScore}%`} detail="Completed assessments" /></div>
     <div className="grid gap-5 xl:grid-cols-[1.25fr_.75fr]">
       <Card className="gap-0 overflow-hidden rounded-lg border-border/70 shadow-none"><SectionHeader title="Learning" detail="Training programmes and progress" icon={GraduationCap} />{data.training.length ? <div className="divide-y divide-border/60">{data.training.map((training) => <div key={training.id} className="grid gap-3 px-5 py-4 sm:grid-cols-[1fr_auto] sm:items-center"><div><p className="text-sm font-semibold">{training.training_program}</p><p className="mt-1 text-xs text-muted-foreground">{training.training_hours} hours{training.completion_date ? ` · Completed ${formatDate(training.completion_date)}` : ""}</p></div><div className="flex items-center gap-3"><RecordStatus status={training.completion_status} />{training.assessment_score !== null && <span className="font-mono text-sm font-semibold">{training.assessment_score}%</span>}</div></div>)}</div> : <div className="p-10"><EmptyState icon={GraduationCap} title="No learning assigned" detail="Training progress will appear here." /></div>}</Card>
-      <Card className="gap-0 overflow-hidden rounded-lg border-border/70 shadow-none"><SectionHeader title="Promotions" detail={plural(data.promotions.length, "promotion")} icon={TrendingUp} /><div className="p-5">{data.promotions.length ? <div className="space-y-4">{data.promotions.map((promotion) => <div key={promotion.id} className="relative border-l-2 border-primary/25 pl-4"><span className="absolute -left-[5px] top-1 size-2 rounded-full bg-primary" /><p className="text-sm font-semibold">{promotion.new_title}</p><p className="mt-1 text-xs text-muted-foreground">Previous title: {promotion.previous_title}</p><p className="mt-2 text-meta font-medium text-primary">{formatDate(promotion.promotion_date)}</p></div>)}</div> : <EmptyState icon={TrendingUp} title="No promotions recorded" detail="Promotion records will appear here." />}</div></Card>
+      <Card className="gap-0 overflow-hidden rounded-lg border-border/70 shadow-none"><SectionHeader title="Promotions" detail={plural(data.promotions.length, "promotion")} icon={TrendingUp} /><div className="p-5">{data.promotions.length ? <div className="space-y-4">{data.promotions.map((promotion) => <div key={promotion.id} className="relative border-l-2 border-primary/25 pl-4"><span className="absolute -left-[5px] top-1 size-2 rounded-full bg-primary" /><p className="text-sm font-semibold">{promotion.new_title}</p><p className="mt-1 text-xs text-muted-foreground">Previous title: {promotion.previous_title}</p><p className="mt-2 text-meta font-semibold text-primary">{formatDate(promotion.promotion_date)}</p></div>)}</div> : <EmptyState icon={TrendingUp} title="No promotions recorded" detail="Promotion records will appear here." />}</div></Card>
     </div>
   </div>
 }
@@ -248,7 +250,7 @@ function SectionHeader({ title, detail }: { title: string; detail?: string; icon
 }
 
 function InfoLine({ label, value, href }: { label: string; value: string; href?: string }) {
-  const content = <><span className="text-xs text-muted-foreground">{label}</span><span className={cn("max-w-[65%] truncate text-right text-sm font-medium", href && "text-primary")}>{value}</span></>
+  const content = <><span className="text-xs text-muted-foreground">{label}</span><span className={cn("max-w-[65%] truncate text-right text-sm font-semibold", href && "text-primary")}>{value}</span></>
   return href ? <a href={href} className="flex items-center justify-between gap-4 hover:underline">{content}</a> : <div className="flex items-center justify-between gap-4">{content}</div>
 }
 
@@ -257,7 +259,7 @@ function PersonLink({ employee, detail, roomy = false }: { employee: ManagedEmpl
 }
 
 function MetricCard({ label, value, detail }: { label: string; value: string; detail: string }) {
-  return <Card className="gap-1 rounded-lg border-border/70 p-5 shadow-none"><p className="text-xs font-medium text-muted-foreground">{label}</p><p className="mt-2 text-2xl font-semibold tabular-nums">{value}</p><p className="mt-1 text-xs text-muted-foreground">{detail}</p></Card>
+  return <Card className="gap-1 rounded-lg border-border/70 p-5 shadow-none"><p className="text-xs font-semibold text-muted-foreground">{label}</p><p className="mt-2 text-2xl font-semibold tabular-nums">{value}</p><p className="mt-1 text-xs text-muted-foreground">{detail}</p></Card>
 }
 
 function RecordStatus({ status }: { status: string }) {
@@ -269,7 +271,7 @@ function RecordStatus({ status }: { status: string }) {
 function Timeline({ activity, compact = false }: { activity: EmployeeActivity[]; compact?: boolean }) {
   return <div className="divide-y divide-border">{activity.map((item) => {
     const changedFields = parseChangedFields(item.changes_json)
-    return <div key={item.id} className="py-3 first:pt-0 last:pb-0"><p className="text-sm font-medium">{item.summary}</p><p className="mt-1 text-meta text-muted-foreground">{formatWorkspaceDateTime(item.created_at)} · {item.actor_email}</p>{!compact && changedFields.length > 0 && <p className="mt-2 text-meta text-muted-foreground">Fields changed: {changedFields.map(friendlyField).join(", ")}</p>}</div>
+    return <div key={item.id} className="py-3 first:pt-0 last:pb-0"><p className="text-sm font-semibold">{item.summary}</p><p className="mt-1 text-meta text-muted-foreground">{formatWorkspaceDateTime(item.created_at)} · {item.actor_email}</p>{!compact && changedFields.length > 0 && <p className="mt-2 text-meta text-muted-foreground">Fields changed: {changedFields.map(friendlyField).join(", ")}</p>}</div>
   })}</div>
 }
 

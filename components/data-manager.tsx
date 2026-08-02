@@ -143,9 +143,9 @@ export function DataManager() {
       <summary className="flex min-h-12 items-center justify-between gap-3 px-4 font-semibold"><span>Data coverage</span><span className="text-meta font-normal text-muted-foreground">View record counts and last import dates</span></summary>
       <div className="overflow-x-auto border-t border-border">
         <table className="w-full min-w-[680px] text-left text-sm">
-          <thead className="bg-muted/45 text-xs text-muted-foreground"><tr><th className="px-5 py-3 font-medium">Domain</th><th className="px-5 py-3 font-medium">Records</th><th className="px-5 py-3 font-medium">Last import</th></tr></thead>
+          <thead className="bg-muted/45 text-xs text-muted-foreground"><tr><th className="px-5 py-3 font-semibold">Domain</th><th className="px-5 py-3 font-semibold">Records</th><th className="px-5 py-3 font-semibold">Last import</th></tr></thead>
           <tbody>{status.map((item) => <tr key={item.domain} className="border-t border-border/70">
-            <td className="px-5 py-3 font-medium capitalize">{item.domain}</td>
+            <td className="px-5 py-3 font-semibold capitalize">{item.domain}</td>
             <td className="px-5 py-3 tabular-nums">{item.count.toLocaleString()}</td>
             <td className="px-5 py-3 text-xs text-muted-foreground">{item.lastImport ? formatWorkspaceDateTime(item.lastImport) : "—"}</td>
           </tr>)}</tbody>
@@ -162,10 +162,10 @@ export function DataManager() {
             <div className="flex items-end"><a className="inline-flex h-10 items-center gap-2 rounded-md border border-border bg-card px-3 text-sm hover:bg-muted" href={`/api/v1/data/template?domain=${domain}`}><Download className="size-4"/>Download template</a></div>
           </div>
           <div className="rounded-md border border-dashed border-input p-6">
-            <label className="flex cursor-pointer flex-col items-center gap-2 text-center"><span className="text-sm font-medium">Choose a CSV file</span><span className="text-xs text-muted-foreground">Maximum 5,000 rows</span><input type="file" accept=".csv,text/csv" className="sr-only" onChange={(event)=>void loadFile(event.target.files?.[0])}/></label>
+            <label className="flex cursor-pointer flex-col items-center gap-2 text-center"><span className="text-sm font-semibold">Choose a CSV file</span><span className="text-xs text-muted-foreground">Maximum 5,000 rows</span><input type="file" accept=".csv,text/csv" className="sr-only" onChange={(event)=>void loadFile(event.target.files?.[0])}/></label>
           </div>
-          <div className="rounded-md bg-muted/40 p-3"><p className="text-xs font-medium">Required columns</p><p className="mt-1 font-mono text-meta text-muted-foreground">{importFields[domain].join(", ")}</p></div>
-          {rows.length > 0 && <div className="rounded-md border border-border p-3"><div className="flex items-center gap-2"><span className="text-sm font-medium">{filename}</span><span className="ml-auto font-mono text-xs">{rows.length} rows</span></div><div className="mt-3 overflow-x-auto"><table className="min-w-full text-left text-meta"><thead><tr>{Object.keys(rows[0]).slice(0,6).map((key)=><th key={key} className="border-b px-2 py-1.5 text-muted-foreground">{key}</th>)}</tr></thead><tbody>{rows.slice(0,3).map((row,index)=><tr key={index}>{Object.keys(rows[0]).slice(0,6).map((key)=><td key={key} className="max-w-36 truncate border-b border-border/50 px-2 py-1.5">{row[key]}</td>)}</tr>)}</tbody></table></div></div>}
+          <div className="rounded-md bg-muted/40 p-3"><p className="text-xs font-semibold">Required columns</p><p className="mt-1 font-mono text-meta text-muted-foreground">{importFields[domain].join(", ")}</p></div>
+          {rows.length > 0 && <div className="rounded-md border border-border p-3"><div className="flex items-center gap-2"><span className="text-sm font-semibold">{filename}</span><span className="ml-auto font-mono text-xs">{rows.length} rows</span></div><div className="mt-3 overflow-x-auto"><table className="min-w-full text-left text-meta"><thead><tr>{Object.keys(rows[0]).slice(0,6).map((key)=><th key={key} className="border-b px-2 py-1.5 text-muted-foreground">{key}</th>)}</tr></thead><tbody>{rows.slice(0,3).map((row,index)=><tr key={index}>{Object.keys(rows[0]).slice(0,6).map((key)=><td key={key} className="max-w-36 truncate border-b border-border/50 px-2 py-1.5">{row[key]}</td>)}</tr>)}</tbody></table></div></div>}
           <label className="flex items-start gap-2 text-sm"><input type="checkbox" checked={replace} onChange={(event)=>setReplace(event.target.checked)} className="mt-1 accent-primary"/><span><b>Replace this domain</b><span className="block text-xs text-muted-foreground">Recommended for full HRIS refresh files. Turn off to upsert by ID while preserving other imported rows.</span></span></label>
           {error && <pre className="max-h-40 overflow-auto whitespace-pre-wrap rounded-md bg-destructive/10 p-3 text-xs text-destructive">{error}</pre>}
           {message && <p className="rounded-md bg-success/10 p-3 text-sm text-success">{message}</p>}
@@ -190,10 +190,10 @@ export function DataManager() {
                 aria-label={`Copy ${item} Power BI endpoint`}
               >
                 <span className="min-w-0 flex-1">
-                  <span className="block text-sm font-medium capitalize">{item}</span>
+                  <span className="block text-sm font-semibold capitalize">{item}</span>
                   <span className="mt-0.5 block truncate font-mono text-meta text-muted-foreground">/api/v1/power-bi/{item}</span>
                 </span>
-                <span className={cn("flex items-center gap-1.5 text-xs font-medium", copied ? "text-success" : "text-muted-foreground group-hover:text-primary")}>
+                <span className={cn("flex items-center gap-1.5 text-xs font-semibold", copied ? "text-success" : "text-muted-foreground group-hover:text-primary")}>
                   {copied ? <Check className="size-3.5" /> : <Clipboard className="size-3.5" />}
                   {copied ? "Copied" : "Copy"}
                 </span>

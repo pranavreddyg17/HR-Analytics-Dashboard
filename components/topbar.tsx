@@ -2,23 +2,24 @@
 
 import Link from "next/link"
 import { usePathname, useSearchParams } from "next/navigation"
-import { Bell, ChevronDown, LogOut, Search } from "lucide-react"
+import { ArrowLeft, Bell, ChevronDown, LogOut, Search } from "lucide-react"
 import { signOut } from "next-auth/react"
 
 import { BrandLogo } from "@/components/brand-logo"
 import type { ShellUser } from "@/components/app-sidebar"
+import { returnDestinationLabel, safeReturnTo } from "@/lib/navigation"
 
 const pageTitles: Record<string, string> = {
   "/": "Home",
   "/people": "People",
   "/inbox": "Inbox",
   "/hiring": "Hiring",
-  "/time-off": "Leaves",
+  "/leaves": "Leaves",
   "/attrition": "Attrition risk",
-  "/ai-agents": "AI assistant",
-  "/data": "Import / export data",
+  "/assistant": "AI assistant",
+  "/imports": "Import / export data",
   "/access": "Access",
-  "/learning": "Assign courses",
+  "/courses": "Assign courses",
   "/employees": "People",
   "/risk-review": "Model review",
 }
@@ -30,6 +31,7 @@ function initials(name: string): string {
 export function Topbar({ user, onOpenPalette }: { user: ShellUser; onOpenPalette: () => void }) {
   const pathname = usePathname()
   const searchParams = useSearchParams()
+  const returnTo = safeReturnTo(searchParams.get("returnTo"))
   let title = pageTitles[pathname] ?? pageTitles["/"]
   if (pathname === "/insights") {
     const view = searchParams.get("view")
@@ -50,7 +52,10 @@ export function Topbar({ user, onOpenPalette }: { user: ShellUser; onOpenPalette
         <BrandLogo compact />
       </Link>
 
-      <p className="topbar__title hidden truncate text-sm font-semibold text-foreground md:block">{title}</p>
+      <div className="topbar__title hidden min-w-0 items-center gap-2 md:flex">
+        {returnTo && <Link href={returnTo} className="inline-flex size-7 shrink-0 items-center justify-center rounded-md text-muted-foreground hover:bg-muted hover:text-foreground" aria-label={`Back to ${returnDestinationLabel(returnTo)}`} title={`Back to ${returnDestinationLabel(returnTo)}`}><ArrowLeft className="size-3.5" /></Link>}
+        <p className="truncate text-sm font-semibold text-foreground">{title}</p>
+      </div>
 
       <button
         type="button"

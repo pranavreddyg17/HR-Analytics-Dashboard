@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react"
 import Link from "next/link"
-import { useSearchParams } from "next/navigation"
+import { useRouter, useSearchParams } from "next/navigation"
 import {
   Check,
   FilterX,
@@ -17,6 +17,7 @@ import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { cn } from "@/lib/utils"
 import { formatWorkspaceDateTime } from "@/lib/date-format"
+import { safeReturnTo, withReturnTo } from "@/lib/navigation"
 import { MetricStrip, WorkspaceHeader, WorkspacePage } from "@/components/workspace-ui"
 
 type Filters = { from: string; to: string; department: string; location: string; leaveType: string; period: "month" | "quarter" | "year" }
@@ -44,7 +45,7 @@ function statusTone(status: string): string {
 }
 
 function LeaveSchedule({ title, description, emptyMessage, rows, people }: { title: string; description: string; emptyMessage: string; rows: LeaveRecord[]; people: Map<string, string> }) {
-  return <Card className="shadow-none"><CardHeader><CardTitle>{title}</CardTitle><CardDescription>{description}</CardDescription></CardHeader><CardContent className="divide-y divide-border">{rows.length ? rows.slice(0, 7).map((row) => <div key={row.id} className="grid grid-cols-[minmax(0,1fr)_auto] gap-3 py-3"><div className="min-w-0"><p className="truncate text-sm font-medium">{people.get(row.employee_id) ?? row.employee_id}</p><p className="mt-0.5 truncate text-meta text-muted-foreground">{row.leave_type} · {row.department}</p></div><div className="text-right"><p className="text-xs font-medium whitespace-nowrap">{dateLabel(row.start_date)}</p><p className="mt-0.5 text-meta text-muted-foreground">{row.leave_days} day{row.leave_days === 1 ? "" : "s"}</p></div></div>) : <div className="flex min-h-44 items-center justify-center px-6 text-center text-xs text-muted-foreground">{emptyMessage}</div>}</CardContent></Card>
+  return <Card className="shadow-none"><CardHeader><CardTitle>{title}</CardTitle><CardDescription>{description}</CardDescription></CardHeader><CardContent className="divide-y divide-border">{rows.length ? rows.slice(0, 7).map((row) => <div key={row.id} className="grid grid-cols-[minmax(0,1fr)_auto] gap-3 py-3"><div className="min-w-0"><p className="truncate text-sm font-semibold">{people.get(row.employee_id) ?? row.employee_id}</p><p className="mt-0.5 truncate text-meta text-muted-foreground">{row.leave_type} · {row.department}</p></div><div className="text-right"><p className="text-xs font-semibold whitespace-nowrap">{dateLabel(row.start_date)}</p><p className="mt-0.5 text-meta text-muted-foreground">{row.leave_days} day{row.leave_days === 1 ? "" : "s"}</p></div></div>) : <div className="flex min-h-44 items-center justify-center px-6 text-center text-xs text-muted-foreground">{emptyMessage}</div>}</CardContent></Card>
 }
 
 function canDecide(row: LeaveRecord, reviewer: Reviewer, employees: Map<string, EmployeeRecord>): boolean {
@@ -70,7 +71,7 @@ function ReviewQueue({ rows, people, reviewer, employees, busyId, onDecision }: 
         <div className="flex items-start justify-between gap-4"><div><CardTitle>Pending decisions</CardTitle><CardDescription>{description}</CardDescription></div><span className="text-sm font-semibold tabular-nums">{rows.length}</span></div>
       </CardHeader>
       <CardContent className="px-0 pb-0">
-        {rows.length ? <div className="divide-y divide-border/70">{rows.map((row) => { const actionable = canDecide(row, reviewer, employees); return <div key={row.id} className="grid gap-4 px-4 py-4 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-center sm:px-5"><div className="min-w-0"><p className="truncate text-sm font-semibold">{people.get(row.employee_id) ?? row.employee_id}</p><p className="mt-1 text-xs text-muted-foreground">{row.leave_type} · {row.leave_days} day{row.leave_days === 1 ? "" : "s"} · {dateLabel(row.start_date)} — {dateLabel(row.end_date)}</p><p className="mt-1 text-meta text-muted-foreground">{row.department} · {row.employee_id}</p></div>{actionable ? <div className="flex items-center gap-2"><Button size="sm" variant="outline" disabled={busyId !== null} onClick={() => onDecision(row, "Rejected")}><X className="size-3.5"/>Decline</Button><Button size="sm" disabled={busyId !== null} onClick={() => onDecision(row, "Approved")}>{busyId === row.id ? <LoaderCircle className="size-3.5 animate-spin"/> : <Check className="size-3.5"/>}Approve</Button></div> : <span className="text-meta font-medium text-muted-foreground">Another approver is required</span>}</div> })}</div> : <div className="flex min-h-32 items-center justify-center px-6 text-center text-sm text-muted-foreground">No pending leave requests.</div>}
+        {rows.length ? <div className="divide-y divide-border/70">{rows.map((row) => { const actionable = canDecide(row, reviewer, employees); return <div key={row.id} className="grid gap-4 px-4 py-4 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-center sm:px-5"><div className="min-w-0"><p className="truncate text-sm font-semibold">{people.get(row.employee_id) ?? row.employee_id}</p><p className="mt-1 text-xs text-muted-foreground">{row.leave_type} · {row.leave_days} day{row.leave_days === 1 ? "" : "s"} · {dateLabel(row.start_date)} — {dateLabel(row.end_date)}</p><p className="mt-1 text-meta text-muted-foreground">{row.department} · {row.employee_id}</p></div>{actionable ? <div className="flex items-center gap-2"><Button size="sm" variant="outline" disabled={busyId !== null} onClick={() => onDecision(row, "Rejected")}><X className="size-3.5"/>Decline</Button><Button size="sm" disabled={busyId !== null} onClick={() => onDecision(row, "Approved")}>{busyId === row.id ? <LoaderCircle className="size-3.5 animate-spin"/> : <Check className="size-3.5"/>}Approve</Button></div> : <span className="text-meta font-semibold text-muted-foreground">Another approver is required</span>}</div> })}</div> : <div className="flex min-h-32 items-center justify-center px-6 text-center text-sm text-muted-foreground">No pending leave requests.</div>}
       </CardContent>
     </Card>
   )
@@ -109,9 +110,18 @@ function LeaveTable({ rows, people, reviewer, employees, busyId, selectedId, onD
 }
 
 export function TimeOffWorkspace({ canRequestLeave, reviewer }: { canRequestLeave: boolean; reviewer: Reviewer }) {
+  const router = useRouter()
   const searchParams = useSearchParams()
   const selectedRequestId = searchParams.get("request")
-  const [filters, setFilters] = useState<Filters>(emptyFilters)
+  const returnTo = safeReturnTo(searchParams.get("returnTo"))
+  const [filters, setFilters] = useState<Filters>(() => ({
+    from: searchParams.get("from") ?? "",
+    to: searchParams.get("to") ?? "",
+    department: searchParams.get("department") ?? "",
+    location: searchParams.get("location") ?? "",
+    leaveType: searchParams.get("leaveType") ?? "",
+    period: "month",
+  }))
   const [data, setData] = useState<WorkforceAnalytics | null>(null)
   const [loadedQuery, setLoadedQuery] = useState<string | null>(null)
   const [refreshKey, setRefreshKey] = useState(0)
@@ -120,6 +130,26 @@ export function TimeOffWorkspace({ canRequestLeave, reviewer }: { canRequestLeav
   const [error, setError] = useState("")
   const query = useMemo(() => queryFor(filters), [filters])
   const loading = query !== loadedQuery
+  const listHref = useMemo(() => {
+    const params = new URLSearchParams()
+    for (const [key, value] of Object.entries(filters)) {
+      if (value && key !== "period") params.set(key, value)
+    }
+    if (returnTo) params.set("returnTo", returnTo)
+    return `/leaves${params.size ? `?${params.toString()}` : ""}`
+  }, [filters, returnTo])
+  const selectedHref = useMemo(() => {
+    if (!selectedRequestId) return listHref
+    const params = new URLSearchParams(listHref.split("?")[1] ?? "")
+    params.set("request", selectedRequestId)
+    return `/leaves?${params.toString()}`
+  }, [listHref, selectedRequestId])
+
+  useEffect(() => {
+    const current = `/leaves${searchParams.size ? `?${searchParams.toString()}` : ""}`
+    const target = selectedRequestId ? selectedHref : listHref
+    if (current !== target) router.replace(target, { scroll: false })
+  }, [listHref, router, searchParams, selectedHref, selectedRequestId])
 
   useEffect(() => {
     const controller = new AbortController()
@@ -163,14 +193,14 @@ export function TimeOffWorkspace({ canRequestLeave, reviewer }: { canRequestLeav
   return <WorkspacePage>
     <WorkspaceHeader title="Leaves" description="Review requests and coordinate team availability." meta={<><span>{data.leave.totalRequests} requests</span><span>Updated {formatWorkspaceDateTime(data.generatedAt)}</span></>} actions={<>{canReviewLeave && pendingForReview.length > 0 && <Button nativeButton={false} variant="outline" render={<a href="#pending-decisions"/>}>Review pending ({pendingForReview.length})</Button>}{canRequestLeave && <Button nativeButton={false} render={<Link href="/inbox?new=leave"/>}><Plus className="size-3.5"/>Request leave</Button>}</>}/>
 
-    {selectedRequestId && (selectedRequest ? <Card className="gap-0 overflow-hidden py-0 shadow-none"><CardHeader className="border-b border-border px-5 py-4 sm:flex-row sm:items-start sm:justify-between"><div><CardTitle>Selected leave request</CardTitle><CardDescription>{selectedPerson} · {selectedRequest.employee_id}</CardDescription></div><div className="flex flex-wrap gap-2"><Button nativeButton={false} variant="outline" render={<Link href="/time-off"/>}>Clear selection</Button><Button nativeButton={false} variant="outline" render={<Link href={`/people/${encodeURIComponent(selectedRequest.employee_id)}`}/>}>View employee</Button>{canDecide(selectedRequest, reviewer, employees) && <><Button variant="outline" disabled={busyId !== null} onClick={() => void decide(selectedRequest, "Rejected")}>Decline</Button><Button disabled={busyId !== null} onClick={() => void decide(selectedRequest, "Approved")}>{busyId === selectedRequest.id && <LoaderCircle className="size-3.5 animate-spin"/>}Approve</Button></>}{selectedRequest.approval_status.toLowerCase() === "approved" && <Button onClick={() => { setFilters({ ...filters, department: selectedRequest.department }); window.setTimeout(() => document.getElementById("leave-register")?.scrollIntoView({ behavior: "smooth", block: "start" }), 0) }}>Show department requests</Button>}</div></CardHeader><CardContent className="grid gap-4 p-5 sm:grid-cols-2 xl:grid-cols-4"><div><p className="text-meta font-semibold text-muted-foreground">Leave</p><p className="mt-1 text-sm">{selectedRequest.leave_type} · {selectedRequest.leave_days} day{selectedRequest.leave_days === 1 ? "" : "s"}</p></div><div><p className="text-meta font-semibold text-muted-foreground">Dates</p><p className="mt-1 text-sm">{dateLabel(selectedRequest.start_date)} — {dateLabel(selectedRequest.end_date)}</p></div><div><p className="text-meta font-semibold text-muted-foreground">Department</p><p className="mt-1 text-sm">{selectedRequest.department}</p></div><div><p className="text-meta font-semibold text-muted-foreground">Status</p><p className={cn("mt-1 text-sm font-semibold", statusTone(selectedRequest.approval_status))}>{selectedRequest.approval_status}</p></div></CardContent></Card> : <div className="rounded-md border border-amber-200 bg-amber-50 px-4 py-3 text-xs text-amber-900 dark:border-amber-900/40 dark:bg-amber-950/20 dark:text-amber-100">This leave request is not available in the current data view. <Link href="/time-off" className="font-semibold underline">Clear selection</Link></div>)}
+    {selectedRequestId && (selectedRequest ? <Card className="gap-0 overflow-hidden py-0 shadow-none"><CardHeader className="border-b border-border px-5 py-4 sm:flex-row sm:items-start sm:justify-between"><div><CardTitle>Selected leave request</CardTitle><CardDescription>{selectedPerson} · {selectedRequest.employee_id}</CardDescription></div><div className="flex flex-wrap gap-2"><Button nativeButton={false} variant="outline" render={<Link href={listHref}/>}>Clear selection</Button><Button nativeButton={false} variant="outline" render={<Link href={withReturnTo(`/people/${encodeURIComponent(selectedRequest.employee_id)}`, selectedHref)}/>}>View employee</Button>{canDecide(selectedRequest, reviewer, employees) && <><Button variant="outline" disabled={busyId !== null} onClick={() => void decide(selectedRequest, "Rejected")}>Decline</Button><Button disabled={busyId !== null} onClick={() => void decide(selectedRequest, "Approved")}>{busyId === selectedRequest.id && <LoaderCircle className="size-3.5 animate-spin"/>}Approve</Button></>}{selectedRequest.approval_status.toLowerCase() === "approved" && <Button onClick={() => { setFilters({ ...filters, department: selectedRequest.department }); window.setTimeout(() => document.getElementById("leave-register")?.scrollIntoView({ behavior: "smooth", block: "start" }), 0) }}>Show department requests</Button>}</div></CardHeader><CardContent className="grid gap-4 p-5 sm:grid-cols-2 xl:grid-cols-4"><div><p className="text-meta font-semibold text-muted-foreground">Leave</p><p className="mt-1 text-sm">{selectedRequest.leave_type} · {selectedRequest.leave_days} day{selectedRequest.leave_days === 1 ? "" : "s"}</p></div><div><p className="text-meta font-semibold text-muted-foreground">Dates</p><p className="mt-1 text-sm">{dateLabel(selectedRequest.start_date)} — {dateLabel(selectedRequest.end_date)}</p></div><div><p className="text-meta font-semibold text-muted-foreground">Department</p><p className="mt-1 text-sm">{selectedRequest.department}</p></div><div><p className="text-meta font-semibold text-muted-foreground">Status</p><p className={cn("mt-1 text-sm font-semibold", statusTone(selectedRequest.approval_status))}>{selectedRequest.approval_status}</p></div></CardContent></Card> : <div className="rounded-md border border-amber-200 bg-amber-50 px-4 py-3 text-xs text-amber-900 dark:border-amber-900/40 dark:bg-amber-950/20 dark:text-amber-100">This leave request is not available in the current data view. <Link href={listHref} className="font-semibold underline">Clear selection</Link></div>)}
 
     <details className="rounded-lg border border-border bg-card">
       <summary className="flex min-h-11 items-center justify-between px-4 font-semibold">Filter requests <span className="text-meta font-normal text-muted-foreground">Department, location, leave type, or date</span></summary>
       <div className="border-t border-border p-4"><div className="mb-3 flex justify-end"><Button size="sm" variant="ghost" onClick={() => setFilters(emptyFilters)}><FilterX className="size-3.5"/>Reset</Button></div><div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-5"><Filter label="From"><input type="date" value={filters.from} onChange={(event) => setFilters({ ...filters, from: event.target.value })}/></Filter><Filter label="To"><input type="date" value={filters.to} onChange={(event) => setFilters({ ...filters, to: event.target.value })}/></Filter><Filter label="Department"><select value={filters.department} onChange={(event) => setFilters({ ...filters, department: event.target.value })}><option value="">All departments</option>{data.dimensions.departments.map((item) => <option key={item}>{item}</option>)}</select></Filter><Filter label="Location"><select value={filters.location} onChange={(event) => setFilters({ ...filters, location: event.target.value })}><option value="">All locations</option>{data.dimensions.locations.map((item) => <option key={item}>{item}</option>)}</select></Filter><Filter label="Leave type"><select value={filters.leaveType} onChange={(event) => setFilters({ ...filters, leaveType: event.target.value })}><option value="">All leave types</option>{data.dimensions.leaveTypes.map((item) => <option key={item}>{item}</option>)}</select></Filter></div>{loading && <div className="mt-3 h-1 overflow-hidden rounded-full bg-muted"><div className="h-full w-2/3 animate-pulse rounded-full bg-primary"/></div>}</div>
     </details>
 
-    {(notice || error) && <div aria-live="polite" className={cn("rounded-md border px-4 py-3 text-xs font-medium", error ? "border-rose-200 bg-rose-50 text-rose-800 dark:border-rose-900/40 dark:bg-rose-950/20 dark:text-rose-200" : "border-emerald-200 bg-emerald-50 text-emerald-800 dark:border-emerald-900/40 dark:bg-emerald-950/20 dark:text-emerald-200")}>{error || notice}</div>}
+    {(notice || error) && <div aria-live="polite" className={cn("rounded-md border px-4 py-3 text-xs font-semibold", error ? "border-rose-200 bg-rose-50 text-rose-800 dark:border-rose-900/40 dark:bg-rose-950/20 dark:text-rose-200" : "border-emerald-200 bg-emerald-50 text-emerald-800 dark:border-emerald-900/40 dark:bg-emerald-950/20 dark:text-emerald-200")}>{error || notice}</div>}
 
     <MetricStrip metrics={[{ label: "Away today", value: new Set(data.leave.currentlyAway.map((row) => row.employee_id)).size.toLocaleString(), detail: "Employees on approved leave" }, { label: "Pending decisions", value: data.leave.pending.toLocaleString(), detail: `${pendingForReview.length} available for review` }, { label: "Approved leave", value: `${data.leave.totalDays.toLocaleString()}d`, detail: `${data.leave.approved} approved requests` }, { label: "Average leave", value: `${data.leave.averageDaysPerEmployee.toLocaleString()}d`, detail: "Per employee with approved leave" }]}/>
 
@@ -184,5 +214,5 @@ export function TimeOffWorkspace({ canRequestLeave, reviewer }: { canRequestLeav
 }
 
 function Filter({ label, children }: { label: string; children: React.ReactNode }) {
-  return <label className="text-meta font-medium text-muted-foreground">{label}<span className="mt-1 block [&_input]:h-9 [&_input]:w-full [&_input]:rounded-md [&_input]:border [&_input]:border-border [&_input]:bg-background [&_input]:px-3 [&_input]:text-xs [&_input]:font-normal [&_select]:h-9 [&_select]:w-full [&_select]:rounded-md [&_select]:border [&_select]:border-border [&_select]:bg-background [&_select]:px-3 [&_select]:text-xs [&_select]:font-normal">{children}</span></label>
+  return <label className="text-meta font-semibold text-muted-foreground">{label}<span className="mt-1 block [&_input]:h-9 [&_input]:w-full [&_input]:rounded-md [&_input]:border [&_input]:border-border [&_input]:bg-background [&_input]:px-3 [&_input]:text-xs [&_input]:font-normal [&_select]:h-9 [&_select]:w-full [&_select]:rounded-md [&_select]:border [&_select]:border-border [&_select]:bg-background [&_select]:px-3 [&_select]:text-xs [&_select]:font-normal">{children}</span></label>
 }

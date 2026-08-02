@@ -1,16 +1,11 @@
-import type { Metadata } from "next"
+import { redirect } from "next/navigation"
 
-import { TimeOffWorkspace } from "@/components/time-off-workspace"
-import { requireRequestActor } from "@/lib/server/request-user"
-import { getWorkflowActorContext } from "@/lib/server/workflows"
+import { searchParamsFromRecord } from "@/lib/navigation"
 
-export const metadata: Metadata = {
-  title: "Leaves",
-  description: "Request, review, and analyze employee leave using live workspace records.",
-}
+export const dynamic = "force-dynamic"
 
-export default async function TimeOffPage() {
-  const actor = await requireRequestActor()
-  const context = await getWorkflowActorContext(actor)
-  return <TimeOffWorkspace canRequestLeave={Boolean(context.employeeId || ["admin", "hr"].includes(actor.role))} reviewer={{ role: actor.role, email: actor.email, employeeId: context.employeeId }} />
+export default async function LegacyTimeOffPage({ searchParams }: { searchParams: Promise<Record<string, string | string[] | undefined>> }) {
+  const params = await searchParams
+  const query = searchParamsFromRecord({ from: params.from, to: params.to, department: params.department, location: params.location, leaveType: params.leaveType, request: params.request, returnTo: params.returnTo })
+  redirect(`/leaves${query ? `?${query}` : ""}`)
 }

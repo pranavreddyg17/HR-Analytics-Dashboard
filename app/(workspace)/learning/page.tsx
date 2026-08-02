@@ -1,22 +1,11 @@
-import type { Metadata } from "next"
+import { redirect } from "next/navigation"
 
-import { LearningWorkspace } from "@/components/learning-workspace"
-import { listPeople } from "@/lib/server/people"
-import { requireRequestActor } from "@/lib/server/request-user"
-import { getWorkflowActorContext } from "@/lib/server/workflows"
+import { searchParamsFromRecord } from "@/lib/navigation"
 
 export const dynamic = "force-dynamic"
 
-export const metadata: Metadata = {
-  title: "Assign courses",
-  description: "Assign training and resolve overdue or mandatory requirements.",
-}
-
-export default async function LearningPage() {
-  const actor = await requireRequestActor()
-  const [context, directory] = await Promise.all([
-    getWorkflowActorContext(actor),
-    listPeople({ limit: 500 }),
-  ])
-  return <LearningWorkspace actor={context} people={directory.items}/>
+export default async function LegacyLearningPage({ searchParams }: { searchParams: Promise<Record<string, string | string[] | undefined>> }) {
+  const params = await searchParams
+  const query = searchParamsFromRecord({ department: params.department, q: params.q, new: params.new, returnTo: params.returnTo })
+  redirect(`/courses${query ? `?${query}` : ""}`)
 }

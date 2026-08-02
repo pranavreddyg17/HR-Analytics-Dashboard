@@ -207,7 +207,7 @@ function EmployeeDrawerPanel({
                 {["Personal", "Employment", "Review"].map((label, index) => (
                   <button key={label} type="button" onClick={() => goToStep(index)} className="group text-left">
                     <span className={cn("mb-2 block h-1 rounded-full transition-colors", index <= step ? "bg-primary" : "bg-muted")} />
-                    <span className={cn("text-xs font-medium", index === step ? "text-foreground" : "text-muted-foreground")}>{label}</span>
+                    <span className={cn("text-xs font-semibold", index === step ? "text-foreground" : "text-muted-foreground")}>{label}</span>
                   </button>
                 ))}
               </div>

@@ -14,6 +14,7 @@ import { PersonAvatar, StatusPill, plural } from "@/components/people/people-ui"
 import type { EmployeeDirectoryResponse, ManagedEmployee } from "@/lib/people-types"
 import { cn } from "@/lib/utils"
 import { WorkspaceHeader, WorkspacePage } from "@/components/workspace-ui"
+import { safeReturnTo, withReturnTo } from "@/lib/navigation"
 
 type Filters = {
   department: string
@@ -40,16 +41,25 @@ function validTenure(value: string | null): string {
 export function PeopleDirectory() {
   const router = useRouter()
   const searchParams = useSearchParams()
-  const [query, setQuery] = useState("")
-  const [debouncedQuery, setDebouncedQuery] = useState("")
-  const [filters, setFilters] = useState<Filters>(() => ({ ...initialFilters, tenure: validTenure(searchParams.get("tenure")) }))
+  const initialQuery = searchParams.get("q") ?? ""
+  const [query, setQuery] = useState(initialQuery)
+  const [debouncedQuery, setDebouncedQuery] = useState(initialQuery.trim())
+  const [filters, setFilters] = useState<Filters>(() => ({
+    department: searchParams.get("department") ?? "",
+    location: searchParams.get("location") ?? "",
+    status: searchParams.get("status") ?? "",
+    employmentType: searchParams.get("employmentType") ?? "",
+    tenure: validTenure(searchParams.get("tenure")),
+    includeArchived: searchParams.get("archived") === "1",
+  }))
   const [data, setData] = useState<EmployeeDirectoryResponse | null>(null)
   const [managerPool, setManagerPool] = useState<ManagedEmployee[]>([])
   const [loadedRequest, setLoadedRequest] = useState<string | null>(null)
   const [retry, setRetry] = useState(0)
   const [error, setError] = useState("")
-  const [drawerOpen, setDrawerOpen] = useState(() => searchParams.get("new") === "employee")
-  const [showFilters, setShowFilters] = useState(() => Boolean(validTenure(searchParams.get("tenure"))))
+  const drawerOpen = searchParams.get("new") === "employee"
+  const [drawerOpenedInternally, setDrawerOpenedInternally] = useState(false)
+  const [showFilters, setShowFilters] = useState(() => ["department", "location", "status", "employmentType", "tenure", "archived"].some((key) => Boolean(searchParams.get(key))))
 
   useEffect(() => {
     const timer = window.setTimeout(() => setDebouncedQuery(query.trim()), 220)
@@ -67,6 +77,28 @@ export function PeopleDirectory() {
     if (filters.includeArchived) params.set("includeArchived", "true")
     return params.toString()
   }, [debouncedQuery, filters])
+
+  const directoryHref = useMemo(() => {
+    const params = new URLSearchParams()
+    if (debouncedQuery) params.set("q", debouncedQuery)
+    if (filters.department) params.set("department", filters.department)
+    if (filters.location) params.set("location", filters.location)
+    if (filters.status) params.set("status", filters.status)
+    if (filters.employmentType) params.set("employmentType", filters.employmentType)
+    if (filters.tenure) params.set("tenure", filters.tenure)
+    if (filters.includeArchived) params.set("archived", "1")
+    const returnTo = safeReturnTo(searchParams.get("returnTo"))
+    if (returnTo) params.set("returnTo", returnTo)
+    return `/people${params.size ? `?${params.toString()}` : ""}`
+  }, [debouncedQuery, filters, searchParams])
+
+  useEffect(() => {
+    const current = `/people${searchParams.size ? `?${searchParams.toString()}` : ""}`
+    const params = new URLSearchParams(directoryHref.split("?")[1] ?? "")
+    if (drawerOpen) params.set("new", "employee")
+    const target = `/people${params.size ? `?${params.toString()}` : ""}`
+    if (current !== target) router.replace(target, { scroll: false })
+  }, [directoryHref, drawerOpen, router, searchParams])
 
   useEffect(() => {
     const controller = new AbortController()
@@ -98,24 +130,27 @@ export function PeopleDirectory() {
   function clearFilters() {
     setQuery("")
     setFilters(initialFilters)
-    const params = new URLSearchParams(searchParams.toString())
-    params.delete("tenure")
-    router.replace(`/people${params.size ? `?${params.toString()}` : ""}`, { scroll: false })
   }
 
   function updateTenure(tenure: string) {
     setFilters((current) => ({ ...current, tenure }))
-    const params = new URLSearchParams(searchParams.toString())
-    if (tenure) params.set("tenure", tenure)
-    else params.delete("tenure")
-    router.replace(`/people${params.size ? `?${params.toString()}` : ""}`, { scroll: false })
   }
 
+  const openDrawer = useCallback(() => {
+    const params = new URLSearchParams(directoryHref.split("?")[1] ?? "")
+    params.set("new", "employee")
+    setDrawerOpenedInternally(true)
+    router.push(`/people?${params.toString()}`, { scroll: false })
+  }, [directoryHref, router])
   const closeDrawer = useCallback(() => {
-    setDrawerOpen(false)
-    if (searchParams.get("new") === "employee") router.replace("/people", { scroll: false })
-  }, [router, searchParams])
-  const openCreatedEmployee = useCallback((employee: ManagedEmployee) => router.push(`/people/${encodeURIComponent(employee.employee_id)}`), [router])
+    if (drawerOpenedInternally) {
+      setDrawerOpenedInternally(false)
+      router.back()
+      return
+    }
+    router.replace(directoryHref, { scroll: false })
+  }, [directoryHref, drawerOpenedInternally, router])
+  const openCreatedEmployee = useCallback((employee: ManagedEmployee) => router.replace(withReturnTo(`/people/${encodeURIComponent(employee.employee_id)}`, directoryHref)), [directoryHref, router])
 
   return (
     <WorkspacePage>
@@ -123,7 +158,7 @@ export function PeopleDirectory() {
         title="People"
         description="Employee profiles, reporting lines, and employment records."
         meta={data ? <>{data.total.toLocaleString()} employees</> : undefined}
-        actions={<Button onClick={() => setDrawerOpen(true)}><Plus className="size-3.5" />Add employee</Button>}
+        actions={<Button onClick={openDrawer}><Plus className="size-3.5" />Add employee</Button>}
       />
 
       <Card className="gap-0 overflow-hidden py-0 shadow-none">
@@ -132,7 +167,7 @@ export function PeopleDirectory() {
             <div className="relative min-w-0 flex-1">
               <Search className="absolute left-3.5 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
               <Input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search name, role, email, or employee ID" className="h-9 bg-background pl-10 pr-10" />
-              {query && <button type="button" onClick={() => setQuery("")} aria-label="Clear search" className="absolute right-3 top-1/2 -translate-y-1/2 text-xs font-medium text-muted-foreground hover:text-foreground">Clear</button>}
+              {query && <button type="button" onClick={() => setQuery("")} aria-label="Clear search" className="absolute right-3 top-1/2 -translate-y-1/2 text-xs font-semibold text-muted-foreground hover:text-foreground">Clear</button>}
             </div>
             <Button variant={showFilters || activeFilterCount ? "secondary" : "outline"} onClick={() => setShowFilters((current) => !current)}><SlidersHorizontal className="size-3.5" />{activeFilterCount > 0 ? `Filters (${activeFilterCount})` : "Filters"}</Button>
           </div>
@@ -145,7 +180,7 @@ export function PeopleDirectory() {
               <FilterSelect label="Employment" value={filters.employmentType} options={dimensions?.employmentTypes ?? []} allLabel="All types" onChange={(employmentType) => setFilters((current) => ({ ...current, employmentType }))} />
               <FilterSelect label="Tenure" value={filters.tenure} options={tenureOptions} allLabel="All tenure ranges" onChange={updateTenure} />
               <div className="flex items-end gap-2">
-                <button type="button" onClick={() => setFilters((current) => ({ ...current, includeArchived: !current.includeArchived }))} className={cn("flex h-9 items-center gap-2 rounded-md border px-3 text-xs font-medium", filters.includeArchived ? "border-primary/30 bg-primary/10 text-primary" : "border-border bg-background text-muted-foreground hover:text-foreground")}><Archive className="size-3.5" />Archived</button>
+                <button type="button" onClick={() => setFilters((current) => ({ ...current, includeArchived: !current.includeArchived }))} className={cn("flex h-9 items-center gap-2 rounded-md border px-3 text-xs font-semibold", filters.includeArchived ? "border-primary/30 bg-primary/10 text-primary" : "border-border bg-background text-muted-foreground hover:text-foreground")}><Archive className="size-3.5" />Archived</button>
                 {activeFilterCount > 0 && <Button type="button" variant="ghost" size="icon" aria-label="Clear filters" onClick={clearFilters}><FilterX className="size-4" /></Button>}
               </div>
             </div>
@@ -157,7 +192,7 @@ export function PeopleDirectory() {
           {(debouncedQuery || activeFilterCount > 0) && <button type="button" onClick={clearFilters} className="text-xs font-semibold text-primary hover:underline">Reset view</button>}
         </div>
 
-        <div className="hidden grid-cols-[minmax(250px,1.4fr)_minmax(170px,1fr)_minmax(130px,.7fr)_90px_120px] gap-4 border-b border-border/60 px-5 py-2.5 text-xs font-medium text-muted-foreground md:grid">
+        <div className="hidden grid-cols-[minmax(250px,1.4fr)_minmax(170px,1fr)_minmax(130px,.7fr)_90px_120px] gap-4 border-b border-border/60 px-5 py-2.5 text-xs font-semibold text-muted-foreground md:grid">
           <span>Employee</span><span>Department</span><span>Location</span><span>Tenure</span><span>Status</span>
         </div>
 
@@ -167,10 +202,10 @@ export function PeopleDirectory() {
             <div className="flex min-h-64 flex-col items-center justify-center gap-3 p-6 text-center"><div><p className="font-semibold">Employee records could not be loaded</p><p className="mt-1 text-sm text-muted-foreground">{error}</p></div><Button variant="outline" onClick={() => setRetry((current) => current + 1)}>Try again</Button></div>
           ) : data?.items.length ? (
             <div>
-              {data.items.map((employee) => <PersonRow key={employee.employee_id} employee={employee} />)}
+              {data.items.map((employee) => <PersonRow key={employee.employee_id} employee={employee} returnTo={directoryHref} />)}
             </div>
           ) : (
-            <div className="flex min-h-72 flex-col items-center justify-center p-6 text-center"><h3 className="font-semibold">No employees found</h3><p className="mt-1 max-w-sm text-sm text-muted-foreground">Change the search or filters, or add an employee record.</p><div className="mt-4 flex gap-2"><Button variant="outline" onClick={clearFilters}>Reset filters</Button><Button onClick={() => setDrawerOpen(true)}><Plus className="size-4" />Add employee</Button></div></div>
+            <div className="flex min-h-72 flex-col items-center justify-center p-6 text-center"><h3 className="font-semibold">No employees found</h3><p className="mt-1 max-w-sm text-sm text-muted-foreground">Change the search or filters, or add an employee record.</p><div className="mt-4 flex gap-2"><Button variant="outline" onClick={clearFilters}>Reset filters</Button><Button onClick={openDrawer}><Plus className="size-4" />Add employee</Button></div></div>
           )}
         </div>
 
@@ -193,9 +228,9 @@ function FilterSelect({ label, value, options, allLabel, onChange }: { label: st
   return <label className="block"><span className="mb-1 block text-meta font-semibold text-muted-foreground">{label}</span><select value={value} onChange={(event) => onChange(event.target.value)} className="h-9 w-full rounded-md border border-border bg-background px-3 text-sm text-foreground outline-none focus:border-ring focus:ring-2 focus:ring-ring/20"><option value="">{allLabel}</option>{options.map((option) => { const item = typeof option === "string" ? { value: option, label: option } : option; return <option key={item.value} value={item.value}>{item.label}</option> })}</select></label>
 }
 
-function PersonRow({ employee }: { employee: ManagedEmployee }) {
+function PersonRow({ employee, returnTo }: { employee: ManagedEmployee; returnTo: string }) {
   return (
-      <Link href={`/people/${encodeURIComponent(employee.employee_id)}`} className={cn("group grid gap-3 border-b border-border/55 px-4 py-3 last:border-b-0 hover:bg-muted/25 sm:px-5 md:grid-cols-[minmax(250px,1.4fr)_minmax(170px,1fr)_minmax(130px,.7fr)_90px_120px] md:items-center md:gap-4", employee.archived_at && "opacity-65")}>
+      <Link href={withReturnTo(`/people/${encodeURIComponent(employee.employee_id)}`, returnTo)} className={cn("group grid gap-3 border-b border-border/55 px-4 py-3 last:border-b-0 hover:bg-muted/25 sm:px-5 md:grid-cols-[minmax(250px,1.4fr)_minmax(170px,1fr)_minmax(130px,.7fr)_90px_120px] md:items-center md:gap-4", employee.archived_at && "opacity-65")}>
         <div className="flex min-w-0 items-center gap-3.5">
           <PersonAvatar employeeId={employee.employee_id} initials={employee.initials} size="lg" />
           <div className="min-w-0 flex-1">

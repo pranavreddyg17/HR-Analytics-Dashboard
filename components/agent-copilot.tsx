@@ -177,7 +177,7 @@ export function AgentCopilot({ dataMode }: { dataMode: string }) {
   return (
     <div className="flex h-full min-h-0 flex-col">
       <div className="flex items-center gap-2 border-b border-border bg-card px-4 py-2.5">
-        <label className="min-w-0 flex-1 text-meta font-medium text-muted-foreground">
+        <label className="min-w-0 flex-1 text-meta font-semibold text-muted-foreground">
           Conversation
           <select
             value={conversationId}

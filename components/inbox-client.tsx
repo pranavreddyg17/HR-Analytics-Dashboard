@@ -5,10 +5,11 @@ import Link from "next/link"
 import { useRouter, useSearchParams } from "next/navigation"
 import { CheckCircle2, CircleAlert, LoaderCircle, RefreshCw } from "lucide-react"
 
-import { WorkflowCreator } from "@/components/workflow-creator"
+import { WorkflowCreator, type WorkflowType } from "@/components/workflow-creator"
 import type { InboxItem, ManagedEmployee, WorkflowActorContext } from "@/lib/people-types"
 import { cn } from "@/lib/utils"
 import { MetricStrip, WorkspaceHeader, WorkspacePage } from "@/components/workspace-ui"
+import { safeReturnTo, withReturnTo } from "@/lib/navigation"
 
 type QueueView = "my_work" | "decisions" | "managers" | "employees" | "overdue" | "completed"
 type DomainFilter = "all" | InboxItem["type"]
@@ -83,8 +84,9 @@ function statusTone(item: InboxItem): string {
   return "text-muted-foreground"
 }
 
-function ItemRow({ item, onAction, disabled, selected }: { item: InboxItem; onAction: (item: InboxItem, action: "approve" | "reject" | "complete") => void; disabled: boolean; selected: boolean }) {
+function ItemRow({ item, onAction, disabled, selected, returnTo }: { item: InboxItem; onAction: (item: InboxItem, action: "approve" | "reject" | "complete") => void; disabled: boolean; selected: boolean; returnTo: string }) {
   const meta = domainMeta[item.type]
+  const recordHref = withReturnTo(item.recordHref, returnTo)
 
   return (
     <article id={`work-${item.id}`} aria-current={selected ? "true" : undefined} className={cn("scroll-mt-24 border-t border-border/70 px-4 py-3.5 first:border-t-0", selected && "bg-accent/45 ring-1 ring-inset ring-primary/30")}>
@@ -95,9 +97,9 @@ function ItemRow({ item, onAction, disabled, selected }: { item: InboxItem; onAc
             <span className={cn("text-status font-semibold", statusTone(item))}>{slaLabel(item)}</span>
             {item.priority === "high" && !item.isCompleted && <span className="text-status font-semibold text-destructive">High priority</span>}
           </div>
-          <Link href={item.recordHref} className="mt-1.5 block text-sm font-semibold hover:text-primary hover:underline">{item.title}</Link>
+          <Link href={recordHref} className="mt-1.5 block text-sm font-semibold hover:text-primary hover:underline">{item.title}</Link>
           <p className="mt-1 text-xs text-muted-foreground">
-            {item.person && <span className="font-medium text-foreground">{item.person} · </span>}
+            {item.person && <span className="font-semibold text-foreground">{item.person} · </span>}
             {item.detail}
           </p>
 
@@ -115,7 +117,7 @@ function ItemRow({ item, onAction, disabled, selected }: { item: InboxItem; onAc
         </div>
 
         <div className="flex shrink-0 items-center gap-2 xl:pt-4">
-          <Link href={item.recordHref} className="inline-flex h-9 items-center rounded-md border border-border bg-background px-3 text-sm font-semibold text-muted-foreground hover:bg-muted hover:text-foreground">View record</Link>
+          <Link href={recordHref} className="inline-flex h-9 items-center rounded-md border border-border bg-background px-3 text-sm font-semibold text-muted-foreground hover:bg-muted hover:text-foreground">View record</Link>
           {item.actions?.includes("approve") ? (
             <>
               <button type="button" disabled={disabled} onClick={() => onAction(item, "reject")} className="inline-flex h-9 items-center rounded-md border border-border bg-background px-3 text-xs font-semibold text-muted-foreground hover:bg-muted disabled:opacity-50">Decline</button>
@@ -133,6 +135,7 @@ function ItemRow({ item, onAction, disabled, selected }: { item: InboxItem; onAc
 export function InboxClient({ initialItems, actor, people }: { initialItems: InboxItem[]; actor: WorkflowActorContext; people: ManagedEmployee[] }) {
   const router = useRouter()
   const searchParams = useSearchParams()
+  const returnTo = safeReturnTo(searchParams.get("returnTo"))
   const selectedId = searchParams.get("item")
   const initiallySelected = selectedId ? initialItems.find((item) => item.id === selectedId) : undefined
   const [items, setItems] = useState(initialItems)
@@ -142,9 +145,18 @@ export function InboxClient({ initialItems, actor, people }: { initialItems: Inb
   const [refreshing, setRefreshing] = useState(false)
   const [error, setError] = useState("")
   const [notice, setNotice] = useState("")
+  const [workflowOpenedInternally, setWorkflowOpenedInternally] = useState(false)
 
   const queueCounts = useMemo(() => Object.fromEntries(queueOptions.map((option) => [option.id, items.filter((item) => matchesQueue(item, option.id)).length])) as Record<QueueView, number>, [items])
   const visibleItems = useMemo(() => items.filter((item) => matchesQueue(item, queue) && (domain === "all" || item.type === domain)), [domain, items, queue])
+  const currentInboxHref = useMemo(() => {
+    const params = new URLSearchParams()
+    if (queue !== "my_work") params.set("view", queue)
+    if (domain !== "all") params.set("type", domain)
+    if (selectedId) params.set("item", selectedId)
+    if (returnTo) params.set("returnTo", returnTo)
+    return `/inbox${params.size ? `?${params.toString()}` : ""}`
+  }, [domain, queue, returnTo, selectedId])
   const openCount = items.filter((item) => !item.isCompleted).length
   const overdueCount = items.filter((item) => item.slaStatus === "overdue" && !item.isCompleted).length
   const decisionCount = items.filter((item) => item.requiresDecision && !item.isCompleted).length
@@ -159,7 +171,27 @@ export function InboxClient({ initialItems, actor, people }: { initialItems: Inb
     const params = new URLSearchParams()
     if (nextQueue !== "my_work") params.set("view", nextQueue)
     if (nextDomain !== "all") params.set("type", nextDomain)
+    if (returnTo) params.set("returnTo", returnTo)
     router.replace(params.size ? `/inbox?${params.toString()}` : "/inbox", { scroll: false })
+  }
+
+  function updateWorkflowType(next: WorkflowType | null) {
+    if (next) {
+      const params = new URLSearchParams(currentInboxHref.split("?")[1] ?? "")
+      params.delete("item")
+      params.set("new", next)
+      setWorkflowOpenedInternally(true)
+      router.push(`/inbox?${params.toString()}`, { scroll: false })
+      return
+    }
+    if (workflowOpenedInternally) {
+      setWorkflowOpenedInternally(false)
+      router.back()
+      return
+    }
+    const params = new URLSearchParams(currentInboxHref.split("?")[1] ?? "")
+    params.delete("item")
+    router.replace(`/inbox${params.size ? `?${params.toString()}` : ""}`, { scroll: false })
   }
 
   function chooseQueue(next: QueueView) {
@@ -224,26 +256,26 @@ export function InboxClient({ initialItems, actor, people }: { initialItems: Inb
         { label: "Overdue", value: overdueCount },
       ]} />
 
-      <WorkflowCreator actor={actor} people={people} initialType={searchParams.get("new") === "leave" ? "leave" : searchParams.get("new") === "hiring" ? "hiring" : searchParams.get("new") === "training" ? "training" : undefined} onCreated={(message) => void refreshInbox(message)} />
+      <WorkflowCreator actor={actor} people={people} initialType={searchParams.get("new") === "leave" ? "leave" : searchParams.get("new") === "hiring" ? "hiring" : searchParams.get("new") === "training" ? "training" : undefined} onTypeChange={updateWorkflowType} onCreated={(message) => void refreshInbox(message)} />
 
       <div className="overflow-x-auto border-b border-border" role="tablist" aria-label="Work queue">
         <div className="flex min-w-max">
-          {queueOptions.map((option) => <button key={option.id} type="button" role="tab" aria-selected={queue === option.id} onClick={() => chooseQueue(option.id)} className={cn("inline-flex h-11 items-center gap-2 border-b-2 px-3 text-xs font-medium", queue === option.id ? "border-foreground text-foreground" : "border-transparent text-muted-foreground hover:text-foreground")}>{option.label}<span className="text-meta tabular-nums text-muted-foreground">{queueCounts[option.id]}</span></button>)}
+          {queueOptions.map((option) => <button key={option.id} type="button" role="tab" aria-selected={queue === option.id} onClick={() => chooseQueue(option.id)} className={cn("inline-flex h-11 items-center gap-2 border-b-2 px-3 text-xs font-semibold", queue === option.id ? "border-foreground text-foreground" : "border-transparent text-muted-foreground hover:text-foreground")}>{option.label}<span className="text-meta tabular-nums text-muted-foreground">{queueCounts[option.id]}</span></button>)}
         </div>
       </div>
 
       <div className="flex flex-wrap items-center gap-2" aria-label="Domain filters">
         <span className="mr-1 text-meta font-semibold text-muted-foreground">Filter</span>
-        {domainOptions.map((option) => <button key={option.id} type="button" onClick={() => chooseDomain(option.id)} className={cn("h-8 rounded-md border px-3 text-xs font-medium", domain === option.id ? "border-foreground bg-foreground text-background" : "border-border bg-background text-muted-foreground hover:bg-muted hover:text-foreground")}>{option.label}</button>)}
+        {domainOptions.map((option) => <button key={option.id} type="button" onClick={() => chooseDomain(option.id)} className={cn("h-8 rounded-md border px-3 text-xs font-semibold", domain === option.id ? "border-foreground bg-foreground text-background" : "border-border bg-background text-muted-foreground hover:bg-muted hover:text-foreground")}>{option.label}</button>)}
       </div>
 
-      {error && <div className="flex items-center gap-2 rounded-md border border-rose-200 bg-rose-50 px-4 py-3 text-xs font-medium text-rose-800 dark:border-rose-800/30 dark:bg-rose-950/20 dark:text-rose-200"><CircleAlert className="size-4 shrink-0" />{error}</div>}
-      {notice && <div className="flex items-center gap-2 rounded-md border border-emerald-200 bg-emerald-50 px-4 py-3 text-xs font-medium text-emerald-800 dark:border-emerald-800/30 dark:bg-emerald-950/20 dark:text-emerald-200"><CheckCircle2 className="size-4 shrink-0" />{notice}</div>}
+      {error && <div className="flex items-center gap-2 rounded-md border border-rose-200 bg-rose-50 px-4 py-3 text-xs font-semibold text-rose-800 dark:border-rose-800/30 dark:bg-rose-950/20 dark:text-rose-200"><CircleAlert className="size-4 shrink-0" />{error}</div>}
+      {notice && <div className="flex items-center gap-2 rounded-md border border-emerald-200 bg-emerald-50 px-4 py-3 text-xs font-semibold text-emerald-800 dark:border-emerald-800/30 dark:bg-emerald-950/20 dark:text-emerald-200"><CheckCircle2 className="size-4 shrink-0" />{notice}</div>}
       {refreshing && <div className="flex items-center justify-center gap-2 py-2 text-xs text-muted-foreground"><LoaderCircle className="size-3.5 animate-spin" />Refreshing work queue</div>}
 
       {visibleItems.length ? (
         <section className="overflow-hidden rounded-lg border border-border bg-card" aria-label={`${queueOptions.find((option) => option.id === queue)?.label} items`}>
-          {visibleItems.map((item) => <ItemRow key={`${item.type}-${item.id}`} item={item} onAction={runAction} disabled={busyId !== null} selected={item.id === selectedId} />)}
+          {visibleItems.map((item) => <ItemRow key={`${item.type}-${item.id}`} item={item} onAction={runAction} disabled={busyId !== null} selected={item.id === selectedId} returnTo={currentInboxHref} />)}
         </section>
       ) : (
         <div className="flex min-h-[220px] flex-col items-center justify-center rounded-lg border border-border bg-card px-6 text-center"><h3 className="text-base font-semibold">No matching work</h3><p className="mt-2 max-w-sm text-sm text-muted-foreground">There are no items in this queue for the selected domain.</p>{domain !== "all" && <button type="button" onClick={() => chooseDomain("all")} className="mt-4 text-xs font-semibold text-primary hover:underline">Clear domain filter</button>}</div>

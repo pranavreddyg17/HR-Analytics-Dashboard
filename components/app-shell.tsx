@@ -48,12 +48,12 @@ const pageDetails: Record<string, string> = {
   "/people": "Employee directory and records",
   "/inbox": "Requests, decisions, and follow-ups",
   "/hiring": "Headcount requests and candidate pipeline",
-  "/time-off": "Leave requests, schedules, and coverage",
-  "/learning": "Course assignments and due dates",
+  "/leaves": "Leave requests, schedules, and coverage",
+  "/courses": "Course assignments and due dates",
   "/insights": "Workforce movement and operational exceptions",
   "/attrition": "Retention signals and model analysis",
-  "/ai-agents": "Workforce questions and assisted actions",
-  "/data": "Imports, record coverage, and reporting feeds",
+  "/assistant": "Workforce questions and assisted actions",
+  "/imports": "Imports, record coverage, and reporting feeds",
   "/access": "Accounts, roles, and access history",
 }
 
@@ -61,20 +61,20 @@ const featureDestinationDefinitions: Array<Omit<SearchDestination, "icon">> = [
   { id: "add-employee", href: "/people?new=employee", label: "Add employee", detail: "Create a new employee profile", keywords: "new member teammate profile onboard hire record", section: "Actions" },
   { id: "mobility-review", href: "/people?tenure=mobility", label: "Mobility review", detail: "Find employees with 3+ years tenure and no promotion", keywords: "tenure promotion career progression stalled people filter", section: "Actions" },
   { id: "request-leave", href: "/inbox?new=leave", label: "Request leave", detail: "Submit a time-off request for an employee", keywords: "annual sick holiday absence time off workflow", section: "Actions" },
-  { id: "review-leave", href: "/time-off#pending-decisions", label: "Review pending leave", detail: "Approve or decline outstanding leave requests", keywords: "decision approval reject time off absence manager", section: "Actions" },
+  { id: "review-leave", href: "/leaves#pending-decisions", label: "Review pending leave", detail: "Approve or decline outstanding leave requests", keywords: "decision approval reject time off absence manager", section: "Actions" },
   { id: "request-position", href: "/inbox?new=hiring", label: "Request a position", detail: "Create a new hiring request", keywords: "requisition role vacancy headcount job opening", section: "Actions" },
   { id: "assign-training", href: "/inbox?new=training", label: "Assign training", detail: "Create an employee learning assignment", keywords: "course mandatory compliance programme learning", section: "Actions" },
   { id: "review-model-records", href: "/risk-review", label: "Review scored records", detail: "Audit historical attrition model scores", keywords: "attrition risk model high medium low validation", section: "Actions" },
-  { id: "import-records", href: "/data#import-records", label: "Import HR records", detail: "Upload employee or workflow data from CSV", keywords: "data hub csv upload employees hiring leave training promotions", section: "Actions" },
-  { id: "power-bi-feeds", href: "/data#power-bi-feeds", label: "Power BI feeds", detail: "Copy reporting endpoints for Power BI", keywords: "csv endpoint reporting connector copy data feed", section: "Actions" },
+  { id: "import-records", href: "/imports#import-records", label: "Import HR records", detail: "Upload employee or workflow data from CSV", keywords: "data hub csv upload employees hiring leave training promotions", section: "Actions" },
+  { id: "power-bi-feeds", href: "/imports#power-bi-feeds", label: "Power BI feeds", detail: "Copy reporting endpoints for Power BI", keywords: "csv endpoint reporting connector copy data feed", section: "Actions" },
   { id: "manage-access", href: "/access", label: "Manage access", detail: "Add, update, or remove workspace accounts", keywords: "allowlist email user role administrator permissions", section: "Actions" },
   { id: "workforce-summary", href: "/insights", label: "Workforce summary", detail: "Review headcount, movement, and completion metrics", keywords: "executive kpi active employees hires exits attrition rate", section: "Reports" },
   { id: "headcount-report", href: "/", label: "Headcount by department", detail: "Compare employee totals across departments", keywords: "overview organization team workforce status employment type manager span", section: "Reports" },
   { id: "hiring-pipeline", href: "/hiring", label: "Hiring pipeline", detail: "Review open demand, velocity, roles, and sources", keywords: "requisition recruitment source performance time to hire job", section: "Reports" },
-  { id: "leave-coverage", href: "/time-off", label: "Leave coverage", detail: "Review schedules, leave mix, and department coverage", keywords: "away today coming up approved days annual sick absence", section: "Reports" },
-  { id: "learning-compliance", href: "/learning", label: "Learning compliance", detail: "Review incomplete and completed training", keywords: "mandatory overdue assessment programme participation", section: "Reports" },
+  { id: "leave-coverage", href: "/leaves", label: "Leave coverage", detail: "Review schedules, leave mix, and department coverage", keywords: "away today coming up approved days annual sick absence", section: "Reports" },
+  { id: "learning-compliance", href: "/courses", label: "Learning compliance", detail: "Review incomplete and completed training", keywords: "mandatory overdue assessment programme participation", section: "Reports" },
   { id: "attrition-analysis", href: "/attrition", label: "Attrition analysis", detail: "Review exits, tenure cohorts, and retention priorities", keywords: "turnover resignation voluntary involuntary department risk", section: "Reports" },
-  { id: "data-coverage", href: "/data#data-coverage", label: "Data coverage", detail: "Review record counts by HR domain", keywords: "database records status domains", section: "Reports" },
+  { id: "data-coverage", href: "/imports#data-coverage", label: "Data coverage", detail: "Review record counts by HR domain", keywords: "database records status domains", section: "Reports" },
 ]
 
 const featureDestinations: SearchDestination[] = featureDestinationDefinitions
@@ -124,7 +124,11 @@ function MobileMore({ open, onClose, user }: { open: boolean; onClose: () => voi
             const active = pathname === path && (path !== "/insights" || (item.view ? currentView === item.view : !currentView || currentView === "executive"))
             return (
               <Link key={item.href} href={item.href} onClick={onClose} className={cn("mobile-more-link", active && "mobile-more-link--active")}>
-                <span>{item.label}</span>
+                <item.icon className="size-4 shrink-0" aria-hidden="true" />
+                <span className="min-w-0">
+                  <span className="block font-semibold text-foreground">{item.label}</span>
+                  <span className="block text-meta text-muted-foreground">{item.description}</span>
+                </span>
               </Link>
             )
           })}

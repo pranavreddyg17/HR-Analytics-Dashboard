@@ -1,12 +1,14 @@
 "use client"
 
 import { useEffect, useMemo, useState } from "react"
+import { useRouter, useSearchParams } from "next/navigation"
 import { LoaderCircle, Plus, Search, X } from "lucide-react"
 
 import { SelectEmployee } from "@/components/workflow-creator"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { formatWorkspaceDateTime } from "@/lib/date-format"
+import { safeReturnTo } from "@/lib/navigation"
 import type { TrainingRecord, WorkforceAnalytics } from "@/lib/hr-types"
 import type { ManagedEmployee, WorkflowActorContext } from "@/lib/people-types"
 import { cn } from "@/lib/utils"
@@ -43,16 +45,21 @@ function Field({ label, children }: { label: string; children: React.ReactNode }
 }
 
 export function LearningWorkspace({ actor, people }: { actor: WorkflowActorContext; people: ManagedEmployee[] }) {
+  const router = useRouter()
+  const searchParams = useSearchParams()
+  const returnTo = safeReturnTo(searchParams.get("returnTo"))
   const assignablePeople = useMemo(
     () => actor.role === "manager" ? people.filter((person) => person.manager_id === actor.employeeId) : people,
     [actor, people],
   )
-  const [department, setDepartment] = useState("")
+  const [department, setDepartment] = useState(searchParams.get("department") ?? "")
+  const [location, setLocation] = useState(searchParams.get("location") ?? "")
   const [data, setData] = useState<WorkforceAnalytics | null>(null)
   const [loadedQuery, setLoadedQuery] = useState<string | null>(null)
   const [refreshKey, setRefreshKey] = useState(0)
-  const [query, setQuery] = useState("")
-  const [assignOpen, setAssignOpen] = useState(false)
+  const [query, setQuery] = useState(searchParams.get("q") ?? "")
+  const assignOpen = searchParams.get("new") === "course"
+  const [assignmentOpenedInternally, setAssignmentOpenedInternally] = useState(false)
   const [saving, setSaving] = useState(false)
   const [busyId, setBusyId] = useState<string | null>(null)
   const [notice, setNotice] = useState("")
@@ -67,9 +74,42 @@ export function LearningWorkspace({ actor, people }: { actor: WorkflowActorConte
   const requestQuery = useMemo(() => {
     const params = new URLSearchParams({ dataMode: "live" })
     if (department) params.set("department", department)
+    if (location) params.set("location", location)
     return params.toString()
-  }, [department])
+  }, [department, location])
   const loading = loadedQuery !== requestQuery
+  const workspaceBaseHref = useMemo(() => {
+    const params = new URLSearchParams()
+    if (department) params.set("department", department)
+    if (location) params.set("location", location)
+    if (query.trim()) params.set("q", query.trim())
+    if (returnTo) params.set("returnTo", returnTo)
+    return `/courses${params.size ? `?${params.toString()}` : ""}`
+  }, [department, location, query, returnTo])
+
+  useEffect(() => {
+    const current = `/courses${searchParams.size ? `?${searchParams.toString()}` : ""}`
+    const params = new URLSearchParams(workspaceBaseHref.split("?")[1] ?? "")
+    if (assignOpen) params.set("new", "course")
+    const target = `/courses${params.size ? `?${params.toString()}` : ""}`
+    if (current !== target) router.replace(target, { scroll: false })
+  }, [assignOpen, router, searchParams, workspaceBaseHref])
+
+  function openAssignment() {
+    const params = new URLSearchParams(workspaceBaseHref.split("?")[1] ?? "")
+    params.set("new", "course")
+    setAssignmentOpenedInternally(true)
+    router.push(`/courses?${params.toString()}`, { scroll: false })
+  }
+
+  function closeAssignment() {
+    if (assignmentOpenedInternally) {
+      setAssignmentOpenedInternally(false)
+      router.back()
+      return
+    }
+    router.replace(workspaceBaseHref, { scroll: false })
+  }
 
   useEffect(() => {
     const controller = new AbortController()
@@ -171,7 +211,7 @@ export function LearningWorkspace({ actor, people }: { actor: WorkflowActorConte
       })
       const result = await response.json() as { error?: string; message?: string }
       if (!response.ok) throw new Error(result.error ?? "The training assignment could not be saved.")
-      setAssignOpen(false)
+      closeAssignment()
       setAssignment({
         employeeId: assignablePeople[0]?.employee_id ?? "",
         program: "",
@@ -224,7 +264,7 @@ export function LearningWorkspace({ actor, people }: { actor: WorkflowActorConte
   return (
     <WorkspacePage>
       <WorkspaceHeader title="Assign courses" description="Assign training and resolve overdue or mandatory requirements." meta={<><span>{data.training.rows.length} assignments</span><span>Updated {formatWorkspaceDateTime(data.generatedAt)}</span></>} actions={actor.canAssignTraining && assignablePeople.length > 0 ? (
-            <Button onClick={() => { setError(""); setAssignOpen(true) }}>
+            <Button onClick={() => { setError(""); openAssignment() }}>
               <Plus className="size-3.5" />
               Assign training
             </Button>
@@ -239,7 +279,15 @@ export function LearningWorkspace({ actor, people }: { actor: WorkflowActorConte
             </select>
           </Field>
         </div>
-        {department && <Button size="sm" variant="ghost" onClick={() => setDepartment("")}>Clear</Button>}
+        <div className="w-full sm:max-w-xs">
+          <Field label="Location">
+            <select value={location} onChange={(event) => setLocation(event.target.value)} className={inputClass}>
+              <option value="">All locations</option>
+              {data.dimensions.locations.map((item) => <option key={item}>{item}</option>)}
+            </select>
+          </Field>
+        </div>
+        {(department || location) && <Button size="sm" variant="ghost" onClick={() => { setDepartment(""); setLocation("") }}>Clear</Button>}
         {loading && <span className="pb-2 text-meta text-muted-foreground">Updating…</span>}
       </div>
 
@@ -407,10 +455,10 @@ export function LearningWorkspace({ actor, people }: { actor: WorkflowActorConte
             type="button"
             aria-label="Close assignment form"
             className="absolute inset-0 bg-slate-950/40"
-            onClick={() => !saving && setAssignOpen(false)}
+            onClick={() => !saving && closeAssignment()}
           />
           <form onSubmit={submitAssignment} className="relative max-h-[90dvh] w-full max-w-lg overflow-y-auto rounded-lg border border-border bg-background p-6 shadow-none">
-            <button type="button" aria-label="Close" onClick={() => setAssignOpen(false)} className="absolute right-5 top-5 text-muted-foreground hover:text-foreground">
+            <button type="button" aria-label="Close" onClick={closeAssignment} className="absolute right-5 top-5 text-muted-foreground hover:text-foreground">
               <X className="size-4" />
             </button>
             <h2 className="text-section font-semibold">Assign training</h2>
@@ -434,7 +482,7 @@ export function LearningWorkspace({ actor, people }: { actor: WorkflowActorConte
             </div>
             {error && <p role="alert" className="mt-4 rounded-md border border-destructive/20 bg-destructive/5 p-3 text-meta text-destructive">{error}</p>}
             <div className="mt-6 flex justify-end gap-2">
-              <Button type="button" variant="ghost" onClick={() => setAssignOpen(false)} disabled={saving}>Cancel</Button>
+              <Button type="button" variant="ghost" onClick={closeAssignment} disabled={saving}>Cancel</Button>
               <Button type="submit" disabled={saving || !assignment.employeeId}>
                 {saving && <LoaderCircle className="size-4 animate-spin" />}
                 Assign training

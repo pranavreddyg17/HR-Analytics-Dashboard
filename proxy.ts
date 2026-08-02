@@ -1,7 +1,21 @@
 import { auth } from "@/auth"
 import { env } from "cloudflare:workers"
 
+const legacyRoutes: Record<string, string> = {
+  "/time-off": "/leaves",
+  "/learning": "/courses",
+  "/ai-agents": "/assistant",
+  "/data": "/imports",
+  "/employees": "/people",
+}
+
 export default auth((request) => {
+  const canonicalPath = legacyRoutes[request.nextUrl.pathname]
+  if (canonicalPath) {
+    const destination = request.nextUrl.clone()
+    destination.pathname = canonicalPath
+    return Response.redirect(destination, 308)
+  }
   const localPreview = (env as unknown as { LOCAL_UI_PREVIEW?: string }).LOCAL_UI_PREVIEW === "true"
     && ["localhost", "127.0.0.1"].includes(request.nextUrl.hostname)
   if (localPreview) return
@@ -10,4 +24,4 @@ export default auth((request) => {
   }
 })
 
-export const config = { matcher: ["/api/v1/:path*", "/api/mcp"] }
+export const config = { matcher: ["/api/v1/:path*", "/api/mcp", "/time-off", "/learning", "/ai-agents", "/data", "/employees"] }

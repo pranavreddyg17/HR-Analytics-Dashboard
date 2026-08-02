@@ -2,6 +2,7 @@
 
 import Link from "next/link"
 import { usePathname, useSearchParams } from "next/navigation"
+import { Activity, ArrowUpDown, BriefcaseBusiness, CalendarDays, ChartNoAxesCombined, GraduationCap, House, ListChecks, MessageSquareText, ShieldCheck, Users, type LucideIcon } from "lucide-react"
 
 import { BrandLogo } from "@/components/brand-logo"
 import { cn } from "@/lib/utils"
@@ -16,6 +17,8 @@ export type ShellUser = {
 export type NavigationItem = {
   href: string
   label: string
+  description: string
+  icon: LucideIcon
   view?: string
 }
 
@@ -23,32 +26,32 @@ export const navigationGroups: Array<{ label: string; items: NavigationItem[] }>
   {
     label: "Workspace",
     items: [
-      { href: "/", label: "Home" },
-      { href: "/people", label: "People" },
-      { href: "/inbox", label: "Inbox" },
+      { href: "/", label: "Home", description: "Priorities", icon: House },
+      { href: "/people", label: "People", description: "Directory", icon: Users },
+      { href: "/inbox", label: "Inbox", description: "Approvals", icon: ListChecks },
     ],
   },
   {
     label: "Operations",
     items: [
-      { href: "/hiring", label: "Hiring" },
-      { href: "/time-off", label: "Leaves" },
-      { href: "/learning", label: "Assign courses" },
+      { href: "/hiring", label: "Hiring", description: "Recruiting", icon: BriefcaseBusiness },
+      { href: "/leaves", label: "Leaves", description: "Requests", icon: CalendarDays },
+      { href: "/courses", label: "Assign courses", description: "Compliance", icon: GraduationCap },
     ],
   },
   {
     label: "Analysis",
     items: [
-      { href: "/insights", label: "Insights" },
-      { href: "/attrition", label: "Attrition risk" },
-      { href: "/ai-agents", label: "AI assistant" },
+      { href: "/insights", label: "Insights", description: "Workforce BI", icon: ChartNoAxesCombined },
+      { href: "/attrition", label: "Attrition risk", description: "Retention", icon: Activity },
+      { href: "/assistant", label: "AI assistant", description: "Analysis", icon: MessageSquareText },
     ],
   },
   {
     label: "Settings",
     items: [
-      { href: "/data", label: "Import / export data" },
-      { href: "/access", label: "Access" },
+      { href: "/imports", label: "Import / export data", description: "Data exchange", icon: ArrowUpDown },
+      { href: "/access", label: "Access", description: "Permissions", icon: ShieldCheck },
     ],
   },
 ]
@@ -107,7 +110,11 @@ export function AppSidebar({
                       aria-current={active ? "page" : undefined}
                       className={cn("sidebar-nav-item", active && "sidebar-nav-item--active")}
                     >
-                      <span className="truncate">{item.label}</span>
+                      <item.icon className="sidebar-nav-item__icon" aria-hidden="true" />
+                      <span className="min-w-0 flex-1">
+                        <span className="block truncate">{item.label}</span>
+                        <span className="sidebar-nav-item__description">{item.description}</span>
+                      </span>
                     </Link>
                   )
                 })}

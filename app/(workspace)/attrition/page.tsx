@@ -6,6 +6,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { getWorkforceAnalytics } from "@/lib/server/hr-analytics"
 import { getDashboard, getPredictionSchema } from "@/lib/server/runtime"
 import { MetricStrip, WorkspaceHeader, WorkspacePage } from "@/components/workspace-ui"
+import { withReturnTo } from "@/lib/navigation"
 
 export const dynamic = "force-dynamic"
 
@@ -65,7 +66,7 @@ export default async function AttritionPage() {
 
   return (
     <WorkspacePage>
-      <WorkspaceHeader title="Attrition risk" description="Monitor recorded exits, identify retention priorities, and assess model scenarios." actions={<Button nativeButton={false} render={<Link href="/risk-review" />}>
+      <WorkspaceHeader title="Attrition risk" description="Monitor recorded exits, identify retention priorities, and assess model scenarios." actions={<Button nativeButton={false} render={<Link href={withReturnTo("/risk-review", "/attrition")} />}>
           Review employee risk
         </Button>}/>
 

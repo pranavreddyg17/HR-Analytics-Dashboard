@@ -6,14 +6,14 @@ import { Check, ChevronsUpDown, LoaderCircle, Search, X } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import type { ManagedEmployee, WorkflowActorContext } from "@/lib/people-types"
 
-type WorkflowType = "leave" | "hiring" | "training"
+export type WorkflowType = "leave" | "hiring" | "training"
 
 const inputClass = "h-10 w-full rounded-md border border-border bg-background px-3 text-sm outline-none focus:border-ring focus:ring-2 focus:ring-ring/20"
 const textareaClass = "min-h-24 w-full resize-y rounded-md border border-border bg-background px-3 py-2.5 text-sm outline-none focus:border-ring focus:ring-2 focus:ring-ring/20"
 const today = () => new Date().toISOString().slice(0, 10)
 
-export function WorkflowCreator({ actor, people, initialType, onCreated }: { actor: WorkflowActorContext; people: ManagedEmployee[]; initialType?: WorkflowType; onCreated: (message: string) => void }) {
-  const [type, setType] = useState<WorkflowType | null>(initialType ?? null)
+export function WorkflowCreator({ actor, people, initialType, onCreated, onTypeChange }: { actor: WorkflowActorContext; people: ManagedEmployee[]; initialType?: WorkflowType; onCreated: (message: string) => void; onTypeChange?: (type: WorkflowType | null) => void }) {
+  const type = initialType ?? null
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState("")
   const [leave, setLeave] = useState({ employeeId: actor.employeeId ?? people[0]?.employee_id ?? "", leaveType: "Annual", startDate: today(), endDate: today(), note: "" })
@@ -21,6 +21,10 @@ export function WorkflowCreator({ actor, people, initialType, onCreated }: { act
   const [training, setTraining] = useState({ employeeId: people[0]?.employee_id ?? "", program: "", dueDate: today(), hours: "1", note: "" })
   const trainingPeople = useMemo(() => actor.role === "manager" ? people.filter((person) => person.manager_id === actor.employeeId) : people, [actor, people])
   const canRequestLeave = Boolean(actor.employeeId || (["admin", "hr"].includes(actor.role) && people.length))
+
+  function chooseType(next: WorkflowType | null) {
+    onTypeChange?.(next)
+  }
 
   async function submit(event: React.FormEvent) {
     event.preventDefault()
@@ -36,7 +40,7 @@ export function WorkflowCreator({ actor, people, initialType, onCreated }: { act
       const response = await fetch("/api/v1/hr/workflows", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(payload) })
       const result = await response.json() as { error?: string; message?: string }
       if (!response.ok) throw new Error(result.error ?? "The request could not be saved.")
-      setType(null)
+      chooseType(null)
       onCreated(result.message ?? "Workflow created.")
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : "The request could not be saved.")
@@ -57,7 +61,7 @@ export function WorkflowCreator({ actor, people, initialType, onCreated }: { act
         <span className="mr-1 text-label font-semibold text-muted-foreground">Create</span>
         {cards.map((card) => {
           return (
-            <button key={card.type} type="button" disabled={!card.enabled} onClick={() => { setError(""); setType(card.type) }} title={card.detail} className="inline-flex h-9 items-center rounded-md border border-border bg-card px-3 font-semibold hover:bg-muted disabled:cursor-not-allowed disabled:opacity-45">
+            <button key={card.type} type="button" disabled={!card.enabled} onClick={() => { setError(""); chooseType(card.type) }} title={card.detail} className="inline-flex h-9 items-center rounded-md border border-border bg-card px-3 font-semibold hover:bg-muted disabled:cursor-not-allowed disabled:opacity-45">
               <span>{card.title}</span>
             </button>
           )
@@ -66,9 +70,9 @@ export function WorkflowCreator({ actor, people, initialType, onCreated }: { act
 
       {type && (
         <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
-          <button type="button" aria-label="Close workflow form" className="absolute inset-0 bg-slate-950/40" onClick={() => !saving && setType(null)} />
+          <button type="button" aria-label="Close workflow form" className="absolute inset-0 bg-slate-950/40" onClick={() => !saving && chooseType(null)} />
           <form onSubmit={submit} className="relative max-h-[90dvh] w-full max-w-lg overflow-y-auto rounded-lg border border-border bg-background p-6 shadow-none">
-            <button type="button" aria-label="Close" onClick={() => setType(null)} className="absolute right-5 top-5 text-muted-foreground hover:text-foreground"><X className="size-4" /></button>
+            <button type="button" aria-label="Close" onClick={() => chooseType(null)} className="absolute right-5 top-5 text-muted-foreground hover:text-foreground"><X className="size-4" /></button>
             <h3 className="text-xl font-semibold">{type === "leave" ? "Request leave" : type === "hiring" ? "Request a new position" : "Assign training"}</h3>
             <p className="mt-1 text-sm text-muted-foreground">{type === "leave" ? "Submit dates and leave details for approval." : type === "hiring" ? "Submit a requisition for HR review." : "Create an employee training assignment."}</p>
 
@@ -100,7 +104,7 @@ export function WorkflowCreator({ actor, people, initialType, onCreated }: { act
             </div>
 
             {error && <p role="alert" className="mt-4 rounded-md border border-destructive/20 bg-destructive/5 p-3 text-xs text-destructive">{error}</p>}
-            <div className="mt-6 flex justify-end gap-2"><Button type="button" variant="ghost" onClick={() => setType(null)} disabled={saving}>Cancel</Button><Button type="submit" disabled={saving}>{saving && <LoaderCircle className="size-4 animate-spin" />}{type === "leave" ? "Submit request" : type === "hiring" ? "Send to HR" : "Assign training"}</Button></div>
+            <div className="mt-6 flex justify-end gap-2"><Button type="button" variant="ghost" onClick={() => chooseType(null)} disabled={saving}>Cancel</Button><Button type="submit" disabled={saving}>{saving && <LoaderCircle className="size-4 animate-spin" />}{type === "leave" ? "Submit request" : type === "hiring" ? "Send to HR" : "Assign training"}</Button></div>
           </form>
         </div>
       )}
@@ -166,7 +170,7 @@ export function SelectEmployee({ value, people, onChange }: { value: string; peo
               >
                 <span className="flex size-8 shrink-0 items-center justify-center rounded-md bg-secondary text-meta font-semibold text-secondary-foreground">{person.initials}</span>
                 <span className="min-w-0 flex-1">
-                  <span className="truncate text-sm font-medium">{person.display_name}</span>
+                  <span className="truncate text-sm font-semibold">{person.display_name}</span>
                   <span className="block truncate text-meta text-muted-foreground">{person.employee_id} · {person.job_title} · {person.department}</span>
                 </span>
                 {person.employee_id === value && <Check className="size-4 shrink-0 text-primary" />}

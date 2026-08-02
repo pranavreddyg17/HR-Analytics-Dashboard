@@ -72,11 +72,11 @@ export function AccessManager({ ownerEmail }: { ownerEmail: string }) {
           <p className="mt-1 text-xs text-muted-foreground">Grant access to an approved Google account.</p>
         </div>
         <form onSubmit={invite} className="grid gap-3 p-4 sm:grid-cols-[minmax(0,1fr)_160px_auto] sm:items-end">
-          <label className="text-xs font-medium text-foreground">
+          <label className="text-xs font-semibold text-foreground">
             Email address
             <input required type="email" value={email} onChange={(event) => setEmail(event.target.value)} placeholder="name@company.com" className="mt-1 h-9 w-full rounded-md border border-border bg-background px-3 text-sm outline-none focus:ring-2 focus:ring-primary/25" />
           </label>
-          <label className="text-xs font-medium text-foreground">
+          <label className="text-xs font-semibold text-foreground">
             Role
             <select value={role} onChange={(event) => setRole(event.target.value)} className="mt-1 h-9 w-full rounded-md border border-border bg-background px-3 text-sm">
               <option value="hr">HR</option>
@@ -107,7 +107,7 @@ export function AccessManager({ ownerEmail }: { ownerEmail: string }) {
                 <div className="min-w-0">
                   <p className="truncate text-sm font-semibold">
                     {user.display_name || user.email.split("@")[0]}
-                    {user.email === ownerEmail && <span className="ml-2 text-meta font-medium text-muted-foreground">Current user</span>}
+                    {user.email === ownerEmail && <span className="ml-2 text-meta font-semibold text-muted-foreground">Current user</span>}
                   </p>
                   <p className="truncate text-xs text-muted-foreground">{user.email} · {user.last_login_at ? `Last sign-in ${new Date(user.last_login_at).toLocaleDateString()}` : "No sign-in recorded"}</p>
                 </div>
@@ -117,7 +117,7 @@ export function AccessManager({ ownerEmail }: { ownerEmail: string }) {
                   <option value="manager">Manager</option>
                   <option value="viewer">Viewer</option>
                 </select>
-                <button disabled={user.email === ownerEmail} onClick={() => update(user, { status: user.status === "active" ? "disabled" : "active" })} className="h-9 rounded-md border border-border bg-background px-3 text-xs font-medium capitalize disabled:opacity-50">
+                <button disabled={user.email === ownerEmail} onClick={() => update(user, { status: user.status === "active" ? "disabled" : "active" })} className="h-9 rounded-md border border-border bg-background px-3 text-xs font-semibold capitalize disabled:opacity-50">
                   {user.status}
                 </button>
                 <button type="button" disabled={user.email === ownerEmail} onClick={() => setRemoveTarget(user)} className="inline-flex size-9 items-center justify-center rounded-md border border-border text-muted-foreground hover:bg-muted hover:text-destructive disabled:cursor-not-allowed disabled:opacity-30" aria-label={`Remove ${user.email}`} title={user.email === ownerEmail ? "The workspace owner cannot be removed" : "Remove access"}>

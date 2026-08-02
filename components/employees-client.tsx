@@ -78,7 +78,7 @@ export function EmployeesClient({ employees, total }: { employees: Employee[]; t
                   key={item.key}
                   onClick={() => { setFilter(item.key); setPage(1); setOpenId(null) }}
                   className={cn(
-                    "-mb-px border-b-2 px-2.5 py-2 text-xs font-medium transition-colors",
+                    "-mb-px border-b-2 px-2.5 py-2 text-xs font-semibold transition-colors",
                     filter === item.key
                       ? "border-primary text-foreground"
                       : "border-transparent text-muted-foreground hover:text-foreground",
@@ -92,7 +92,7 @@ export function EmployeesClient({ employees, total }: { employees: Employee[]; t
         </CardHeader>
 
         <CardContent className="p-0">
-          <div className="hidden grid-cols-[1.4fr_1fr_1.4fr_0.9fr_auto] gap-4 bg-muted/35 px-5 py-3 text-xs font-medium text-muted-foreground md:grid">
+          <div className="hidden grid-cols-[1.4fr_1fr_1.4fr_0.9fr_auto] gap-4 bg-muted/35 px-5 py-3 text-xs font-semibold text-muted-foreground md:grid">
             <span>Record</span>
             <span>Department</span>
             <span>Top model signal</span>
@@ -106,7 +106,7 @@ export function EmployeesClient({ employees, total }: { employees: Employee[]; t
               <div key={employee.id} className="border-b border-border last:border-b-0">
                 <div className="grid grid-cols-1 items-center gap-3 px-4 py-3 md:grid-cols-[1.4fr_1fr_1.4fr_0.9fr_auto] md:gap-4">
                   <div className="min-w-0">
-                    <p className="truncate text-sm font-medium">{employee.id}</p>
+                    <p className="truncate text-sm font-semibold">{employee.id}</p>
                     <p className="truncate text-xs text-muted-foreground">{employee.role}</p>
                   </div>
 
@@ -136,7 +136,7 @@ export function EmployeesClient({ employees, total }: { employees: Employee[]; t
                 {open && (
                   <div className="border-t border-border bg-muted/25 px-4 py-3">
                       <div>
-                        <p className="text-xs font-medium">Review guidance</p>
+                        <p className="text-xs font-semibold">Review guidance</p>
                         <p className="mt-1 text-sm text-pretty">{employee.suggestion}</p>
                         <p className="mt-2 text-xs text-muted-foreground">
                           Tenure: {employee.tenure} · Job satisfaction: {employee.jobSatisfaction}/4 · Work-life balance: {employee.workLifeBalance}/4 · Historical outcome: {employee.observedAttrition}

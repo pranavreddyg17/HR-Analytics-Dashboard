@@ -1,7 +1,11 @@
-import { DataManager } from "@/components/data-manager"
+import { redirect } from "next/navigation"
+
+import { searchParamsFromRecord } from "@/lib/navigation"
 
 export const dynamic = "force-dynamic"
 
-export default function DataPage() {
-  return <DataManager />
+export default async function LegacyDataPage({ searchParams }: { searchParams: Promise<Record<string, string | string[] | undefined>> }) {
+  const params = await searchParams
+  const query = searchParamsFromRecord({ domain: params.domain, returnTo: params.returnTo })
+  redirect(`/imports${query ? `?${query}` : ""}`)
 }

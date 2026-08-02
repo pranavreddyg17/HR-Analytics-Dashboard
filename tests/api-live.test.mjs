@@ -9,6 +9,24 @@ async function json(path, init) {
   return { response, body }
 }
 
+test("workspace navigation exposes canonical routes and preserves legacy query state", async () => {
+  const canonicalRoutes = ["/", "/people", "/inbox", "/hiring", "/leaves", "/courses", "/insights", "/attrition", "/assistant", "/imports", "/access"]
+  const responses = await Promise.all(canonicalRoutes.map((path) => fetch(baseUrl + path)))
+  responses.forEach((response, index) => assert.equal(response.status, 200, `${canonicalRoutes[index]} should render`))
+
+  const redirects = [
+    ["/time-off?department=Sales", "/leaves?department=Sales"],
+    ["/learning?q=security", "/courses?q=security"],
+    ["/ai-agents?conversation=CONV-1", "/assistant?conversation=CONV-1"],
+    ["/data?domain=employees", "/imports?domain=employees"],
+  ]
+  for (const [legacy, canonical] of redirects) {
+    const response = await fetch(baseUrl + legacy, { redirect: "manual" })
+    assert.ok([307, 308].includes(response.status), `${legacy} should redirect`)
+    assert.equal(new URL(response.headers.get("location"), baseUrl).pathname + new URL(response.headers.get("location"), baseUrl).search, canonical)
+  }
+})
+
 test("health reports every production capability ready", async () => {
   const { response, body } = await json("/api/v1/health")
   assert.equal(response.status, 200)
@@ -45,6 +63,24 @@ test("workforce analytics spans every requested HR domain", async () => {
   assert.ok(Array.isArray(body.operatingSignals.replacementCoverage))
   assert.ok(body.operatingSignals.replacementCoverage.every((item) => ["Gap", "Watch", "Covered"].includes(item.status)))
   assert.deepEqual(body.status.map((item) => item.domain), ["employees", "hiring", "attrition", "leave", "training", "promotions"])
+})
+
+test("insights reporting uses persisted workforce records and a bounded quarterly series", async () => {
+  const [report, liveOnly] = await Promise.all([
+    json("/api/v1/workforce?dataMode=all&from=2025-08-03&to=2026-08-02&period=quarter"),
+    json("/api/v1/workforce?dataMode=live&from=2025-08-03&to=2026-08-02&period=quarter"),
+  ])
+  assert.equal(report.response.status, 200)
+  assert.equal(liveOnly.response.status, 200)
+  assert.equal(report.body.filters.dataMode, "all")
+  assert.equal(report.body.filters.period, "quarter")
+  assert.ok(report.body.kpis.activeEmployees >= liveOnly.body.kpis.activeEmployees)
+  assert.ok(report.body.hiring.trend.length > 0)
+  assert.ok(report.body.attrition.trend.length > 0)
+  assert.ok(report.body.hiring.trend.length <= 5)
+  assert.ok(report.body.attrition.trend.length <= 5)
+  assert.ok(report.body.hiring.trend.every((row) => /^202[5-6] Q[1-4]$/.test(row.period)))
+  assert.ok(report.body.attrition.trend.every((row) => /^202[5-6] Q[1-4]$/.test(row.period)))
 })
 
 test("operational workspaces contain actionable software-company workflows", async () => {

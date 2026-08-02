@@ -11,6 +11,7 @@ import { formatWorkspaceDateTime } from "@/lib/date-format"
 import type { HiringActivity, HiringCandidate, HiringCandidateStage, HiringOperations, HiringRequisition } from "@/lib/hiring-types"
 import { cn } from "@/lib/utils"
 import { MetricStrip, WorkspaceHeader, WorkspacePage } from "@/components/workspace-ui"
+import { safeReturnTo } from "@/lib/navigation"
 
 const activeStatuses = new Set(["Requested", "Open", "Offer"])
 const activeCandidateStages = new Set<HiringCandidateStage>(["Applied", "Screening", "Interview", "Offer"])
@@ -381,6 +382,10 @@ export function HiringWorkspace({ canRequestHiring }: { canRequestHiring: boolea
   const router = useRouter()
   const searchParams = useSearchParams()
   const selectedFromUrl = searchParams.get("requisition")
+  const selectedCandidateId = searchParams.get("candidateRecord")
+  const showCandidateForm = searchParams.get("newCandidate") === "1"
+  const candidateRequisitionId = searchParams.get("candidateRequisition") ?? ""
+  const returnTo = safeReturnTo(searchParams.get("returnTo"))
   const initialStatus = searchParams.get("status")
   const initialCandidateFilter = searchParams.get("candidate") === "overdue" ? "overdue" : "active"
   const [data, setData] = useState<HiringOperations | null>(null)
@@ -388,14 +393,31 @@ export function HiringWorkspace({ canRequestHiring }: { canRequestHiring: boolea
   const [error, setError] = useState("")
   const [notice, setNotice] = useState("")
   const [busyId, setBusyId] = useState<string | null>(null)
-  const [query, setQuery] = useState("")
+  const [query, setQuery] = useState(searchParams.get("q") ?? "")
   const [status, setStatus] = useState(initialStatus || "active")
-  const [department, setDepartment] = useState("")
-  const [candidateQuery, setCandidateQuery] = useState("")
+  const [department, setDepartment] = useState(searchParams.get("department") ?? "")
+  const [location, setLocation] = useState(searchParams.get("location") ?? "")
+  const [candidateQuery, setCandidateQuery] = useState(searchParams.get("candidateQ") ?? "")
   const [candidateStage, setCandidateStage] = useState(initialCandidateFilter)
-  const [showCandidateForm, setShowCandidateForm] = useState(false)
-  const [candidateRequisitionId, setCandidateRequisitionId] = useState("")
-  const [selectedCandidateId, setSelectedCandidateId] = useState<string | null>(null)
+  const [openedInternally, setOpenedInternally] = useState(false)
+
+  const listHref = useMemo(() => {
+    const params = new URLSearchParams()
+    if (query.trim()) params.set("q", query.trim())
+    if (status !== "active") params.set("status", status)
+    if (department) params.set("department", department)
+    if (location) params.set("location", location)
+    if (candidateQuery.trim()) params.set("candidateQ", candidateQuery.trim())
+    if (candidateStage !== "active") params.set("candidate", candidateStage)
+    if (returnTo) params.set("returnTo", returnTo)
+    return `/hiring${params.size ? `?${params.toString()}` : ""}`
+  }, [candidateQuery, candidateStage, department, location, query, returnTo, status])
+
+  useEffect(() => {
+    if (selectedFromUrl || selectedCandidateId || showCandidateForm) return
+    const current = `/hiring${searchParams.size ? `?${searchParams.toString()}` : ""}`
+    if (current !== listHref) router.replace(listHref, { scroll: false })
+  }, [listHref, router, searchParams, selectedCandidateId, selectedFromUrl, showCandidateForm])
 
   async function loadOperations(message = "") {
     setLoading(true)
@@ -432,15 +454,17 @@ export function HiringWorkspace({ canRequestHiring }: { canRequestHiring: boolea
   }, [])
 
   const departments = useMemo(() => data ? [...new Set(data.requisitions.map((item) => item.department))].sort() : [], [data])
+  const locations = useMemo(() => data ? [...new Set(data.requisitions.map((item) => item.location))].sort() : [], [data])
   const visibleRequisitions = useMemo(() => {
     if (!data) return []
     const normalized = query.trim().toLowerCase()
     return data.requisitions.filter((item) => (
       (status === "all" || status === "active" ? status !== "active" || activeStatuses.has(item.status) : item.status === status)
       && (!department || item.department === department)
+      && (!location || item.location === location)
       && (!normalized || [item.position, item.department, item.location, item.ownerName, item.id].some((value) => value.toLowerCase().includes(normalized)))
     ))
-  }, [data, department, query, status])
+  }, [data, department, location, query, status])
   const selectedRequisition = data?.requisitions.find((item) => item.id === selectedFromUrl) ?? null
   const selectedCandidate = data?.candidates.find((item) => item.id === selectedCandidateId) ?? null
   const activeRequisitions = data?.requisitions.filter((item) => item.canAddCandidate) ?? []
@@ -449,18 +473,55 @@ export function HiringWorkspace({ canRequestHiring }: { canRequestHiring: boolea
     const normalized = candidateQuery.trim().toLowerCase()
     return data.candidates.filter((candidate) => (
       (!selectedFromUrl || candidate.requisitionId === selectedFromUrl)
+      && (!department || candidate.department === department)
+      && (!location || candidate.location === location)
       && (candidateStage === "all"
         || candidateStage === "active" && activeCandidateStages.has(candidate.stage)
         || candidateStage === "overdue" && candidate.isOverdue
         || candidate.stage === candidateStage)
       && (!normalized || [candidate.fullName, candidate.email, candidate.requisitionTitle, candidate.ownerName].some((value) => value.toLowerCase().includes(normalized)))
     ))
-  }, [candidateQuery, candidateStage, data, selectedFromUrl])
+  }, [candidateQuery, candidateStage, data, department, location, selectedFromUrl])
   const requisitionActivity = useMemo(() => data?.recentActivity.filter((item) => item.requisitionId === selectedRequisition?.id) ?? [], [data, selectedRequisition?.id])
   const candidateActivity = useMemo(() => data?.recentActivity.filter((item) => item.entityType === "candidate" && item.entityId === selectedCandidate?.id) ?? [], [data, selectedCandidate?.id])
 
   function selectRequisition(id: string | null) {
-    router.replace(id ? `/hiring?requisition=${encodeURIComponent(id)}` : "/hiring", { scroll: false })
+    if (!id) {
+      router.replace(listHref, { scroll: false })
+      return
+    }
+    const params = new URLSearchParams(listHref.split("?")[1] ?? "")
+    params.set("requisition", id)
+    setOpenedInternally(true)
+    router.push(`/hiring?${params.toString()}`, { scroll: false })
+  }
+
+  function openCandidateForm(requisitionId: string) {
+    const params = new URLSearchParams(listHref.split("?")[1] ?? "")
+    params.set("newCandidate", "1")
+    params.set("candidateRequisition", requisitionId)
+    setOpenedInternally(true)
+    router.push(`/hiring?${params.toString()}`, { scroll: false })
+  }
+
+  function openCandidateRecord(candidateId: string) {
+    const params = new URLSearchParams(listHref.split("?")[1] ?? "")
+    params.set("candidateRecord", candidateId)
+    setOpenedInternally(true)
+    router.push(`/hiring?${params.toString()}`, { scroll: false })
+  }
+
+  function closeRequisition() {
+    if (openedInternally) {
+      setOpenedInternally(false)
+      router.back()
+      return
+    }
+    if (returnTo) {
+      router.push(returnTo)
+      return
+    }
+    router.replace(listHref, { scroll: false })
   }
 
   async function decideRequisition(requisition: HiringRequisition, action: "approve" | "reject") {
@@ -474,7 +535,7 @@ export function HiringWorkspace({ canRequestHiring }: { canRequestHiring: boolea
       })
       const result = await response.json() as { error?: string; message?: string }
       if (!response.ok) throw new Error(result.error || "The requisition could not be updated.")
-      if (action === "reject") selectRequisition(null)
+      if (action === "reject") closeRequisition()
       await loadOperations(result.message || "Requisition updated.")
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : "The requisition could not be updated.")
@@ -491,7 +552,7 @@ export function HiringWorkspace({ canRequestHiring }: { canRequestHiring: boolea
       <WorkspaceHeader title="Hiring" description="Manage headcount decisions, requisition follow-ups, and candidate outcomes." meta={<>Updated {formatWorkspaceDateTime(data.generatedAt)}</>} actions={
           <>
             {canRequestHiring && <Button nativeButton={false} variant="outline" render={<Link href="/inbox?new=hiring" />}><Plus className="size-4" />New requisition</Button>}
-            <Button onClick={() => { setCandidateRequisitionId(activeRequisitions[0]?.id ?? ""); setShowCandidateForm(true) }} disabled={!activeRequisitions.length}><Plus className="size-4" />Add candidate</Button>
+            <Button onClick={() => openCandidateForm(activeRequisitions[0]?.id ?? "")} disabled={!activeRequisitions.length}><Plus className="size-4" />Add candidate</Button>
           </>}/>
 
       {(notice || error) && (
@@ -513,7 +574,7 @@ export function HiringWorkspace({ canRequestHiring }: { canRequestHiring: boolea
             <CardTitle>Requisition queue</CardTitle>
             <CardDescription>Every row has a persisted decision or follow-up workflow.</CardDescription>
           </div>
-          <div className="grid gap-2 sm:grid-cols-[minmax(220px,1fr)_180px_220px]">
+          <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-[minmax(220px,1fr)_170px_200px_180px]">
             <label className="relative">
               <span className="sr-only">Search requisitions</span>
               <Search className="pointer-events-none absolute left-3 top-1/2 size-3.5 -translate-y-1/2 text-muted-foreground" />
@@ -521,6 +582,7 @@ export function HiringWorkspace({ canRequestHiring }: { canRequestHiring: boolea
             </label>
             <label><span className="sr-only">Requisition status</span><select value={status} onChange={(event) => setStatus(event.target.value)} className={fieldClass}><option value="active">Active requisitions</option><option value="all">All statuses</option><option value="Requested">Requested</option><option value="Open">Open</option><option value="Offer">Offer</option><option value="Hired">Hired</option><option value="Closed">Closed</option></select></label>
             <label><span className="sr-only">Department</span><select value={department} onChange={(event) => setDepartment(event.target.value)} className={fieldClass}><option value="">All departments</option>{departments.map((item) => <option key={item}>{item}</option>)}</select></label>
+            <label><span className="sr-only">Location</span><select value={location} onChange={(event) => setLocation(event.target.value)} className={fieldClass}><option value="">All locations</option>{locations.map((item) => <option key={item}>{item}</option>)}</select></label>
           </div>
         </CardHeader>
         <CardContent className="p-0">
@@ -568,7 +630,7 @@ export function HiringWorkspace({ canRequestHiring }: { canRequestHiring: boolea
                   <td className="px-4 py-3">{candidate.ownerName}</td>
                   <td className="max-w-xs px-4 py-3 text-muted-foreground">{candidate.nextStep}</td>
                   <td className={cn("px-4 py-3 whitespace-nowrap", candidate.isOverdue ? "font-semibold text-destructive" : "text-muted-foreground")}>{formatDate(candidate.nextStepDueAt)}</td>
-                  <td className="px-4 py-3 text-right">{candidate.canUpdate ? <Button size="xs" variant="outline" onClick={() => setSelectedCandidateId(candidate.id)}>Record outcome</Button> : <span className="text-meta text-muted-foreground">View only</span>}</td>
+                  <td className="px-4 py-3 text-right">{candidate.canUpdate ? <Button size="xs" variant="outline" onClick={() => openCandidateRecord(candidate.id)}>Record outcome</Button> : <span className="text-meta text-muted-foreground">View only</span>}</td>
                 </tr>
               ))}</tbody>
             </table>
@@ -596,8 +658,8 @@ export function HiringWorkspace({ canRequestHiring }: { canRequestHiring: boolea
         <AddCandidateDialog
           requisitions={activeRequisitions}
           initialRequisitionId={candidateRequisitionId || activeRequisitions[0]?.id || ""}
-          onClose={() => setShowCandidateForm(false)}
-          onSaved={async (message) => { setShowCandidateForm(false); await loadOperations(message) }}
+          onClose={closeRequisition}
+          onSaved={async (message) => { closeRequisition(); await loadOperations(message) }}
         />
       )}
       {selectedCandidate && (
@@ -605,8 +667,8 @@ export function HiringWorkspace({ canRequestHiring }: { canRequestHiring: boolea
           key={selectedCandidate.id}
           candidate={selectedCandidate}
           activity={candidateActivity}
-          onClose={() => setSelectedCandidateId(null)}
-          onSaved={async (message) => { setSelectedCandidateId(null); await loadOperations(message) }}
+          onClose={closeRequisition}
+          onSaved={async (message) => { closeRequisition(); await loadOperations(message) }}
         />
       )}
       {selectedRequisition && (
@@ -615,10 +677,10 @@ export function HiringWorkspace({ canRequestHiring }: { canRequestHiring: boolea
           requisition={selectedRequisition}
           activity={requisitionActivity}
           busy={busyId === selectedRequisition.id}
-          onClose={() => selectRequisition(null)}
+          onClose={closeRequisition}
           onDecision={(action) => decideRequisition(selectedRequisition, action)}
-          onAddCandidate={() => { setCandidateRequisitionId(selectedRequisition.id); selectRequisition(null); setShowCandidateForm(true) }}
-          onSaved={async (message, close) => { if (close) selectRequisition(null); await loadOperations(message) }}
+          onAddCandidate={() => openCandidateForm(selectedRequisition.id)}
+          onSaved={async (message, close) => { if (close) closeRequisition(); await loadOperations(message) }}
         />
       )}
     </WorkspacePage>

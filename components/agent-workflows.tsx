@@ -70,7 +70,7 @@ export function AgentWorkflows({ canPrepare }: { canPrepare: boolean }) {
   }, [])
 
   function connectGoogleCalendar() {
-    void signIn("google", { callbackUrl: "/ai-agents" }, {
+    void signIn("google", { callbackUrl: "/assistant" }, {
       scope: "openid email profile https://www.googleapis.com/auth/calendar.events.owned",
       access_type: "offline",
       prompt: "consent",
@@ -162,7 +162,7 @@ export function AgentWorkflows({ canPrepare }: { canPrepare: boolean }) {
 
           <div className="mt-4 flex items-center justify-between rounded-md border border-border bg-background px-3 py-2.5">
             <div>
-              <p className="text-xs font-medium">Google Calendar</p>
+              <p className="text-xs font-semibold">Google Calendar</p>
               <p className="mt-0.5 text-meta text-muted-foreground">
                 {calendarConnection === "loading" ? "Checking connection" : calendarConnection === "connected" ? "Connected for event creation" : "Not connected"}
               </p>
@@ -171,7 +171,7 @@ export function AgentWorkflows({ canPrepare }: { canPrepare: boolean }) {
           </div>
 
           <form onSubmit={(event) => { event.preventDefault(); void createPlan() }} className="mt-5">
-            <label className="text-xs font-medium text-foreground" htmlFor="calendar-agent-request">Request</label>
+            <label className="text-xs font-semibold text-foreground" htmlFor="calendar-agent-request">Request</label>
             <textarea
               id="calendar-agent-request"
               value={prompt}
@@ -187,7 +187,7 @@ export function AgentWorkflows({ canPrepare }: { canPrepare: boolean }) {
           </form>
 
           <div className="mt-5 border-t border-border pt-4">
-            <p className="text-meta font-medium text-muted-foreground">Examples</p>
+            <p className="text-meta font-semibold text-muted-foreground">Examples</p>
             <div className="mt-2 space-y-1">
               {examples.map((example) => (
                 <button key={example} type="button" onClick={() => void createPlan(example)} className="block w-full rounded-md px-2 py-2 text-left text-xs text-muted-foreground hover:bg-muted hover:text-foreground">
@@ -212,11 +212,11 @@ export function AgentWorkflows({ canPrepare }: { canPrepare: boolean }) {
             <div>
               <div className="flex flex-col gap-3 border-b border-border pb-4 sm:flex-row sm:items-start sm:justify-between">
                 <div>
-                  <p className="text-meta font-medium text-muted-foreground">Review before sending</p>
+                  <p className="text-meta font-semibold text-muted-foreground">Review before sending</p>
                   <h3 className="mt-1 text-lg font-semibold">{plan.title}</h3>
                   <p className="mt-1 text-xs text-muted-foreground">{dateTimeLabel(plan.start)}–{dateTimeLabel(plan.end).split(", ").at(-1)} · {plan.timezone}</p>
                 </div>
-                <span className="text-xs font-medium text-muted-foreground">{plan.employees.length} attendee{plan.employees.length === 1 ? "" : "s"}</span>
+                <span className="text-xs font-semibold text-muted-foreground">{plan.employees.length} attendee{plan.employees.length === 1 ? "" : "s"}</span>
               </div>
 
               <div className="grid gap-5 py-5 sm:grid-cols-2">
@@ -227,7 +227,7 @@ export function AgentWorkflows({ canPrepare }: { canPrepare: boolean }) {
                       <div key={employee.employeeId} className="flex gap-3 px-3 py-2.5">
                         <UserRound className="mt-0.5 size-4 shrink-0 text-muted-foreground" />
                         <div className="min-w-0">
-                          <p className="truncate text-xs font-medium">{employee.name}</p>
+                          <p className="truncate text-xs font-semibold">{employee.name}</p>
                           <p className="mt-0.5 truncate text-meta text-muted-foreground">{employee.jobTitle} · {employee.department} · {employee.employeeId}</p>
                         </div>
                       </div>
@@ -238,7 +238,7 @@ export function AgentWorkflows({ canPrepare }: { canPrepare: boolean }) {
                   <p className="text-xs font-semibold">Agenda</p>
                   <p className="mt-2 text-xs text-muted-foreground">{plan.agenda}</p>
                   <div className="mt-4 rounded-md bg-muted/45 p-3">
-                    <p className="text-meta font-medium text-foreground">Evidence used</p>
+                    <p className="text-meta font-semibold text-foreground">Evidence used</p>
                     <p className="mt-1 text-meta text-muted-foreground">{plan.evidence}</p>
                   </div>
                 </div>
@@ -246,7 +246,7 @@ export function AgentWorkflows({ canPrepare }: { canPrepare: boolean }) {
 
               {error && <div role="alert" className="mb-3 rounded-md border border-destructive/20 bg-destructive/5 px-3 py-2 text-xs text-destructive">{error}</div>}
               {errorCode === "GOOGLE_CALENDAR_API_DISABLED" && (
-                <a className="mb-3 inline-flex text-xs font-medium text-primary hover:underline" href="https://console.cloud.google.com/apis/library/calendar-json.googleapis.com" target="_blank" rel="noreferrer">Open Google Calendar API settings</a>
+                <a className="mb-3 inline-flex text-xs font-semibold text-primary hover:underline" href="https://console.cloud.google.com/apis/library/calendar-json.googleapis.com" target="_blank" rel="noreferrer">Open Google Calendar API settings</a>
               )}
               {notice && <div className="mb-3 flex items-center gap-2 rounded-md border border-emerald-200 bg-emerald-50 px-3 py-2 text-xs text-emerald-900"><Check className="size-4" />{notice}</div>}
 
