@@ -8,7 +8,7 @@ import { getWorkflowActorContext } from "@/lib/server/workflows"
 export const dynamic = "force-dynamic"
 
 export const metadata: Metadata = {
-  title: "Learning",
+  title: "Assign Courses",
   description: "Assign training, manage compliance work, and review learning progress.",
 }
 

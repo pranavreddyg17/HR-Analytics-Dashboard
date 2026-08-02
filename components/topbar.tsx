@@ -9,16 +9,16 @@ import { BrandLogo } from "@/components/brand-logo"
 import type { ShellUser } from "@/components/app-sidebar"
 
 const pageTitles: Record<string, string> = {
-  "/": "Overview",
+  "/": "Home",
   "/people": "People",
   "/inbox": "Inbox",
   "/hiring": "Hiring",
-  "/time-off": "Time off",
+  "/time-off": "Leaves",
   "/attrition": "Attrition risk",
-  "/ai-agents": "Analytics assistant",
-  "/data": "Data Hub",
+  "/ai-agents": "AI Assistant",
+  "/data": "Import / Export Data",
   "/access": "Access",
-  "/learning": "Learning",
+  "/learning": "Assign Courses",
   "/employees": "People",
   "/risk-review": "Model review",
 }
@@ -36,9 +36,9 @@ export function Topbar({ user, onOpenPalette }: { user: ShellUser; onOpenPalette
     title = view === "hiring"
       ? "Hiring"
       : view === "leave"
-        ? "Time off"
+        ? "Leaves"
         : view === "training"
-          ? "Learning"
+          ? "Assign Courses"
           : "Insights"
   } else if (pathname.startsWith("/people/")) {
     title = "Employee profile"

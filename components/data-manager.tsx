@@ -138,7 +138,7 @@ export function DataManager() {
   return <div className="mx-auto flex w-full max-w-[1520px] flex-col gap-5 pb-10">
     <header className="flex flex-col gap-4 border-b border-border pb-5 sm:flex-row sm:items-end sm:justify-between">
       <div>
-        <h1 className="text-2xl font-semibold tracking-[-0.02em]">Data Hub</h1>
+        <h1 className="text-2xl font-semibold tracking-[-0.02em]">Import / Export Data</h1>
         <p className="mt-1 max-w-2xl text-sm leading-6 text-muted-foreground">Import HR records, review source coverage, and connect reporting feeds.</p>
       </div>
       <Button type="button" variant="outline" onClick={() => void refreshStatus()} disabled={statusBusy}>

@@ -120,7 +120,7 @@ export function HomeDashboard({ analytics, inbox, people }: HomeDashboardProps) 
     <div className="mx-auto flex w-full max-w-[1440px] flex-col gap-6 pb-10">
       <header className="flex flex-col gap-4 border-b border-border pb-5 sm:flex-row sm:items-end sm:justify-between">
         <div>
-          <h1 className="text-2xl font-semibold tracking-tight">Overview</h1>
+          <h1 className="text-2xl font-semibold tracking-tight">Home</h1>
           <p className="mt-1 text-sm text-muted-foreground">Current workforce status and work requiring attention.</p>
           <p className="mt-2 text-xs text-muted-foreground">
             Updated {new Intl.DateTimeFormat("en", { month: "short", day: "numeric", year: "numeric", hour: "numeric", minute: "2-digit" }).format(generatedAt)}
@@ -285,8 +285,8 @@ export function HomeDashboard({ analytics, inbox, people }: HomeDashboardProps) 
           </CardHeader>
           <CardContent className="divide-y divide-border p-0">
             {[
-              { label: "Time off", value: `${awayToday.length} away · ${analytics.leave.pending} pending`, href: "/time-off" },
-              { label: "Learning", value: `${percent.format(analytics.training.completionRate)}% complete`, href: "/learning" },
+              { label: "Leaves", value: `${awayToday.length} away · ${analytics.leave.pending} pending`, href: "/time-off" },
+              { label: "Assign Courses", value: `${percent.format(analytics.training.completionRate)}% complete`, href: "/learning" },
               { label: "Hiring", value: `${analytics.hiring.activeRequisitions} open roles · ${analytics.hiring.offers} offers`, href: "/hiring" },
               { label: "Attrition", value: `${percent.format(analytics.attrition.rate)}% rate · ${analytics.attrition.totalExits} exits`, href: "/attrition" },
               { label: "People", value: `${analytics.kpis.activeEmployees} active employee records`, href: "/people" },

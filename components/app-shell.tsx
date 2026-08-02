@@ -9,7 +9,6 @@ import {
   AppSidebar,
   commandNavigation,
   navigationGroups,
-  type NavigationItem,
   type ShellUser,
 } from "@/components/app-sidebar"
 import { BrandLogo } from "@/components/brand-logo"
@@ -32,7 +31,6 @@ type PaletteItem = {
   detail: string
   kind: "destination" | "person"
   section: string
-  icon?: NavigationItem["icon"]
   initials?: string
 }
 
@@ -43,7 +41,6 @@ type SearchDestination = {
   detail: string
   keywords: string
   section: "Pages" | "Actions" | "Reports"
-  icon?: NavigationItem["icon"]
 }
 
 const pageDetails: Record<string, string> = {
@@ -58,12 +55,6 @@ const pageDetails: Record<string, string> = {
   "/ai-agents": "Grounded workforce analytics",
   "/data": "Imports, source coverage, and reporting feeds",
   "/access": "Accounts, roles, and access history",
-}
-
-function navigationIcon(href: string): NavigationItem["icon"] | undefined {
-  const path = href.split(/[?#]/)[0]
-  const iconPath = path === "/risk-review" ? "/attrition" : path
-  return commandNavigation.find((item) => item.href.split("?")[0] === iconPath)?.icon
 }
 
 const featureDestinationDefinitions: Array<Omit<SearchDestination, "icon">> = [
@@ -86,10 +77,7 @@ const featureDestinationDefinitions: Array<Omit<SearchDestination, "icon">> = [
   { id: "data-coverage", href: "/data#data-coverage", label: "Data coverage", detail: "Review record counts and source classifications", keywords: "database imported demo mixed operational status domains", section: "Reports" },
 ]
 
-const featureDestinations: SearchDestination[] = featureDestinationDefinitions.map((item) => ({
-  ...item,
-  icon: navigationIcon(item.href),
-}))
+const featureDestinations: SearchDestination[] = featureDestinationDefinitions
 
 const searchDestinations: SearchDestination[] = [
   ...commandNavigation.map((item) => ({
@@ -99,7 +87,6 @@ const searchDestinations: SearchDestination[] = [
     detail: pageDetails[item.href] ?? "Workspace page",
     keywords: `${item.label} ${item.href}`,
     section: "Pages" as const,
-    icon: item.icon,
   })),
   ...featureDestinations,
 ]
@@ -133,12 +120,10 @@ function MobileMore({ open, onClose, user }: { open: boolean; onClose: () => voi
         </div>
         <nav className="grid grid-cols-2 gap-2 px-4 pb-[calc(1rem+env(safe-area-inset-bottom))]">
           {secondary.map((item) => {
-            const Icon = item.icon
             const path = item.href.split("?")[0]
             const active = pathname === path && (path !== "/insights" || (item.view ? currentView === item.view : !currentView || currentView === "executive"))
             return (
               <Link key={item.href} href={item.href} onClick={onClose} className={cn("mobile-more-link", active && "mobile-more-link--active")}>
-                <span className="mobile-more-link__icon"><Icon className="size-5" strokeWidth={1.8} /></span>
                 <span>{item.label}</span>
               </Link>
             )
@@ -240,7 +225,6 @@ function CommandPalette({ onClose, user }: { onClose: () => void; user: ShellUse
         </div>
         <div className="command-results">
           {items.map((item, index) => {
-            const Icon = item.icon
             const beginsSection = index === 0 || items[index - 1]?.section !== item.section
             return (
               <div key={item.id}>
@@ -251,9 +235,7 @@ function CommandPalette({ onClose, user }: { onClose: () => void; user: ShellUse
                   onClick={() => select(item)}
                   className={cn("command-result", index === activeIndex && "command-result--active")}
                 >
-                  <span className={cn("command-result__icon", item.kind === "person" && "command-result__avatar")}>
-                    {item.kind === "person" ? (item.initials || <UserRound className="size-4" />) : Icon && <Icon className="size-[18px]" strokeWidth={1.8} />}
-                  </span>
+                  {item.kind === "person" && <span className="command-result__icon command-result__avatar">{item.initials || <UserRound className="size-4" />}</span>}
                   <span className="min-w-0 flex-1 text-left">
                     <span className="block truncate text-sm font-semibold">{item.label}</span>
                     <span className="block truncate text-xs text-muted-foreground">{item.detail}</span>
@@ -276,7 +258,6 @@ function CommandPalette({ onClose, user }: { onClose: () => void; user: ShellUse
 
 export function AppShell({ user, children }: { user: ShellUser; children: React.ReactNode }) {
   const pathname = usePathname()
-  const [collapsed, setCollapsed] = useState(false)
   const [paletteOpen, setPaletteOpen] = useState(false)
   const [mobileMoreOpen, setMobileMoreOpen] = useState(false)
 
@@ -297,9 +278,7 @@ export function AppShell({ user, children }: { user: ShellUser; children: React.
   return (
     <div className="app-frame">
       <AppSidebar
-        collapsed={collapsed}
         user={user}
-        onToggle={() => setCollapsed((current) => !current)}
         onOpenMobileMore={() => setMobileMoreOpen(true)}
       />
       <div className="app-stage">
