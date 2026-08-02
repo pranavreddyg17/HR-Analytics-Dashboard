@@ -1,5 +1,5 @@
 import { PDFDocument, StandardFonts, rgb } from "pdf-lib"
-import * as XLSX from "xlsx"
+import writeXlsxFile, { type SheetData } from "write-excel-file/node"
 
 import type { HrDomain, WorkforceAnalytics } from "@/lib/hr-types"
 
@@ -25,11 +25,24 @@ function analyticsRows(analytics: WorkforceAnalytics): Record<HrDomain, Array<Re
   }
 }
 
-export function createWorkbook(analytics: WorkforceAnalytics): Uint8Array {
-  const workbook = XLSX.utils.book_new()
-  const summary = [
+function rowsToSheetData(rows: Array<Record<string, unknown>>): SheetData {
+  if (!rows.length) return [["No records"]]
+  const headers = Object.keys(rows[0]).filter((header) => header !== "updated_at")
+  return [
+    headers.map((header) => ({ value: header, fontWeight: "bold" as const })),
+    ...rows.map((row) => headers.map((header) => {
+      const value = row[header]
+      if (value === null || value === undefined) return null
+      if (typeof value === "string" || typeof value === "number" || typeof value === "boolean" || value instanceof Date) return value
+      return JSON.stringify(value)
+    })),
+  ]
+}
+
+export async function createWorkbook(analytics: WorkforceAnalytics): Promise<Uint8Array> {
+  const summary: SheetData = [
     ["LaidbackHR.AI workforce report", analytics.generatedAt],
-    ["Metric", "Value"],
+    [{ value: "Metric", fontWeight: "bold" }, { value: "Value", fontWeight: "bold" }],
     ["Employees", analytics.kpis.totalEmployees],
     ["Active employees", analytics.kpis.activeEmployees],
     ["Hires", analytics.kpis.hires],
@@ -42,11 +55,16 @@ export function createWorkbook(analytics: WorkforceAnalytics): Uint8Array {
     ["Executive insights"],
     ...analytics.executiveInsights.map((insight) => [insight]),
   ]
-  XLSX.utils.book_append_sheet(workbook, XLSX.utils.aoa_to_sheet(summary), "Executive summary")
-  for (const [domain, rows] of Object.entries(analyticsRows(analytics))) {
-    XLSX.utils.book_append_sheet(workbook, XLSX.utils.json_to_sheet(rows), domain.slice(0, 31))
-  }
-  return XLSX.write(workbook, { type: "array", bookType: "xlsx", compression: true }) as Uint8Array
+  const sheets = [
+    { data: summary, sheet: "Executive summary", stickyRowsCount: 2 },
+    ...Object.entries(analyticsRows(analytics)).map(([domain, rows]) => ({
+      data: rowsToSheetData(rows),
+      sheet: domain.slice(0, 31),
+      stickyRowsCount: 1,
+    })),
+  ]
+  const buffer = await writeXlsxFile(sheets, { fontFamily: "Segoe UI", fontSize: 10 }).toBuffer()
+  return new Uint8Array(buffer)
 }
 
 function wrap(text: string, width = 92): string[] {

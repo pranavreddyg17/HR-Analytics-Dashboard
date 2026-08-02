@@ -27,7 +27,6 @@ import { Button } from "@/components/ui/button"
 import { Card } from "@/components/ui/card"
 import { EmployeeDrawer } from "@/components/people/employee-drawer"
 import { PersonAvatar, StatusPill, formatDate, plural } from "@/components/people/people-ui"
-import { apiBaseUrl } from "@/lib/api"
 import type { EmployeeActivity, EmployeeDirectoryResponse, EmployeeProfileResponse, ManagedEmployee } from "@/lib/people-types"
 import { cn } from "@/lib/utils"
 import { formatWorkspaceDateTime } from "@/lib/date-format"
@@ -55,7 +54,7 @@ export function PeopleProfile({ employeeId }: { employeeId: string }) {
   useEffect(() => {
     const controller = new AbortController()
     const requestRevision = revision
-    fetch(`${apiBaseUrl}/api/v1/hr/people/${encodeURIComponent(employeeId)}`, { cache: "no-store", signal: controller.signal })
+    fetch(`/api/v1/hr/people/${encodeURIComponent(employeeId)}`, { cache: "no-store", signal: controller.signal })
       .then(async (response) => {
         const body = await response.json() as EmployeeProfileResponse & { error?: string }
         if (!response.ok) throw new Error(body.error ?? "This employee profile is unavailable.")
@@ -69,7 +68,7 @@ export function PeopleProfile({ employeeId }: { employeeId: string }) {
 
   useEffect(() => {
     const controller = new AbortController()
-    fetch(`${apiBaseUrl}/api/v1/hr/people?limit=250`, { cache: "no-store", signal: controller.signal })
+    fetch("/api/v1/hr/people?limit=250", { cache: "no-store", signal: controller.signal })
       .then(async (response) => response.ok ? response.json() as Promise<EmployeeDirectoryResponse> : null)
       .then((body) => { if (body) setManagerPool(body.items) })
       .catch(() => undefined)
@@ -263,7 +262,7 @@ function MetricCard({ label, value, detail }: { label: string; value: string; de
 function RecordStatus({ status }: { status: string }) {
   const positive = /approved|completed|voluntary/i.test(status)
   const pending = /pending|incomplete|open/i.test(status)
-  return <span className={cn("inline-flex w-fit items-center rounded-sm border px-2.5 py-1 text-meta font-medium", positive ? "border-emerald-200 bg-emerald-50 text-emerald-800 dark:border-emerald-900/60 dark:bg-emerald-950/30 dark:text-emerald-300" : pending ? "border-amber-200 bg-amber-50 text-amber-800 dark:border-amber-900/60 dark:bg-amber-950/30 dark:text-amber-300" : "border-border bg-muted text-muted-foreground")}>{status}</span>
+  return <span className={cn("inline-flex w-fit items-center rounded-sm border px-2.5 py-1 text-status font-semibold", positive ? "border-emerald-200 bg-emerald-50 text-emerald-800 dark:border-emerald-900/60 dark:bg-emerald-950/30 dark:text-emerald-300" : pending ? "border-amber-200 bg-amber-50 text-amber-800 dark:border-amber-900/60 dark:bg-amber-950/30 dark:text-amber-300" : "border-border bg-muted text-muted-foreground")}>{status}</span>
 }
 
 function Timeline({ activity, compact = false }: { activity: EmployeeActivity[]; compact?: boolean }) {
@@ -296,7 +295,7 @@ function ArchiveDialog({ open, employee, onClose, onChanged }: { open: boolean; 
     setBusy(true); setError("")
     try {
       const action = restoring ? "restore" : "archive"
-      const response = await fetch(`${apiBaseUrl}/api/v1/hr/people/${encodeURIComponent(employee.employee_id)}/${action}`, { method: "POST" })
+      const response = await fetch(`/api/v1/hr/people/${encodeURIComponent(employee.employee_id)}/${action}`, { method: "POST" })
       const body = await response.json() as { error?: string }
       if (!response.ok) throw new Error(body.error ?? `Unable to ${action} this employee.`)
       onChanged()

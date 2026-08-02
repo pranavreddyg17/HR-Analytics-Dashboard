@@ -72,6 +72,7 @@ export type InboxItem = {
   nextAction: string
   attentionReason: string
   completionEffect: string
+  requestContext: Array<{ label: string; value: string }>
   assignedTo: "hr" | "manager" | "employee"
   requiresDecision: boolean
   isCompleted: boolean
@@ -83,6 +84,8 @@ export type InboxItem = {
   blockedReason: string | null
   actionable: boolean
   actions?: Array<"approve" | "reject" | "complete">
+  reviewHref: string
+  recordHref: string
 }
 
 export type WorkflowActorContext = {

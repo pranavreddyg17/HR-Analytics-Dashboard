@@ -1,6 +1,4 @@
 @import "tailwindcss";
-@import "tw-animate-css";
-@import "shadcn/tailwind.css";
 
 @custom-variant dark (&:is(.dark *));
 
@@ -183,6 +181,7 @@
     font-weight: 400;
     line-height: 20px;
     letter-spacing: 0;
+    font-synthesis: none;
   }
 
   h1 {
@@ -218,8 +217,30 @@
   input,
   select,
   textarea {
+    font-family: inherit;
     font-size: 13px !important;
     line-height: 20px !important;
+  }
+
+  [data-slot="card-title"] {
+    font-size: 13px !important;
+    font-weight: 600 !important;
+    line-height: 20px !important;
+    letter-spacing: 0 !important;
+  }
+
+  [data-slot="card-description"] {
+    font-size: 12px !important;
+    font-weight: 400 !important;
+    line-height: 16px !important;
+    letter-spacing: 0 !important;
+  }
+
+  [data-slot="badge"] {
+    font-size: 11px !important;
+    font-weight: 600 !important;
+    line-height: 16px !important;
+    letter-spacing: 0 !important;
   }
 
   input,

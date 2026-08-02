@@ -3,7 +3,6 @@
 import { useEffect, useState } from "react"
 import { Check, Clipboard, Download, RefreshCw, Upload } from "lucide-react"
 
-import { apiBaseUrl } from "@/lib/api"
 import { hrDomains, importFields, type DomainStatus, type HrDomain } from "@/lib/hr-types"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
@@ -75,7 +74,7 @@ export function DataManager() {
   async function refreshStatus() {
     setStatusBusy(true)
     try {
-      const response = await fetch(`${apiBaseUrl}/api/v1/data/status`, { cache: "no-store" })
+      const response = await fetch("/api/v1/data/status", { cache: "no-store" })
       if (!response.ok) throw new Error("Data status could not be refreshed.")
       setStatus((await response.json() as { status: DomainStatus[] }).status)
     } catch (reason) {
@@ -87,7 +86,7 @@ export function DataManager() {
 
   useEffect(() => {
     const controller = new AbortController()
-    fetch(`${apiBaseUrl}/api/v1/data/status`, { cache: "no-store", signal: controller.signal })
+    fetch("/api/v1/data/status", { cache: "no-store", signal: controller.signal })
       .then((response) => response.ok ? response.json() as Promise<{ status: DomainStatus[] }> : null)
       .then((body) => { if (body) setStatus(body.status) })
       .catch(() => undefined)
@@ -109,7 +108,7 @@ export function DataManager() {
     if (!rows.length || error) return
     setBusy(true); setMessage(""); setError("")
     try {
-      const response = await fetch(`${apiBaseUrl}/api/v1/data/import`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ domain, rows, filename, replace }) })
+      const response = await fetch("/api/v1/data/import", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ domain, rows, filename, replace }) })
       const body = await response.json() as { imported?: number; error?: string }
       if (!response.ok) throw new Error(body.error ?? `Import failed (${response.status})`)
       setMessage(`Imported ${body.imported} ${domain} rows. Dashboards and reports now use the updated records.`)
@@ -120,7 +119,7 @@ export function DataManager() {
   }
 
   async function copyPowerBiFeed(item: HrDomain) {
-    const url = `${window.location.origin}${apiBaseUrl}/api/v1/power-bi/${item}`
+    const url = `${window.location.origin}/api/v1/power-bi/${item}`
     setCopyError("")
     try {
       await copyToClipboard(url)
@@ -171,7 +170,7 @@ export function DataManager() {
         <CardContent className="space-y-5">
           <div className="grid gap-4 sm:grid-cols-2">
             <label className="text-xs text-muted-foreground">Domain<select value={domain} onChange={(event)=>{setDomain(event.target.value as HrDomain);setRows([]);setFilename("");setError("");setMessage("")}} className="mt-1 h-10 w-full rounded-md border border-input bg-background px-3 text-sm text-foreground">{hrDomains.map((item)=><option key={item} value={item}>{item[0].toUpperCase()+item.slice(1)}</option>)}</select></label>
-            <div className="flex items-end"><a className="inline-flex h-10 items-center gap-2 rounded-md border border-border bg-card px-3 text-sm hover:bg-muted" href={`${apiBaseUrl}/api/v1/data/template?domain=${domain}`}><Download className="size-4"/>Download template</a></div>
+            <div className="flex items-end"><a className="inline-flex h-10 items-center gap-2 rounded-md border border-border bg-card px-3 text-sm hover:bg-muted" href={`/api/v1/data/template?domain=${domain}`}><Download className="size-4"/>Download template</a></div>
           </div>
           <div className="rounded-md border border-dashed border-input p-6">
             <label className="flex cursor-pointer flex-col items-center gap-2 text-center"><span className="text-sm font-medium">Choose a CSV file</span><span className="text-xs text-muted-foreground">Maximum 5,000 rows</span><input type="file" accept=".csv,text/csv" className="sr-only" onChange={(event)=>void loadFile(event.target.files?.[0])}/></label>

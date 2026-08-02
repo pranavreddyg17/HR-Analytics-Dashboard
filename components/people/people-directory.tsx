@@ -11,7 +11,6 @@ import { Card } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
 import { EmployeeDrawer } from "@/components/people/employee-drawer"
 import { PersonAvatar, StatusPill, plural } from "@/components/people/people-ui"
-import { apiBaseUrl } from "@/lib/api"
 import type { EmployeeDirectoryResponse, ManagedEmployee } from "@/lib/people-types"
 import { cn } from "@/lib/utils"
 
@@ -72,7 +71,7 @@ export function PeopleDirectory() {
   useEffect(() => {
     const controller = new AbortController()
     const requestKey = `${searchString}:${retry}`
-    fetch(`${apiBaseUrl}/api/v1/hr/people?${searchString}`, { cache: "no-store", signal: controller.signal })
+    fetch(`/api/v1/hr/people?${searchString}`, { cache: "no-store", signal: controller.signal })
       .then(async (response) => {
         const body = await response.json() as EmployeeDirectoryResponse & { error?: string }
         if (!response.ok) throw new Error(body.error ?? "The people directory is unavailable.")
@@ -86,7 +85,7 @@ export function PeopleDirectory() {
 
   useEffect(() => {
     const controller = new AbortController()
-    fetch(`${apiBaseUrl}/api/v1/hr/people?limit=250`, { cache: "no-store", signal: controller.signal })
+    fetch("/api/v1/hr/people?limit=250", { cache: "no-store", signal: controller.signal })
       .then(async (response) => response.ok ? response.json() as Promise<EmployeeDirectoryResponse> : null)
       .then((body) => { if (body) setManagerPool(body.items) })
       .catch(() => undefined)

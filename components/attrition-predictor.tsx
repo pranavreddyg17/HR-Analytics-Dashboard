@@ -6,7 +6,6 @@ import { Loader2, RotateCcw } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { RiskBadge } from "@/components/risk-badge"
-import { apiBaseUrl } from "@/lib/api"
 import type { PredictionInput, PredictionResult, PredictionSchema } from "@/lib/types"
 
 function integer(value: string): number {
@@ -42,7 +41,7 @@ export function AttritionPredictor({ schema }: { schema: PredictionSchema }) {
     setLoading(true)
     setError(null)
     try {
-      const response = await fetch(`${apiBaseUrl}/api/v1/predict`, {
+      const response = await fetch("/api/v1/predict", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(form),
@@ -71,7 +70,7 @@ export function AttritionPredictor({ schema }: { schema: PredictionSchema }) {
     <div className="grid grid-cols-1 gap-4 xl:grid-cols-[1.15fr_0.85fr]">
       <Card className="rounded-lg shadow-none">
         <CardHeader>
-          <CardTitle className="text-base">Profile inputs</CardTitle>
+          <CardTitle>Profile inputs</CardTitle>
           <CardDescription>
             Enter the ten fields used by the historical model. No protected demographic fields are included.
           </CardDescription>
@@ -120,7 +119,7 @@ export function AttritionPredictor({ schema }: { schema: PredictionSchema }) {
 
       <Card className="rounded-lg shadow-none">
         <CardHeader>
-          <CardTitle className="text-base">Assessment result</CardTitle>
+          <CardTitle>Assessment result</CardTitle>
           <CardDescription>Probability, contributing signals, and an appropriate HR review.</CardDescription>
         </CardHeader>
         <CardContent>

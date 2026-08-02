@@ -63,6 +63,8 @@ test("operational workspaces contain actionable software-company workflows", asy
   assert.ok(items.some((item) => item.isCompleted && item.completionNotes))
   assert.ok(items.some((item) => item.slaStatus === "overdue" && !item.isCompleted))
   assert.ok(items.every((item) => item.owner && item.nextAction && item.attentionReason && item.completionEffect))
+  assert.ok(items.every((item) => item.reviewHref.startsWith("/inbox?") && item.recordHref.startsWith("/")))
+  assert.ok(items.every((item) => Array.isArray(item.requestContext) && item.requestContext.length > 0))
   assert.ok(items.every((item) => ["overdue", "due_today", "due_soon", "on_track", "complete", "unscheduled"].includes(item.slaStatus)))
 
   assert.ok(workforce.body.leave.pending >= 6)
@@ -96,6 +98,10 @@ test("hiring work moves from decision to owned follow-up and records completion"
   assert.equal(requestedItem.nextAction, "Approve or decline the requisition.")
   assert.ok(requestedItem.ownerEmail)
   assert.ok(requestedItem.dueDate)
+  assert.match(requestedItem.reviewHref, new RegExp(`^/inbox\\?view=decisions&type=hiring&item=${created.body.id}$`))
+  assert.equal(requestedItem.recordHref, `/hiring?requisition=${created.body.id}`)
+  assert.equal(requestedItem.requestContext.find((item) => item.label === "Employment type")?.value, "Full-time")
+  assert.match(requestedItem.requestContext.find((item) => item.label === "Business justification")?.value ?? "", /accountable hiring workflow/)
 
   const approved = await json("/api/v1/hr/workflows/action", {
     method: "POST",
@@ -111,6 +117,7 @@ test("hiring work moves from decision to owned follow-up and records completion"
   assert.equal(openedItem.requiresDecision, false)
   assert.equal(openedItem.isCompleted, false)
   assert.match(openedItem.nextAction, /Record recruiting progress/)
+  assert.match(openedItem.reviewHref, new RegExp(`^/inbox\\?view=my_work&type=hiring&item=${created.body.id}$`))
 
   const closed = await json("/api/v1/hr/workflows/action", {
     method: "POST",
@@ -123,6 +130,82 @@ test("hiring work moves from decision to owned follow-up and records completion"
   assert.equal(completedItem.isCompleted, true)
   assert.ok(completedItem.completedAt)
   assert.match(completedItem.completionNotes, /rejected the hiring requisition/i)
+})
+
+test("hiring operations persist a candidate pipeline against approved requisitions", async () => {
+  const initial = await json("/api/v1/hr/hiring")
+  assert.equal(initial.response.status, 200)
+  assert.ok(initial.body.requisitions.length >= 10)
+  assert.ok(initial.body.requisitions.every((item) => !item.id.startsWith("HIR-DEMO-")))
+  assert.ok(initial.body.candidates.length >= 10)
+  assert.ok(initial.body.candidates.some((item) => item.requisitionId.startsWith("HIR-SOFTWARE-")))
+  assert.ok(initial.body.summary.activeCandidates > 0)
+
+  const created = await json("/api/v1/hr/workflows", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      type: "hiring",
+      position: "Candidate Pipeline Validation Engineer",
+      department: "Research & Development",
+      location: "Remote",
+      employmentType: "Full-time",
+      justification: "Validate that approved requisitions own persistent candidate records.",
+    }),
+  })
+  assert.equal(created.response.status, 201)
+  const approved = await json("/api/v1/hr/workflows/action", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ id: created.body.id, type: "hiring", action: "approve" }),
+  })
+  assert.equal(approved.response.status, 200)
+
+  const candidateEmail = `pipeline-${Date.now()}@example.test`
+  const candidate = await json("/api/v1/hr/hiring/candidates", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ requisitionId: created.body.id, fullName: "Pipeline Test Candidate", email: candidateEmail, source: "Careers site", notes: "Validation record" }),
+  })
+  assert.equal(candidate.response.status, 201)
+  assert.match(candidate.body.id, /^CAN-/)
+
+  const screening = await json(`/api/v1/hr/hiring/candidates/${candidate.body.id}`, {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ stage: "Screening", nextStep: "Complete validation screen", nextStepDueAt: "2026-08-08" }),
+  })
+  assert.equal(screening.response.status, 200)
+  assert.equal(screening.body.stage, "Screening")
+
+  const missingReason = await json(`/api/v1/hr/hiring/candidates/${candidate.body.id}`, {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ stage: "Rejected" }),
+  })
+  assert.equal(missingReason.response.status, 422)
+
+  const rejected = await json(`/api/v1/hr/hiring/candidates/${candidate.body.id}`, {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ stage: "Rejected", rejectedReason: "Validation completed" }),
+  })
+  assert.equal(rejected.response.status, 200)
+
+  const persisted = await json("/api/v1/hr/hiring")
+  assert.equal(persisted.response.status, 200)
+  const persistedCandidate = persisted.body.candidates.find((item) => item.id === candidate.body.id)
+  assert.equal(persistedCandidate.requisitionId, created.body.id)
+  assert.equal(persistedCandidate.email, candidateEmail)
+  assert.equal(persistedCandidate.stage, "Rejected")
+  assert.equal(persistedCandidate.rejectedReason, "Validation completed")
+
+  const closed = await json("/api/v1/hr/workflows/action", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ id: created.body.id, type: "hiring", action: "reject" }),
+  })
+  assert.equal(closed.response.status, 200)
 })
 
 test("grounded data endpoints expose the real dataset", async () => {

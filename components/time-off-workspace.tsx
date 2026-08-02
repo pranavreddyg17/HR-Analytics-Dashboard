@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react"
 import Link from "next/link"
+import { useSearchParams } from "next/navigation"
 import {
   Area,
   AreaChart,
@@ -22,7 +23,6 @@ import {
   X,
 } from "lucide-react"
 
-import { apiBaseUrl } from "@/lib/api"
 import type { BreakdownPoint, EmployeeRecord, LeaveRecord, TimePoint, WorkforceAnalytics } from "@/lib/hr-types"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
@@ -114,11 +114,15 @@ function ReviewQueue({ rows, people, reviewer, employees, busyId, onDecision }: 
   )
 }
 
-function LeaveTable({ rows, people, reviewer, employees, busyId, onDecision }: { rows: LeaveRecord[]; people: Map<string, string>; reviewer: Reviewer; employees: Map<string, EmployeeRecord>; busyId: string | null; onDecision: (row: LeaveRecord, decision: "Approved" | "Rejected") => void }) {
+function LeaveTable({ rows, people, reviewer, employees, busyId, selectedId, onDecision }: { rows: LeaveRecord[]; people: Map<string, string>; reviewer: Reviewer; employees: Map<string, EmployeeRecord>; busyId: string | null; selectedId: string | null; onDecision: (row: LeaveRecord, decision: "Approved" | "Rejected") => void }) {
   const [query, setQuery] = useState("")
   const [status, setStatus] = useState("")
   const statuses = useMemo(() => [...new Set(rows.map((row) => row.approval_status))].sort(), [rows])
   const visible = useMemo(() => { const normalized = query.trim().toLowerCase(); return rows.filter((row) => (!status || row.approval_status === status) && (!normalized || [row.employee_id, people.get(row.employee_id) ?? "", row.leave_type, row.department].some((value) => value.toLowerCase().includes(normalized)))) }, [people, query, rows, status])
+  useEffect(() => {
+    if (!selectedId || !visible.some((row) => row.id === selectedId)) return
+    document.getElementById(`leave-request-${selectedId}`)?.scrollIntoView({ block: "center" })
+  }, [selectedId, visible])
   return (
     <Card className="gap-0 overflow-hidden py-0 shadow-none">
       <CardHeader className="gap-4 border-b border-border px-5 py-5 lg:flex-row lg:items-center lg:justify-between">
@@ -132,7 +136,7 @@ function LeaveTable({ rows, people, reviewer, employees, busyId, onDecision }: {
         <div className="max-h-[480px] overflow-auto">
           <table className="w-full min-w-[1040px] text-left text-xs">
             <thead className="sticky top-0 z-10 bg-muted/95"><tr>{["Employee", "Leave type", "Dates", "Days", "Department", "Status", "Action"].map((heading) => <th key={heading} className="px-4 py-3 font-semibold text-muted-foreground">{heading}</th>)}</tr></thead>
-            <tbody>{visible.map((row) => <tr key={row.id} className="border-t border-border/60 hover:bg-muted/25"><td className="px-4 py-3"><p className="font-semibold">{people.get(row.employee_id) ?? row.employee_id}</p><p className="mt-0.5 text-meta text-muted-foreground">{row.employee_id}</p></td><td className="px-4 py-3">{row.leave_type}</td><td className="px-4 py-3 whitespace-nowrap">{dateLabel(row.start_date)} — {dateLabel(row.end_date)}</td><td className="px-4 py-3 font-semibold tabular-nums">{row.leave_days}</td><td className="px-4 py-3">{row.department}</td><td className="px-4 py-3"><span className={cn("text-meta font-medium", statusTone(row.approval_status))}>{row.approval_status}</span></td><td className="px-4 py-3">{canDecide(row, reviewer, employees) ? <div className="flex gap-1.5"><Button size="xs" variant="outline" disabled={busyId !== null} onClick={() => onDecision(row, "Rejected")}><X className="size-3"/>Decline</Button><Button size="xs" disabled={busyId !== null} onClick={() => onDecision(row, "Approved")}>{busyId === row.id ? <LoaderCircle className="size-3 animate-spin"/> : <Check className="size-3"/>}Approve</Button></div> : <span className="text-muted-foreground">—</span>}</td></tr>)}</tbody>
+            <tbody>{visible.map((row) => <tr id={`leave-request-${row.id}`} key={row.id} className={cn("border-t border-border/60 hover:bg-muted/25", selectedId === row.id && "bg-primary/5 ring-1 ring-inset ring-primary/30")}><td className="px-4 py-3"><p className="font-semibold">{people.get(row.employee_id) ?? row.employee_id}</p><p className="mt-0.5 text-meta text-muted-foreground">{row.employee_id}</p></td><td className="px-4 py-3">{row.leave_type}</td><td className="px-4 py-3 whitespace-nowrap">{dateLabel(row.start_date)} — {dateLabel(row.end_date)}</td><td className="px-4 py-3 font-semibold tabular-nums">{row.leave_days}</td><td className="px-4 py-3">{row.department}</td><td className="px-4 py-3"><span className={cn("text-status font-semibold", statusTone(row.approval_status))}>{row.approval_status}</span></td><td className="px-4 py-3">{canDecide(row, reviewer, employees) ? <div className="flex gap-1.5"><Button size="xs" variant="outline" disabled={busyId !== null} onClick={() => onDecision(row, "Rejected")}><X className="size-3"/>Decline</Button><Button size="xs" disabled={busyId !== null} onClick={() => onDecision(row, "Approved")}>{busyId === row.id ? <LoaderCircle className="size-3 animate-spin"/> : <Check className="size-3"/>}Approve</Button></div> : <span className="text-muted-foreground">—</span>}</td></tr>)}</tbody>
           </table>
           {!visible.length && <div className="p-10 text-center text-sm text-muted-foreground">No leave requests match your search.</div>}
         </div>
@@ -143,6 +147,8 @@ function LeaveTable({ rows, people, reviewer, employees, busyId, onDecision }: {
 }
 
 export function TimeOffWorkspace({ canRequestLeave, reviewer }: { canRequestLeave: boolean; reviewer: Reviewer }) {
+  const searchParams = useSearchParams()
+  const selectedRequestId = searchParams.get("request")
   const [filters, setFilters] = useState<Filters>(emptyFilters)
   const [data, setData] = useState<WorkforceAnalytics | null>(null)
   const [loadedQuery, setLoadedQuery] = useState<string | null>(null)
@@ -155,7 +161,7 @@ export function TimeOffWorkspace({ canRequestLeave, reviewer }: { canRequestLeav
 
   useEffect(() => {
     const controller = new AbortController()
-    fetch(`${apiBaseUrl}/api/v1/workforce?${query}`, { cache: "no-store", signal: controller.signal })
+    fetch(`/api/v1/workforce?${query}`, { cache: "no-store", signal: controller.signal })
       .then(async (response) => { if (!response.ok) throw new Error("Time-off data could not be loaded."); return response.json() as Promise<WorkforceAnalytics> })
       .then((result) => { setData(result); setError(""); setLoadedQuery(query) })
       .catch((reason: unknown) => { if ((reason as { name?: string })?.name !== "AbortError") { setError(reason instanceof Error ? reason.message : "Time-off data could not be loaded."); setLoadedQuery(query) } })
@@ -169,6 +175,10 @@ export function TimeOffWorkspace({ canRequestLeave, reviewer }: { canRequestLeav
   const people = new Map(data.directoryEmployees.map((employee) => [employee.employee_id, `${employee.preferred_name || employee.first_name} ${employee.last_name}`.trim()]))
   const pendingForReview = data.leave.rows.filter((row) => canSeePending(row, reviewer, employees))
   const canReviewLeave = ["admin", "hr", "manager"].includes(reviewer.role)
+  const selectedRequest = selectedRequestId
+    ? [...data.leave.rows, ...data.leave.upcoming, ...data.leave.currentlyAway].find((row) => row.id === selectedRequestId) ?? null
+    : null
+  const selectedPerson = selectedRequest ? people.get(selectedRequest.employee_id) ?? selectedRequest.employee_id : ""
 
   async function decide(row: LeaveRecord, decision: "Approved" | "Rejected") {
     setBusyId(row.id)
@@ -191,6 +201,8 @@ export function TimeOffWorkspace({ canRequestLeave, reviewer }: { canRequestLeav
   return <div className="mx-auto flex w-full max-w-[1520px] flex-col gap-5 pb-10">
     <header className="border-b border-border pb-5"><div className="flex flex-col gap-5 lg:flex-row lg:items-end lg:justify-between"><div><h1 className="text-2xl font-semibold">Leaves</h1><p className="mt-1 max-w-2xl text-sm text-muted-foreground">Manage leave requests, approvals, schedules, and coverage.</p></div><div className="flex flex-wrap gap-2">{canReviewLeave && <Button nativeButton={false} variant="outline" render={<a href="#pending-decisions"/>}>Review pending ({pendingForReview.length})</Button>}{canRequestLeave && <Button nativeButton={false} render={<Link href="/inbox?new=leave"/>}><Plus className="size-4"/>Request leave</Button>}</div></div><div className="mt-3 flex flex-wrap gap-x-5 gap-y-1 text-xs text-muted-foreground"><span>{data.leave.totalRequests} records</span><span>Updated {formatWorkspaceDateTime(data.generatedAt)}</span></div></header>
 
+    {selectedRequestId && (selectedRequest ? <Card className="gap-0 overflow-hidden py-0 shadow-none"><CardHeader className="border-b border-border px-5 py-4 sm:flex-row sm:items-start sm:justify-between"><div><CardTitle>Selected leave request</CardTitle><CardDescription>{selectedPerson} · {selectedRequest.employee_id}</CardDescription></div><div className="flex flex-wrap gap-2"><Button nativeButton={false} variant="outline" render={<Link href="/time-off"/>}>Clear selection</Button><Button nativeButton={false} variant="outline" render={<Link href={`/people/${encodeURIComponent(selectedRequest.employee_id)}`}/>}>View employee</Button>{canDecide(selectedRequest, reviewer, employees) && <><Button variant="outline" disabled={busyId !== null} onClick={() => void decide(selectedRequest, "Rejected")}>Decline</Button><Button disabled={busyId !== null} onClick={() => void decide(selectedRequest, "Approved")}>{busyId === selectedRequest.id && <LoaderCircle className="size-3.5 animate-spin"/>}Approve</Button></>}{selectedRequest.approval_status.toLowerCase() === "approved" && <Button onClick={() => { setFilters({ ...filters, department: selectedRequest.department }); window.setTimeout(() => document.getElementById("department-coverage")?.scrollIntoView({ behavior: "smooth", block: "start" }), 0) }}>Review department coverage</Button>}</div></CardHeader><CardContent className="grid gap-4 p-5 sm:grid-cols-2 xl:grid-cols-4"><div><p className="text-meta font-semibold text-muted-foreground">Leave</p><p className="mt-1 text-sm">{selectedRequest.leave_type} · {selectedRequest.leave_days} day{selectedRequest.leave_days === 1 ? "" : "s"}</p></div><div><p className="text-meta font-semibold text-muted-foreground">Dates</p><p className="mt-1 text-sm">{dateLabel(selectedRequest.start_date)} — {dateLabel(selectedRequest.end_date)}</p></div><div><p className="text-meta font-semibold text-muted-foreground">Department</p><p className="mt-1 text-sm">{selectedRequest.department}</p></div><div><p className="text-meta font-semibold text-muted-foreground">Status</p><p className={cn("mt-1 text-sm font-semibold", statusTone(selectedRequest.approval_status))}>{selectedRequest.approval_status}</p></div></CardContent></Card> : <div className="rounded-md border border-amber-200 bg-amber-50 px-4 py-3 text-xs text-amber-900 dark:border-amber-900/40 dark:bg-amber-950/20 dark:text-amber-100">This leave request is not available in the current data view. <Link href="/time-off" className="font-semibold underline">Clear selection</Link></div>)}
+
     <Card className="gap-4 p-4 shadow-none sm:p-5"><div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between"><p className="text-sm font-semibold">Filters</p><Button size="sm" variant="ghost" onClick={() => setFilters(emptyFilters)}><FilterX className="size-4"/>Reset</Button></div><div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-6"><Filter label="From"><input type="date" value={filters.from} onChange={(event) => setFilters({ ...filters, from: event.target.value })}/></Filter><Filter label="To"><input type="date" value={filters.to} onChange={(event) => setFilters({ ...filters, to: event.target.value })}/></Filter><Filter label="Department"><select value={filters.department} onChange={(event) => setFilters({ ...filters, department: event.target.value })}><option value="">All departments</option>{data.dimensions.departments.map((item) => <option key={item}>{item}</option>)}</select></Filter><Filter label="Location"><select value={filters.location} onChange={(event) => setFilters({ ...filters, location: event.target.value })}><option value="">All locations</option>{data.dimensions.locations.map((item) => <option key={item}>{item}</option>)}</select></Filter><Filter label="Leave type"><select value={filters.leaveType} onChange={(event) => setFilters({ ...filters, leaveType: event.target.value })}><option value="">All leave types</option>{data.dimensions.leaveTypes.map((item) => <option key={item}>{item}</option>)}</select></Filter><Filter label="Reporting interval"><select value={filters.period} onChange={(event) => setFilters({ ...filters, period: event.target.value as Filters["period"] })}><option value="month">Monthly</option><option value="quarter">Quarterly</option><option value="year">Yearly</option></select></Filter></div>{loading && <div className="h-1 overflow-hidden rounded-full bg-muted"><div className="h-full w-2/3 animate-pulse rounded-full bg-primary"/></div>}</Card>
 
     {(notice || error) && <div aria-live="polite" className={cn("rounded-md border px-4 py-3 text-xs font-medium", error ? "border-rose-200 bg-rose-50 text-rose-800 dark:border-rose-900/40 dark:bg-rose-950/20 dark:text-rose-200" : "border-emerald-200 bg-emerald-50 text-emerald-800 dark:border-emerald-900/40 dark:bg-emerald-950/20 dark:text-emerald-200")}>{error || notice}</div>}
@@ -205,9 +217,9 @@ export function TimeOffWorkspace({ canRequestLeave, reviewer }: { canRequestLeav
 
     <div className="grid gap-4 xl:grid-cols-2"><Card><CardHeader><CardTitle>Approved leave trend</CardTitle><CardDescription>Approved days grouped by {data.filters.period}</CardDescription></CardHeader><CardContent><TrendChart data={data.leave.trend}/></CardContent></Card><Card><CardHeader><CardTitle>Approved leave by type</CardTitle><CardDescription>Approved days by leave category</CardDescription></CardHeader><CardContent><BreakdownChart data={data.leave.byType} name="Days"/></CardContent></Card></div>
 
-    <Card><CardHeader><CardTitle>Coverage by department</CardTitle><CardDescription>Approved leave days by department</CardDescription></CardHeader><CardContent><BreakdownChart data={data.leave.byDepartment} name="Days" onSelect={(department) => setFilters({ ...filters, department })}/></CardContent></Card>
+    <Card id="department-coverage"><CardHeader><CardTitle>Coverage by department</CardTitle><CardDescription>Approved leave days by department</CardDescription></CardHeader><CardContent><BreakdownChart data={data.leave.byDepartment} name="Days" onSelect={(department) => setFilters({ ...filters, department })}/></CardContent></Card>
 
-    <LeaveTable rows={data.leave.rows} people={people} reviewer={reviewer} employees={employees} busyId={busyId} onDecision={(row, decision) => void decide(row, decision)}/>
+    <LeaveTable rows={data.leave.rows} people={people} reviewer={reviewer} employees={employees} busyId={busyId} selectedId={selectedRequestId} onDecision={(row, decision) => void decide(row, decision)}/>
 
   </div>
 }

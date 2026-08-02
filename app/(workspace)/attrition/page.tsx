@@ -164,7 +164,7 @@ export default async function AttritionPage() {
 
       <Card className="gap-0 rounded-lg py-0 shadow-none">
         <CardHeader className="border-b border-border px-5 py-4">
-          <CardTitle className="text-base">Retention priorities</CardTitle>
+          <CardTitle>Retention priorities</CardTitle>
           <CardDescription>Evidence to review, why it matters, and the appropriate HR follow-up.</CardDescription>
         </CardHeader>
         <CardContent className="p-0">
@@ -203,7 +203,7 @@ export default async function AttritionPage() {
         <div className="grid gap-4 xl:grid-cols-2">
           <Card className="gap-0 rounded-lg py-0 shadow-none">
             <CardHeader className="border-b border-border px-5 py-4">
-              <CardTitle className="text-base">Exits by department</CardTitle>
+              <CardTitle>Exits by department</CardTitle>
               <CardDescription>Count and share of all recorded exits.</CardDescription>
             </CardHeader>
             <CardContent className="px-5 py-1">
@@ -212,7 +212,7 @@ export default async function AttritionPage() {
           </Card>
           <Card className="gap-0 rounded-lg py-0 shadow-none">
             <CardHeader className="border-b border-border px-5 py-4">
-              <CardTitle className="text-base">Exits by tenure</CardTitle>
+              <CardTitle>Exits by tenure</CardTitle>
               <CardDescription>Use tenure concentration to target lifecycle improvements.</CardDescription>
             </CardHeader>
             <CardContent className="px-5 py-1">
@@ -230,14 +230,14 @@ export default async function AttritionPage() {
         <div className="grid gap-4 xl:grid-cols-2">
           <Card className="rounded-lg shadow-none">
             <CardHeader>
-              <CardTitle className="text-base">Department review concentration</CardTitle>
+              <CardTitle>Department review concentration</CardTitle>
               <CardDescription>Mean predicted risk, records above threshold, and observed attrition.</CardDescription>
             </CardHeader>
             <CardContent><DepartmentRiskChart data={dashboard.departmentRisk} /></CardContent>
           </Card>
           <Card className="rounded-lg shadow-none">
             <CardHeader>
-              <CardTitle className="text-base">Attrition by tenure cohort</CardTitle>
+              <CardTitle>Attrition by tenure cohort</CardTitle>
               <CardDescription>Observed attrition compared with mean predicted risk and the overall benchmark.</CardDescription>
             </CardHeader>
             <CardContent><AttritionTrendChart data={dashboard.attritionTrend} /></CardContent>
@@ -261,7 +261,7 @@ export default async function AttritionPage() {
         <div className="grid gap-4 xl:grid-cols-2">
           <Card className="rounded-lg shadow-none">
             <CardHeader>
-              <CardTitle className="text-base">Model feature importance</CardTitle>
+              <CardTitle>Model feature importance</CardTitle>
               <CardDescription>Relative coefficient magnitude; importance does not establish causation.</CardDescription>
             </CardHeader>
             <CardContent><FeatureImportanceChart data={dashboard.featureImportance} /></CardContent>
@@ -269,14 +269,14 @@ export default async function AttritionPage() {
           <div className="grid gap-4">
             <Card className="rounded-lg shadow-none">
               <CardHeader>
-                <CardTitle className="text-base">Risk score distribution</CardTitle>
+                <CardTitle>Risk score distribution</CardTitle>
                 <CardDescription>All historical records grouped by predicted probability.</CardDescription>
               </CardHeader>
               <CardContent><RiskDistributionChart data={dashboard.riskDistribution} /></CardContent>
             </Card>
             <Card className="gap-0 rounded-lg py-0 shadow-none">
               <CardHeader className="border-b border-border px-5 py-4">
-                <CardTitle className="text-base">Validation measures</CardTitle>
+                <CardTitle>Validation measures</CardTitle>
                 <CardDescription>Quality measures for the historical model.</CardDescription>
               </CardHeader>
               <CardContent className="grid grid-cols-2 gap-px bg-border p-0 sm:grid-cols-3">

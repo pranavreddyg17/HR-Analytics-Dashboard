@@ -21,7 +21,6 @@ import {
   YAxis as RechartsYAxis,
 } from "recharts"
 
-import { apiBaseUrl } from "@/lib/api"
 import type { BreakdownPoint, TimePoint, TrainingRecord, WorkforceAnalytics } from "@/lib/hr-types"
 import type { ManagedEmployee, WorkflowActorContext } from "@/lib/people-types"
 import { SelectEmployee } from "@/components/workflow-creator"
@@ -92,7 +91,7 @@ export function LearningWorkspace({ actor, people }: { actor: WorkflowActorConte
 
   useEffect(() => {
     const controller = new AbortController()
-    fetch(`${apiBaseUrl}/api/v1/workforce?${requestQuery}`, { cache: "no-store", signal: controller.signal })
+    fetch(`/api/v1/workforce?${requestQuery}`, { cache: "no-store", signal: controller.signal })
       .then(async (response) => { if (!response.ok) throw new Error("Learning data could not be loaded."); return response.json() as Promise<WorkforceAnalytics> })
       .then((result) => { setData(result); setLoadedQuery(requestQuery); setError("") })
       .catch((reason: unknown) => { if ((reason as { name?: string })?.name !== "AbortError") { setError(reason instanceof Error ? reason.message : "Learning data could not be loaded."); setLoadedQuery(requestQuery) } })

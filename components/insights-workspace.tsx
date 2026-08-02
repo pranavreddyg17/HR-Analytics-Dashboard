@@ -8,7 +8,6 @@ import {
 } from "lucide-react"
 import { CartesianGrid, Legend, Line, LineChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts"
 
-import { apiBaseUrl } from "@/lib/api"
 import type { BreakdownPoint, TimePoint, WorkforceAnalytics } from "@/lib/hr-types"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
@@ -87,7 +86,7 @@ export function InsightsWorkspace() {
 
   useEffect(() => {
     const controller = new AbortController()
-    fetch(`${apiBaseUrl}/api/v1/workforce?${requestQuery}`, { cache: "no-store", signal: controller.signal })
+    fetch(`/api/v1/workforce?${requestQuery}`, { cache: "no-store", signal: controller.signal })
       .then(async (response) => { if (!response.ok) throw new Error("Workforce insights could not be loaded."); return response.json() as Promise<WorkforceAnalytics> })
       .then((result) => { setData(result); setLoadedQuery(requestQuery); setError("") })
       .catch((reason: unknown) => { if ((reason as { name?: string })?.name !== "AbortError") { setError(reason instanceof Error ? reason.message : "Workforce insights could not be loaded."); setLoadedQuery(requestQuery) } })
@@ -115,7 +114,7 @@ export function InsightsWorkspace() {
   ]
 
   return <div className="mx-auto flex w-full max-w-[1520px] flex-col gap-5 pb-10">
-    <header className="flex flex-col gap-4 border-b border-border pb-5 lg:flex-row lg:items-end lg:justify-between"><div><h1 className="text-2xl font-semibold">Workforce insights</h1><p className="mt-1 max-w-2xl text-sm text-muted-foreground">Company workforce metrics, open HR work, and department exceptions.</p><p className="mt-2 text-meta text-muted-foreground">Last refreshed {formatWorkspaceDateTime(data.generatedAt)}</p></div><div className="flex flex-wrap gap-2"><a href={`${apiBaseUrl}/api/v1/reports?format=pdf&${requestQuery}`} className="inline-flex h-9 items-center gap-2 rounded-md border border-border bg-background px-3 text-xs font-medium hover:bg-muted"><Download className="size-3.5"/>PDF summary</a><a href={`${apiBaseUrl}/api/v1/reports?format=xlsx&${requestQuery}`} className="inline-flex h-9 items-center gap-2 rounded-md bg-foreground px-3 text-xs font-medium text-background hover:opacity-90"><Download className="size-3.5"/>Export data</a></div></header>
+    <header className="flex flex-col gap-4 border-b border-border pb-5 lg:flex-row lg:items-end lg:justify-between"><div><h1 className="text-2xl font-semibold">Workforce insights</h1><p className="mt-1 max-w-2xl text-sm text-muted-foreground">Company workforce metrics, open HR work, and department exceptions.</p><p className="mt-2 text-meta text-muted-foreground">Last refreshed {formatWorkspaceDateTime(data.generatedAt)}</p></div><div className="flex flex-wrap gap-2"><a href={`/api/v1/reports?format=pdf&${requestQuery}`} className="inline-flex h-9 items-center gap-2 rounded-md border border-border bg-background px-3 text-sm font-medium hover:bg-muted"><Download className="size-3.5"/>PDF summary</a><a href={`/api/v1/reports?format=xlsx&${requestQuery}`} className="inline-flex h-9 items-center gap-2 rounded-md bg-foreground px-3 text-sm font-medium text-background hover:opacity-90"><Download className="size-3.5"/>Export data</a></div></header>
 
     <Card className="gap-4 p-4 shadow-none"><div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between"><p className="text-sm font-medium">Filters</p><Button size="sm" variant="ghost" onClick={() => setFilters(defaultFilters)}><FilterX className="size-4"/>Reset</Button></div><div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-5"><Filter label="From"><input type="date" value={filters.from} onChange={(event) => setFilters({ ...filters, from: event.target.value })}/></Filter><Filter label="To"><input type="date" value={filters.to} onChange={(event) => setFilters({ ...filters, to: event.target.value })}/></Filter><Filter label="Department"><select value={filters.department} onChange={(event) => setFilters({ ...filters, department: event.target.value })}><option value="">All departments</option>{data.dimensions.departments.map((item) => <option key={item}>{item}</option>)}</select></Filter><Filter label="Location"><select value={filters.location} onChange={(event) => setFilters({ ...filters, location: event.target.value })}><option value="">All locations</option>{data.dimensions.locations.map((item) => <option key={item}>{item}</option>)}</select></Filter><Filter label="Reporting interval"><select value={filters.period} onChange={(event) => setFilters({ ...filters, period: event.target.value as Filters["period"] })}><option value="month">Monthly</option><option value="quarter">Quarterly</option><option value="year">Yearly</option></select></Filter></div>{loading && <div className="h-1 overflow-hidden rounded-full bg-muted"><div className="h-full w-2/3 animate-pulse rounded-full bg-primary"/></div>}</Card>
 

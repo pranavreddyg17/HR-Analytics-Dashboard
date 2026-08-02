@@ -32,6 +32,10 @@ const createStatements = [
   "CREATE TABLE IF NOT EXISTS employee_activity (id TEXT PRIMARY KEY, employee_id TEXT NOT NULL, event_type TEXT NOT NULL, summary TEXT NOT NULL, changes_json TEXT, actor_email TEXT NOT NULL, created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP)",
   "CREATE TABLE IF NOT EXISTS workspace_settings (key TEXT PRIMARY KEY, value TEXT NOT NULL, updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP)",
   "CREATE TABLE IF NOT EXISTS hiring_records (id TEXT PRIMARY KEY, position TEXT NOT NULL, department TEXT NOT NULL, application_date TEXT NOT NULL, hiring_date TEXT, hiring_source TEXT NOT NULL, time_to_hire_days INTEGER, recruitment_status TEXT NOT NULL, location TEXT NOT NULL, data_source TEXT NOT NULL DEFAULT 'imported', updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP)",
+  "CREATE TABLE IF NOT EXISTS hiring_candidates (id TEXT PRIMARY KEY, requisition_id TEXT NOT NULL, full_name TEXT NOT NULL, email TEXT NOT NULL, stage TEXT NOT NULL DEFAULT 'Applied', source TEXT NOT NULL, applied_at TEXT NOT NULL, owner_email TEXT NOT NULL, next_step TEXT NOT NULL, next_step_due_at TEXT, notes TEXT, rejected_reason TEXT, created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP, updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP)",
+  "CREATE INDEX IF NOT EXISTS hiring_candidates_requisition_stage_idx ON hiring_candidates(requisition_id, stage)",
+  "CREATE INDEX IF NOT EXISTS hiring_candidates_due_stage_idx ON hiring_candidates(next_step_due_at, stage)",
+  "CREATE UNIQUE INDEX IF NOT EXISTS hiring_candidates_requisition_email_idx ON hiring_candidates(requisition_id, email)",
   "CREATE TABLE IF NOT EXISTS attrition_events (id TEXT PRIMARY KEY, employee_id TEXT NOT NULL, exit_date TEXT NOT NULL, exit_reason TEXT NOT NULL, exit_type TEXT NOT NULL, department TEXT NOT NULL, tenure_years REAL NOT NULL, data_source TEXT NOT NULL DEFAULT 'imported', updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP)",
   "CREATE TABLE IF NOT EXISTS attrition_model_profiles (employee_id TEXT PRIMARY KEY, observed_attrition TEXT NOT NULL, risk_score REAL NOT NULL, risk_level TEXT NOT NULL, top_driver TEXT NOT NULL, monthly_income REAL NOT NULL, distance_from_home INTEGER NOT NULL, education_level INTEGER NOT NULL, education_field TEXT NOT NULL, environment_satisfaction INTEGER NOT NULL, job_satisfaction INTEGER NOT NULL, prior_companies INTEGER NOT NULL, work_life_balance INTEGER NOT NULL, years_at_company REAL NOT NULL, model_version TEXT NOT NULL, data_source TEXT NOT NULL DEFAULT 'demo', updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP)",
   "CREATE INDEX IF NOT EXISTS attrition_model_risk_idx ON attrition_model_profiles(risk_level, risk_score)",
@@ -624,6 +628,33 @@ async function seedSoftwareCompanyWorkflowsOnce(database: Database): Promise<voi
     .bind(settingKey).run()
 }
 
+async function seedHiringCandidatePipelineOnce(database: Database): Promise<void> {
+  const settingKey = "hiring_candidate_pipeline_seed_v1"
+  const initialized = await database.prepare("SELECT value FROM workspace_settings WHERE key=?").bind(settingKey).first<{ value: string }>()
+  if (initialized) return
+  const candidates = [
+    { id: "CAN-SOFTWARE-001", requisition: "HIR-SOFTWARE-001", name: "Maya Patel", email: "maya.patel@example.com", stage: "Hired", source: "Employee referral", applied: -68, owner: "talent@laidbackhr.cloud", step: "Onboarding handoff completed", due: null, notes: "Accepted offer after platform engineering panel." },
+    { id: "CAN-SOFTWARE-002", requisition: "HIR-SOFTWARE-002", name: "Ethan Brooks", email: "ethan.brooks@example.com", stage: "Hired", source: "LinkedIn", applied: -59, owner: "talent@laidbackhr.cloud", step: "Onboarding handoff completed", due: null, notes: "Portfolio and product collaboration interviews completed." },
+    { id: "CAN-SOFTWARE-003", requisition: "HIR-SOFTWARE-006", name: "Sophia Turner", email: "sophia.turner@example.com", stage: "Interview", source: "Employee referral", applied: -16, owner: "talent@laidbackhr.cloud", step: "Record system-design panel outcome", due: 1, notes: "Frontend platform experience aligns with the role." },
+    { id: "CAN-SOFTWARE-004", requisition: "HIR-SOFTWARE-006", name: "Daniel Kim", email: "daniel.kim@example.com", stage: "Screening", source: "LinkedIn", applied: -9, owner: "talent@laidbackhr.cloud", step: "Complete recruiter screen", due: 2, notes: null },
+    { id: "CAN-SOFTWARE-005", requisition: "HIR-SOFTWARE-006", name: "Amara Okafor", email: "amara.okafor@example.com", stage: "Applied", source: "Careers site", applied: -3, owner: "talent@laidbackhr.cloud", step: "Review application", due: 1, notes: null },
+    { id: "CAN-SOFTWARE-006", requisition: "HIR-SOFTWARE-007", name: "Lucas Martin", email: "lucas.martin@example.com", stage: "Interview", source: "Agency", applied: -14, owner: "talent@laidbackhr.cloud", step: "Schedule security architecture interview", due: -1, notes: "Cloud security background confirmed in recruiter screen." },
+    { id: "CAN-SOFTWARE-007", requisition: "HIR-SOFTWARE-007", name: "Priya Shah", email: "priya.shah@example.com", stage: "Screening", source: "Employee referral", applied: -6, owner: "talent@laidbackhr.cloud", step: "Complete hiring-manager screen", due: 2, notes: null },
+    { id: "CAN-SOFTWARE-008", requisition: "HIR-SOFTWARE-008", name: "Noah Wilson", email: "noah.wilson@example.com", stage: "Interview", source: "Careers site", applied: -12, owner: "talent@laidbackhr.cloud", step: "Record automation exercise outcome", due: 1, notes: null },
+    { id: "CAN-SOFTWARE-009", requisition: "HIR-SOFTWARE-009", name: "Elena Rossi", email: "elena.rossi@example.com", stage: "Applied", source: "LinkedIn", applied: -4, owner: "talent@laidbackhr.cloud", step: "Review application", due: -1, notes: "Product analytics and platform delivery experience." },
+    { id: "CAN-SOFTWARE-010", requisition: "HIR-SOFTWARE-010", name: "Marcus Chen", email: "marcus.chen@example.com", stage: "Screening", source: "Employee referral", applied: -7, owner: "talent@laidbackhr.cloud", step: "Complete technical discovery screen", due: 3, notes: null },
+    { id: "CAN-SOFTWARE-011", requisition: "HIR-SOFTWARE-011", name: "Lily Nguyen", email: "lily.nguyen@example.com", stage: "Offer", source: "Agency", applied: -17, owner: "talent@laidbackhr.cloud", step: "Record offer response", due: 2, notes: "Offer issued after final data-platform panel." },
+    { id: "CAN-SOFTWARE-012", requisition: "HIR-SOFTWARE-012", name: "Ava Thompson", email: "ava.thompson@example.com", stage: "Offer", source: "Employee referral", applied: -15, owner: "talent@laidbackhr.cloud", step: "Confirm proposed start date", due: 1, notes: null },
+    { id: "CAN-SOFTWARE-013", requisition: "HIR-SOFTWARE-013", name: "Oliver Grant", email: "oliver.grant@example.com", stage: "Offer", source: "LinkedIn", applied: -13, owner: "talent@laidbackhr.cloud", step: "Record offer response", due: -1, notes: "Compensation approval is complete." },
+    { id: "CAN-SOFTWARE-014", requisition: "HIR-SOFTWARE-010", name: "Zara Ali", email: "zara.ali@example.com", stage: "Rejected", source: "Careers site", applied: -10, owner: "talent@laidbackhr.cloud", step: "No further action", due: null, notes: "Role scope did not match candidate preference." },
+  ] as const
+  const statements = candidates.map((candidate) => database.prepare("INSERT OR IGNORE INTO hiring_candidates(id, requisition_id, full_name, email, stage, source, applied_at, owner_email, next_step, next_step_due_at, notes, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)")
+    .bind(candidate.id, candidate.requisition, candidate.name, candidate.email, candidate.stage, candidate.source, dateFromToday(candidate.applied), candidate.owner, candidate.step, candidate.due === null ? null : dateFromToday(candidate.due), candidate.notes, dateFromToday(candidate.applied)))
+  for (let index = 0; index < statements.length; index += 80) await database.batch(statements.slice(index, index + 80))
+  await database.prepare("INSERT INTO workspace_settings(key, value, updated_at) VALUES (?, 'true', CURRENT_TIMESTAMP) ON CONFLICT(key) DO UPDATE SET value='true', updated_at=CURRENT_TIMESTAMP")
+    .bind(settingKey).run()
+}
+
 export async function ensureHrDatabase(): Promise<Database | null> {
   const database = getHrDatabase()
   if (!database) return null
@@ -642,6 +673,7 @@ export async function ensureHrDatabase(): Promise<Database | null> {
     await seedLeaveWorkflowExamplesOnce(database)
     await seedTrainingWorkflowExamplesOnce(database)
     await seedSoftwareCompanyWorkflowsOnce(database)
+    await seedHiringCandidatePipelineOnce(database)
     await backfillWorkflowAccountabilityOnce(database)
     await syncOpenOperationalWork(database)
     await database.prepare("INSERT OR IGNORE INTO app_users(email, display_name, role, status, invited_by) VALUES ('pranavreddyg17@gmail.com', 'Pranav Reddy', 'admin', 'active', 'system')").run()

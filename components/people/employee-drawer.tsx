@@ -7,7 +7,6 @@ import { ChevronRight, Mail, MapPin, Save, X } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { PersonAvatar } from "@/components/people/people-ui"
-import { apiBaseUrl } from "@/lib/api"
 import type { EmployeeInput, ManagedEmployee } from "@/lib/people-types"
 import { cn } from "@/lib/utils"
 
@@ -139,8 +138,8 @@ function EmployeeDrawerPanel({
     setError("")
     try {
       const path = mode === "create"
-        ? `${apiBaseUrl}/api/v1/hr/people`
-        : `${apiBaseUrl}/api/v1/hr/people/${encodeURIComponent(employee?.employee_id ?? "")}`
+        ? "/api/v1/hr/people"
+        : `/api/v1/hr/people/${encodeURIComponent(employee?.employee_id ?? "")}`
       const response = await fetch(path, {
         method: mode === "create" ? "POST" : "PATCH",
         headers: { "Content-Type": "application/json" },

@@ -6,4 +6,3 @@ scikit-learn==1.8.0
 joblib==1.5.3
 httpx==0.28.1
 pydantic==2.11.7
-pytest==8.4.1

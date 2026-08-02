@@ -337,6 +337,8 @@ export async function listInboxItems(actor?: RequestActor): Promise<InboxItem[]>
     if (sla === "overdue" || sla === "due_today") return "high"
     return row.workflow_priority === "high" || row.workflow_priority === "low" ? row.workflow_priority : "medium"
   }
+  const reviewHref = (type: InboxItem["type"], id: string, view: "decisions" | "employees" | "my_work" | "completed"): string =>
+    `/inbox?view=${view}&type=${type}&item=${encodeURIComponent(id)}`
   return [
     ...visibleLeave.map((row): InboxItem => {
       const isCompleted = Boolean(row.completed_at) || ["approved", "rejected"].includes(row.approval_status.toLowerCase())
@@ -349,9 +351,16 @@ export async function listInboxItems(actor?: RequestActor): Promise<InboxItem[]>
         dueDate, status: row.approval_status, priority: priority(row, sla), owner: ownerLabel(row, "People Operations"), ownerEmail: row.owner_email ?? null,
         nextAction: row.next_action || (isCompleted ? "No further action." : "Approve or decline the request."), attentionReason,
         completionEffect: "The decision is recorded and the employee leave schedule is updated.", assignedTo: row.manager_email && row.owner_email?.toLowerCase() === row.manager_email.toLowerCase() ? "manager" : "hr",
+        requestContext: [
+          { label: "Requested dates", value: `${row.start_date} to ${row.end_date}` },
+          { label: "Duration", value: `${row.leave_days} day${row.leave_days === 1 ? "" : "s"}` },
+          ...(detailValue(row, "note") ? [{ label: "Request note", value: detailValue(row, "note") as string }] : []),
+        ],
         requiresDecision: !isCompleted, isCompleted, slaStatus: sla, timeInStatusDays: daysSince(row.assigned_at || row.workflow_updated_at || row.workflow_created_at),
         createdAt: row.workflow_created_at || row.updated_at || nowIso, completedAt: row.completed_at ?? null, completionNotes: row.completion_notes ?? null, blockedReason: row.blocked_reason ?? null,
         actionable: canDecide, actions: canDecide ? ["reject", "approve"] : [],
+        reviewHref: reviewHref("leave", row.id, isCompleted ? "completed" : "decisions"),
+        recordHref: `/people/${encodeURIComponent(row.employee_id)}`,
       }
     }),
     ...visibleHiring.map((row): InboxItem => {
@@ -361,15 +370,27 @@ export async function listInboxItems(actor?: RequestActor): Promise<InboxItem[]>
       const sla = slaStatus(dueDate, isCompleted)
       const requiresDecision = status.toLowerCase() === "requested"
       const canDecide = Boolean(!isCompleted && row.requested_by_email && actor && ["admin", "hr"].includes(actor.role) && requiresDecision)
-      const attentionReason = row.blocked_reason || (sla === "overdue" ? "No required update was recorded before the follow-up deadline." : requiresDecision ? "HR approval is required before recruiting begins." : status.toLowerCase() === "offer" ? "The offer needs a recorded response or owner follow-up." : "The requisition remains open and needs a current progress update.")
+      const attentionReason = row.blocked_reason || (requiresDecision
+        ? sla === "overdue" ? "The approval deadline has passed, so recruiting has not started." : "HR approval is required before recruiting begins."
+        : sla === "overdue" ? "No recruiting update was recorded before the follow-up deadline."
+        : status.toLowerCase() === "offer" ? "The offer needs a recorded response or owner follow-up."
+        : "The requisition remains open and needs a current progress update.")
+      const title = status.toLowerCase() === "offer" ? `${row.position} offer` : `${row.position} requisition`
       return {
-        id: String(row.id), type: "hiring", title: `${status}: ${row.position}`, detail: `${row.department} · ${row.location} · requested by ${row.requested_by_email ?? "HR"}`, person: null, employeeId: null,
+        id: String(row.id), type: "hiring", title, detail: `${row.department} · ${row.location} · Requested by ${row.requested_by_email ?? "HR"}`, person: null, employeeId: null,
         dueDate, status, priority: priority(row, sla), owner: ownerLabel(row, "Talent Acquisition"), ownerEmail: row.owner_email ?? null,
         nextAction: row.next_action || (requiresDecision ? "Approve or decline the requisition." : "Record the next recruiting update."), attentionReason,
         completionEffect: requiresDecision ? "Approval opens the requisition; rejection closes the request." : "The recruiting record and its next follow-up date are updated.",
+        requestContext: [
+          { label: "Employment type", value: detailValue(row, "employmentType") || "Not recorded" },
+          { label: "Business justification", value: detailValue(row, "justification") || "No justification was recorded." },
+          { label: "Requested by", value: row.requested_by_email || "HR" },
+        ],
         assignedTo: "hr", requiresDecision, isCompleted, slaStatus: sla, timeInStatusDays: daysSince(row.assigned_at || row.workflow_updated_at || row.workflow_created_at),
         createdAt: row.workflow_created_at || String(row.updated_at || nowIso), completedAt: row.completed_at ?? null, completionNotes: row.completion_notes ?? null, blockedReason: row.blocked_reason ?? null,
         actionable: canDecide, actions: canDecide ? ["reject", "approve"] : [],
+        reviewHref: reviewHref("hiring", String(row.id), isCompleted ? "completed" : requiresDecision ? "decisions" : "my_work"),
+        recordHref: `/hiring?requisition=${encodeURIComponent(String(row.id))}`,
       }
     }),
     ...visibleTraining.map((row): InboxItem => {
@@ -383,9 +404,16 @@ export async function listInboxItems(actor?: RequestActor): Promise<InboxItem[]>
         dueDate, status: row.completion_status, priority: priority(row, sla), owner: ownerLabel(row, personName(row)), ownerEmail: row.owner_email ?? null,
         nextAction: row.next_action || (isCompleted ? "No further action." : "Complete the assigned course and record completion."), attentionReason,
         completionEffect: "Completion is added to the employee timeline and removed from the open compliance queue.", assignedTo: "employee", requiresDecision: false,
+        requestContext: [
+          { label: "Programme", value: row.training_program },
+          { label: "Expected time", value: `${row.training_hours} hour${row.training_hours === 1 ? "" : "s"}` },
+          ...(detailValue(row, "note") ? [{ label: "Assignment note", value: detailValue(row, "note") as string }] : []),
+        ],
         isCompleted, slaStatus: sla, timeInStatusDays: daysSince(row.assigned_at || row.workflow_updated_at || row.workflow_created_at),
         createdAt: row.workflow_created_at || row.updated_at || nowIso, completedAt: row.completed_at ?? null, completionNotes: row.completion_notes ?? null, blockedReason: row.blocked_reason ?? null,
         actionable: canComplete, actions: canComplete ? ["complete"] : [],
+        reviewHref: reviewHref("training", row.id, isCompleted ? "completed" : "employees"),
+        recordHref: `/people/${encodeURIComponent(row.employee_id)}`,
       }
     }),
   ].sort((left, right) => Number(left.isCompleted) - Number(right.isCompleted)

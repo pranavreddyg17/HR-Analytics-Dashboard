@@ -5,4 +5,10 @@ allowBuilds:
   unrs-resolver: true
   workerd: true
 overrides:
-  hono: 4.12.25
+  "@hono/node-server": 2.0.12
+  body-parser: 2.3.0
+  fast-uri: 3.1.4
+  hono: 4.12.33
+  postcss: 8.5.25
+  sharp: 0.35.3
+  ws: 8.21.1

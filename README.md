@@ -12,7 +12,7 @@ It deliberately distinguishes two kinds of data:
 The deployed application is a single Cloudflare-compatible web runtime:
 
 - Next.js-compatible pages are built with Vinext.
-- The private Sites access gate provides ChatGPT sign-in, and the authenticated identity is attached to employee changes and leave decisions.
+- Google sign-in and the application allowlist provide access control, and the authenticated identity is attached to employee and workflow changes.
 - Employee profiles, reporting lines, soft archival, operational HR domains, approvals, imports, and activity history are stored in D1.
 - The persisted scikit-learn pipeline is exported into an equivalent TypeScript inference runtime.
 - Predictions from the web runtime are parity-tested against the Python model.
@@ -28,6 +28,9 @@ The deployed application is a single Cloudflare-compatible web runtime:
 - `/people` — searchable employee directory and add-employee workflow
 - `/people/{id}` — profile, reporting line, time off, growth, and attributable activity
 - `/inbox` — leave approvals plus hiring, training, and human-review follow-ups
+- `/hiring` — requisition approvals, accountable recruiting work, and a persisted candidate pipeline
+- `/time-off` — leave decisions, upcoming absences, and department coverage
+- `/learning` — training assignment, completion tracking, and compliance follow-up
 - `/insights` — employee, hiring, attrition, leave, training, promotion, and executive analytics
 - `/attrition` and `/risk-review` — governed historical model diagnostics and clearly labelled synthetic employee review rows
 - `/ai-agents` — grounded LangChain + MCP copilot with a visible tool trace
@@ -53,7 +56,7 @@ pnpm dev
 
 Open `http://localhost:3000`.
 
-The production API is same-origin, so `NEXT_PUBLIC_API_BASE_URL` should normally remain blank. Set it only when deliberately running the optional FastAPI service separately.
+Copy `.env.local.example` to `.env.local` for local authentication and optional model-synthesis settings. The web application uses its same-origin API; the FastAPI service is retained only as the model-training and reference implementation.
 
 ## Verification
 
@@ -76,7 +79,7 @@ Run the Python reference tests:
 ```bash
 cd backend
 python3 -m venv .venv
-.venv/bin/pip install -r requirements.txt
+.venv/bin/pip install -r requirements-dev.txt
 PYTHONPATH=. .venv/bin/python -m pytest -q
 ```
 
@@ -103,6 +106,11 @@ PYTHONPATH=. .venv/bin/python scripts/export_worker_runtime.py
 | POST | `/api/v1/hr/people/{id}/archive` | Soft-archive an employee |
 | POST | `/api/v1/hr/people/{id}/restore` | Restore an archived employee |
 | GET | `/api/v1/hr/inbox` | Unified HR work queue |
+| GET | `/api/v1/hr/hiring` | Operational requisitions and candidate pipeline |
+| POST | `/api/v1/hr/hiring/candidates` | Add a candidate to an approved requisition |
+| PATCH | `/api/v1/hr/hiring/candidates/{id}` | Advance, reject, or hire a candidate |
+| POST | `/api/v1/hr/workflows` | Create leave, hiring, or training work |
+| POST | `/api/v1/hr/workflows/action` | Record an approval, rejection, or completion |
 | POST | `/api/v1/hr/leave/{id}/decision` | Approve or reject leave with audit history |
 | GET | `/api/v1/workforce` | Filtered seven-view workforce analytics |
 | POST | `/api/v1/data/import` | Authenticated domain import |

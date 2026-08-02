@@ -1,5 +1,5 @@
 import { sql } from "drizzle-orm"
-import { index, integer, real, sqliteTable, text } from "drizzle-orm/sqlite-core"
+import { index, integer, real, sqliteTable, text, uniqueIndex } from "drizzle-orm/sqlite-core"
 
 export const actionStatus = sqliteTable("action_status", {
   actionId: text("action_id").primaryKey(),
@@ -71,6 +71,27 @@ export const hiringRecords = sqliteTable("hiring_records", {
 }, (table) => [
   index("hiring_department_idx").on(table.department),
   index("hiring_date_idx").on(table.hiringDate),
+])
+
+export const hiringCandidates = sqliteTable("hiring_candidates", {
+  id: text("id").primaryKey(),
+  requisitionId: text("requisition_id").notNull(),
+  fullName: text("full_name").notNull(),
+  email: text("email").notNull(),
+  stage: text("stage").notNull().default("Applied"),
+  source: text("source").notNull(),
+  appliedAt: text("applied_at").notNull(),
+  ownerEmail: text("owner_email").notNull(),
+  nextStep: text("next_step").notNull(),
+  nextStepDueAt: text("next_step_due_at"),
+  notes: text("notes"),
+  rejectedReason: text("rejected_reason"),
+  createdAt: text("created_at").notNull().default(sql`CURRENT_TIMESTAMP`),
+  updatedAt: text("updated_at").notNull().default(sql`CURRENT_TIMESTAMP`),
+}, (table) => [
+  index("hiring_candidates_requisition_stage_idx").on(table.requisitionId, table.stage),
+  index("hiring_candidates_due_stage_idx").on(table.nextStepDueAt, table.stage),
+  uniqueIndex("hiring_candidates_requisition_email_idx").on(table.requisitionId, table.email),
 ])
 
 export const attritionEvents = sqliteTable("attrition_events", {
