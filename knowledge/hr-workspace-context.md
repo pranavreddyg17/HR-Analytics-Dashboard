@@ -14,7 +14,7 @@ Completed hires use records with a Hired recruitment status. Average time to hir
 
 ## Attrition and model risk
 
-Observed attrition is calculated from recorded exit events. Voluntary and involuntary exits must remain separate. Historical model scores are validation signals from anonymized training records, not forecasts about live employees. Department differences are associations and do not prove cause. Employee-level action always requires human review and corroborating operational context.
+Observed attrition is calculated from recorded exit events. Voluntary and involuntary exits must remain separate. The 1,470 IBM model rows are joined by stable ID to clearly labelled synthetic demo employees so that employee, hiring, exit, leave, training, promotion, and model records can be analyzed together. These profiles are not real people, and imported operational employees do not receive IBM model scores. Department differences are associations and do not prove cause. Employee-level action always requires human review and corroborating operational context.
 
 ## Leave
 
@@ -30,4 +30,4 @@ Promotion rate compares recorded promotions with active headcount. Employees wit
 
 ## Workflow actions
 
-LaidbackHR.AI may plan a calendar event using active operational employee records with work email addresses. The plan resolves named employees or supported cohorts from persisted employee and promotion records, then shows the participants, timing, agenda, and evidence before execution. Only after the signed-in HR user explicitly confirms may the app create the event in that user's Google Calendar and send attendee invitations. Historical attrition-model rows cannot be used as recipients because they are anonymized and are not joined to live employee IDs. The assistant never approves leave or makes employment decisions on its own.
+LaidbackHR.AI may plan a calendar event using active operational employee records with work email addresses. The plan resolves named employees or supported cohorts from persisted employee and promotion records, then shows the participants, timing, agenda, and evidence before execution. Only after the signed-in HR user explicitly confirms may the app create the event in that user's Google Calendar and send attendee invitations. Synthetic IBM-linked demo profiles cannot be used as recipients. The assistant never approves leave or makes employment decisions on its own.

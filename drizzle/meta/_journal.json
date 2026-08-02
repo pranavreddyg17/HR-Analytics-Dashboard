@@ -36,6 +36,13 @@
       "when": 1785459835688,
       "tag": "0004_zippy_bucky",
       "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "6",
+      "when": 1785641335336,
+      "tag": "0005_soft_scourge",
+      "breakpoints": true
     }
   ]
 }

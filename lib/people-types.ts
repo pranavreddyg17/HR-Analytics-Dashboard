@@ -1,4 +1,4 @@
-import type { AttritionRecord, EmployeeRecord, LeaveRecord, PromotionRecord, TrainingRecord } from "@/lib/hr-types"
+import type { AttritionModelProfile, AttritionRecord, EmployeeRecord, LeaveRecord, PromotionRecord, TrainingRecord } from "@/lib/hr-types"
 
 export type ManagedEmployee = EmployeeRecord & {
   display_name: string
@@ -36,6 +36,7 @@ export type EmployeeProfileResponse = {
   training: TrainingRecord[]
   promotions: PromotionRecord[]
   attrition: AttritionRecord[]
+  attritionModel: AttritionModelProfile | null
   activity: EmployeeActivity[]
 }
 

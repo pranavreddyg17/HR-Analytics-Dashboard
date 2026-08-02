@@ -64,6 +64,48 @@ export type AttritionRecord = {
   data_source: string
 }
 
+export type AttritionModelProfile = {
+  employee_id: string
+  observed_attrition: "Yes" | "No"
+  risk_score: number
+  risk_level: "high" | "medium" | "low"
+  top_driver: string
+  monthly_income: number
+  distance_from_home: number
+  education_level: number
+  education_field: string
+  environment_satisfaction: number
+  job_satisfaction: number
+  prior_companies: number
+  work_life_balance: number
+  years_at_company: number
+  model_version: string
+  data_source: string
+}
+
+export type AttritionEmployeeRecord = {
+  employeeId: string
+  name: string
+  department: string
+  jobTitle: string
+  location: string
+  manager: string
+  employmentStatus: string
+  tenureYears: number
+  observedAttrition: "Yes" | "No"
+  exitDate: string | null
+  exitReason: string | null
+  exitType: string | null
+  riskScore: number
+  riskLevel: "high" | "medium" | "low"
+  topDriver: string
+  jobSatisfaction: number
+  environmentSatisfaction: number
+  workLifeBalance: number
+  monthlyIncome: number
+  dataSource: string
+}
+
 export type LeaveRecord = {
   id: string
   employee_id: string
@@ -166,6 +208,7 @@ export type WorkforceAnalytics = {
     byRole: BreakdownPoint[]
     byTenure: BreakdownPoint[]
     highRiskEmployees: Array<{ id: string; department: string; role: string; riskScore: number; topDriver: string }>
+    employeeRecords: AttritionEmployeeRecord[]
     rows: AttritionRecord[]
   }
   leave: {

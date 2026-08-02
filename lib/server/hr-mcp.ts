@@ -4,7 +4,6 @@ import { z } from "zod"
 import type { DomainStatus, HrFilters, WorkforceAnalytics } from "@/lib/hr-types"
 import { getWorkforceAnalytics } from "@/lib/server/hr-analytics"
 import { ensureHrDatabase } from "@/lib/server/hr-database"
-import { getEmployees as getScoredEmployees } from "@/lib/server/runtime"
 
 const filtersShape = {
   from: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional().describe("Start date in YYYY-MM-DD format"),
@@ -151,15 +150,28 @@ export function createHrMcpServer(): McpServer {
   server.registerTool("analyze_attrition_signals", {
     title: mcpToolCatalog[2].title,
     description: mcpToolCatalog[2].description,
-    inputSchema: filtersShape,
+    inputSchema: {
+      recordScope: z.enum(["summary", "exited", "high_risk", "all"]).optional().describe("Optional joined employee record cohort to return"),
+      query: z.string().trim().max(120).optional().describe("Optional employee ID, name, department, job title, or location search"),
+      limit: z.number().int().min(1).max(20).optional(),
+      ...filtersShape,
+    },
     annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false },
-  }, async (filters: FilterArgs) => {
+  }, async ({ recordScope = "summary", query = "", limit = 10, ...filters }: FilterArgs & { recordScope?: "summary" | "exited" | "high_risk" | "all"; query?: string; limit?: number }) => {
     const analytics = await getWorkforceAnalytics(filters)
     const riskDistribution = {
-      high: getScoredEmployees({ risk: "high", limit: 1 }).total,
-      medium: getScoredEmployees({ risk: "medium", limit: 1 }).total,
-      low: getScoredEmployees({ risk: "low", limit: 1 }).total,
+      high: analytics.attrition.employeeRecords.filter((record) => record.riskLevel === "high").length,
+      medium: analytics.attrition.employeeRecords.filter((record) => record.riskLevel === "medium").length,
+      low: analytics.attrition.employeeRecords.filter((record) => record.riskLevel === "low").length,
     }
+    const terms = query.toLowerCase().split(/[^a-z0-9-]+/).filter((term) => term.length > 1)
+    const scopedRecords = analytics.attrition.employeeRecords.filter((record) => {
+      if (recordScope === "summary") return false
+      if (recordScope === "exited" && !record.exitDate) return false
+      if (recordScope === "high_risk" && (record.riskLevel !== "high" || /terminated/i.test(record.employmentStatus))) return false
+      const searchable = `${record.employeeId} ${record.name} ${record.department} ${record.jobTitle} ${record.location}`.toLowerCase()
+      return terms.every((term) => searchable.includes(term))
+    })
     return result({
       ...evidence(analytics),
       observedAttrition: {
@@ -174,10 +186,12 @@ export function createHrMcpServer(): McpServer {
       historicalModelReview: {
         totalScoredRecords: Object.values(riskDistribution).reduce((sum, count) => sum + count, 0),
         riskDistribution,
-        recordsAboveReviewThreshold: analytics.attrition.highRiskEmployees.length,
-        records: analytics.attrition.highRiskEmployees.slice(0, 20),
-        scope: "Anonymized historical validation records. These model records are not joined to live employee IDs and cannot identify current employees.",
+        recordsAboveReviewThreshold: riskDistribution.high,
+        scope: "The IBM validation rows are joined only to clearly labelled synthetic demo employee profiles with the same stable IDs. Imported operational employees are not assigned IBM model scores.",
       },
+      recordScope,
+      matchCount: scopedRecords.length,
+      joinedEmployeeRecords: scopedRecords.slice(0, limit),
       governance: "Patterns are associations, not proven causes. Model signals require human review and must not be used as automatic employment decisions.",
     })
   })

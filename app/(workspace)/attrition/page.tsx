@@ -151,7 +151,7 @@ export default async function AttritionPage() {
             <div>
               <p className="text-sm font-semibold">Historical prediction benchmark</p>
               <p className="mt-1 text-xs leading-relaxed text-muted-foreground">
-                {historicalRows.toLocaleString()} anonymized training records. Scores support human review and are not live employee outcomes.
+                {historicalRows.toLocaleString()} IBM training records linked to synthetic demo employees for joined analysis. Imported employees are not scored.
               </p>
             </div>
         </div>
@@ -233,7 +233,7 @@ export default async function AttritionPage() {
       <section aria-labelledby="benchmark-heading">
         <div className="mb-3">
           <h2 id="benchmark-heading" className="text-sm font-semibold">Historical prediction benchmark</h2>
-          <p className="mt-0.5 text-xs text-muted-foreground">Model behavior across anonymized historical cohorts.</p>
+          <p className="mt-0.5 text-xs text-muted-foreground">Model behavior across the historical IBM cohorts and their linked synthetic demo profiles.</p>
         </div>
         <div className="grid gap-4 xl:grid-cols-2">
           <Card className="rounded-lg shadow-none">

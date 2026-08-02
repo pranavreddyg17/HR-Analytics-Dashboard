@@ -33,6 +33,8 @@ test("workforce analytics spans every requested HR domain", async () => {
   assert.ok(body.kpis.totalEmployees > 0)
   assert.ok(Array.isArray(body.hiring.trend))
   assert.ok(Array.isArray(body.attrition.highRiskEmployees))
+  assert.ok(body.attrition.employeeRecords.length > 0)
+  assert.ok(body.attrition.employeeRecords.every((item) => item.employeeId.startsWith("DEMO-EMP-") && item.department === "Sales"))
   assert.ok(Array.isArray(body.leave.byType))
   assert.ok(Array.isArray(body.training.byProgram))
   assert.ok(Array.isArray(body.promotions.byDepartment))
@@ -115,6 +117,19 @@ test("LangChain agent invokes MCP tools and returns its trace", async () => {
   assert.ok(body.tools.some((trace) => trace.tool === "analyze_attrition_signals" && trace.status === "completed"))
   assert.match(body.answer, /recorded exits/)
   assert.ok(body.context.some((item) => item.section === "Attrition and model risk"))
+})
+
+test("analytics assistant returns employee records joined to observed attrition", async () => {
+  const { response, body } = await json("/api/v1/chat", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ message: "Pull up records of employees with attrition" }),
+  })
+  assert.equal(response.status, 200)
+  assert.ok(body.tools.some((trace) => trace.tool === "analyze_attrition_signals" && trace.status === "completed"))
+  assert.match(body.answer, /Demo Employee/)
+  assert.match(body.answer, /exited \d{4}-\d{2}-\d{2}/)
+  assert.match(body.answer, /synthetic demo profiles/)
 })
 
 test("MCP server lists and calls the HR tools", async () => {

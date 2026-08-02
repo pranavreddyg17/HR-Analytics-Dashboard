@@ -231,6 +231,12 @@ function ActivityTab({ data }: { data: EmployeeProfileResponse }) {
     <Card className="gap-0 overflow-hidden rounded-lg border-border/70 shadow-none"><SectionHeader title="Change history" detail="Recorded profile and workflow changes" icon={History} /><div className="p-5">{data.activity.length ? <Timeline activity={data.activity} /> : <EmptyState icon={History} title="No activity recorded" detail="Profile and workflow changes will appear here." />}</div></Card>
     <div className="space-y-5">
       <InfoCard title="Record details" icon={ShieldAlert}><InfoLine label="Source" value={data.employee.data_source === "demo" ? "Sample workspace data" : "HR-managed record"} /><InfoLine label="Version" value={`v${data.employee.version}`} /><InfoLine label="Last updated" value={data.employee.updated_at ? new Date(data.employee.updated_at).toLocaleString() : "Not recorded"} /></InfoCard>
+      {data.attritionModel && <InfoCard title="Historical model context" icon={Gauge}>
+        <InfoLine label="Risk band" value={`${data.attritionModel.risk_level} · ${Number(data.attritionModel.risk_score).toFixed(1)}%`} />
+        <InfoLine label="Observed outcome" value={data.attritionModel.observed_attrition === "Yes" ? "Recorded exit" : "No recorded exit"} />
+        <InfoLine label="Model version" value={data.attritionModel.model_version} />
+        <p className="border-t border-border/60 pt-3 text-xs leading-relaxed text-muted-foreground">{data.attritionModel.top_driver} This context belongs to the synthetic IBM demo record and is not an employment decision.</p>
+      </InfoCard>}
       {data.attrition.length > 0 && <Card className="gap-0 overflow-hidden rounded-lg border-border/70 shadow-none"><SectionHeader title="Exit records" detail="Recorded employee departures" icon={Archive} /><div className="divide-y divide-border/60">{data.attrition.map((item) => <div key={item.id} className="p-4"><div className="flex items-center justify-between gap-3"><p className="text-sm font-semibold">{item.exit_reason}</p><RecordStatus status={item.exit_type} /></div><p className="mt-1 text-xs text-muted-foreground">{formatDate(item.exit_date)} · {item.tenure_years} years tenure</p></div>)}</div></Card>}
     </div>
   </div>

@@ -103,13 +103,20 @@ function explainTool(toolName: string, data: Record<string, unknown>): string {
     const model = (data.historicalModelReview ?? {}) as Record<string, unknown>
     const distribution = (model.riskDistribution ?? {}) as Record<string, unknown>
     const department = topItem(observed.byDepartment)
+    const records = list(data.joinedEmployeeRecords)
     return [
       `Current source: ${mode}.`,
       `- ${numberValue(observed, "exits")} recorded exits; ${numberValue(observed, "rate")}% attrition; ${numberValue(observed, "voluntary")} voluntary and ${numberValue(observed, "involuntary")} involuntary.`,
       department ? `- ${department.label} has the most recorded exits in this view (${department.value}).` : "- No department exit comparison is available.",
-      `- Historical model review: ${numberValue(distribution, "high")} high, ${numberValue(distribution, "medium")} medium, and ${numberValue(distribution, "low")} low risk records across ${numberValue(model, "totalScoredRecords")} anonymized validation rows.`,
-      "The historical scores are not joined to live employee IDs. Department patterns and model scores are associations, not forecasts or proven causes; human review is required.",
-    ].join("\n")
+      `- Historical model review: ${numberValue(distribution, "high")} high, ${numberValue(distribution, "medium")} medium, and ${numberValue(distribution, "low")} low risk records across ${numberValue(model, "totalScoredRecords")} validation rows.`,
+      records.length ? `- ${Number(data.matchCount ?? records.length)} joined synthetic employee records match this request:` : "",
+      ...records.map((record) => {
+        const exit = record.exitDate ? `exited ${String(record.exitDate)} (${String(record.exitType ?? "type not recorded")}; ${String(record.exitReason ?? "reason not recorded")})` : `status: ${String(record.employmentStatus)}`
+        return `- ${String(record.name)} (${String(record.employeeId)}) — ${String(record.jobTitle)}, ${String(record.department)}; ${exit}; model score ${Number(record.riskScore ?? 0).toFixed(1)}% (${String(record.riskLevel)}).`
+      }),
+      Number(data.matchCount ?? 0) > records.length ? `- ${Number(data.matchCount) - records.length} additional matching records are available.` : "",
+      "IBM scores are joined only to labelled synthetic demo profiles. Imported operational employees do not receive these scores. Associations are not forecasts or proven causes; human review is required.",
+    ].filter(Boolean).join("\n")
   }
 
   if (toolName === "review_people_operations") {
@@ -206,7 +213,19 @@ async function planTools(message: string): Promise<ToolPlan[]> {
   const domain = operationDomain(message)
 
   if (/attrition|turnover|exit|retention|risk/i.test(message)) {
-    plans.push({ name: "analyze_attrition_signals", input: cleanFilters })
+    const wantsRecords = /\b(?:list|show|find|pull|which|who|records?|employees?|people)\b/i.test(message)
+    const exitedRecords = /attrition records?|employees? (?:who )?(?:left|exited)|former employees?|departures?|terminations?/i.test(message)
+      || /records? of employees? of attrition/i.test(message)
+    const highRiskRecords = /at[-\s]?risk|high[-\s]?risk|retention risk|likely to leave/i.test(message)
+    const identifier = message.match(/\b(?:emp|ibm)[-_ ]?\d+\b/i)?.[0]?.replace(/[_ ]/g, "-")
+    plans.push({
+      name: "analyze_attrition_signals",
+      input: {
+        ...cleanFilters,
+        ...(wantsRecords ? { recordScope: exitedRecords ? "exited" : highRiskRecords ? "high_risk" : "all", limit: 10 } : {}),
+        ...(identifier ? { query: identifier } : {}),
+      },
+    })
   }
   if (domain) {
     plans.push({ name: "review_people_operations", input: { ...cleanFilters, domain } })

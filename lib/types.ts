@@ -58,8 +58,14 @@ export type Employee = {
   topDriver: string
   suggestion: string
   monthlyIncome: number
+  distanceFromHome: number
+  educationLevel: number
+  educationField: string
+  environmentSatisfaction: number
   jobSatisfaction: number
+  priorCompanies: number
   workLifeBalance: number
+  yearsAtCompany: number
   observedAttrition: string
 }
 

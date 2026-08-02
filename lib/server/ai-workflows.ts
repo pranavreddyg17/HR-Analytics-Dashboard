@@ -186,7 +186,7 @@ export async function planAiCalendarWorkflow(value: unknown, actor: RequestActor
   const { prompt } = calendarAgentPrompt.parse(value)
   const lower = prompt.toLowerCase()
   if (/attrition\s+risk|high[-\s]?risk|likely\s+to\s+leave/i.test(prompt)) {
-    throw new PeopleError("Historical attrition scores are anonymized and cannot identify live employees. Choose named employees, a department, or the mobility-review cohort instead.", 422)
+    throw new PeopleError("IBM attrition scores are linked only to synthetic demo employees, which cannot receive calendar invitations. Choose imported employees, a department, or the mobility-review cohort instead.", 422)
   }
 
   const db = await database()

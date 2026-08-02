@@ -89,6 +89,29 @@ export const attritionEvents = sqliteTable("attrition_events", {
   index("attrition_date_idx").on(table.exitDate),
 ])
 
+export const attritionModelProfiles = sqliteTable("attrition_model_profiles", {
+  employeeId: text("employee_id").primaryKey(),
+  observedAttrition: text("observed_attrition").notNull(),
+  riskScore: real("risk_score").notNull(),
+  riskLevel: text("risk_level").notNull(),
+  topDriver: text("top_driver").notNull(),
+  monthlyIncome: real("monthly_income").notNull(),
+  distanceFromHome: integer("distance_from_home").notNull(),
+  educationLevel: integer("education_level").notNull(),
+  educationField: text("education_field").notNull(),
+  environmentSatisfaction: integer("environment_satisfaction").notNull(),
+  jobSatisfaction: integer("job_satisfaction").notNull(),
+  priorCompanies: integer("prior_companies").notNull(),
+  workLifeBalance: integer("work_life_balance").notNull(),
+  yearsAtCompany: real("years_at_company").notNull(),
+  modelVersion: text("model_version").notNull(),
+  dataSource: text("data_source").notNull().default("demo"),
+  updatedAt: text("updated_at").notNull().default(sql`CURRENT_TIMESTAMP`),
+}, (table) => [
+  index("attrition_model_risk_idx").on(table.riskLevel, table.riskScore),
+  index("attrition_model_observed_idx").on(table.observedAttrition),
+])
+
 export const leaveRecords = sqliteTable("leave_records", {
   id: text("id").primaryKey(),
   employeeId: text("employee_id").notNull(),

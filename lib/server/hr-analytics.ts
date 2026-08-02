@@ -1,4 +1,6 @@
 import type {
+  AttritionEmployeeRecord,
+  AttritionModelProfile,
   AttritionRecord,
   BreakdownPoint,
   DomainStatus,
@@ -13,8 +15,7 @@ import type {
   WorkforceAnalytics,
 } from "@/lib/hr-types"
 import { hrDomains } from "@/lib/hr-types"
-import { ensureHrDatabase, readDomainRows } from "@/lib/server/hr-database"
-import { getEmployees as getScoredEmployees } from "@/lib/server/runtime"
+import { ensureHrDatabase, readAttritionModelProfiles, readDomainRows } from "@/lib/server/hr-database"
 
 function inRange(date: string | null, filters: HrFilters): boolean {
   if (!date) return false
@@ -102,13 +103,14 @@ async function getDomainStatus(rowsByDomain: Record<HrDomain, Array<Record<strin
 
 export async function getWorkforceAnalytics(filters: HrFilters = {}): Promise<WorkforceAnalytics> {
   const normalizedFilters: WorkforceAnalytics["filters"] = { ...filters, period: filters.period ?? "month" }
-  const [employeeRows, hiringRows, attritionRows, leaveRows, trainingRows, promotionRows] = await Promise.all([
+  const [employeeRows, hiringRows, attritionRows, leaveRows, trainingRows, promotionRows, modelProfileRows] = await Promise.all([
     readDomainRows("employees"),
     readDomainRows("hiring"),
     readDomainRows("attrition"),
     readDomainRows("leave"),
     readDomainRows("training"),
     readDomainRows("promotions"),
+    readAttritionModelProfiles(),
   ])
 
   const allEmployees = employeeRows as unknown as EmployeeRecord[]
@@ -117,6 +119,7 @@ export async function getWorkforceAnalytics(filters: HrFilters = {}): Promise<Wo
   const allLeave = leaveRows as unknown as LeaveRecord[]
   const allTraining = trainingRows as unknown as TrainingRecord[]
   const allPromotions = promotionRows as unknown as PromotionRecord[]
+  const allModelProfiles = modelProfileRows as unknown as AttritionModelProfile[]
   const employeeMap = new Map(allEmployees.map((employee) => [employee.employee_id, employee]))
   const liveOnly = normalizedFilters.dataMode === "live"
   const isIncluded = (record: { data_source: string }) => !liveOnly || record.data_source !== "demo"
@@ -148,13 +151,40 @@ export async function getWorkforceAnalytics(filters: HrFilters = {}): Promise<Wo
   const completedTraining = training.filter((record) => record.completion_status.toLowerCase() === "completed")
   const activeEmployees = employees.filter((employee) => employee.employment_status.toLowerCase() !== "terminated")
   const attritionRate = percent(attrition.length, activeEmployees.length + attrition.length)
-  const promotedIds = new Set(promotions.map((promotion) => promotion.employee_id))
+  const promotedIds = new Set(allPromotions.filter(isIncluded).map((promotion) => promotion.employee_id))
   const withoutPromotion = activeEmployees.filter((employee) => employee.tenure_years >= 3 && !promotedIds.has(employee.employee_id)).length
-  const highRiskEmployees = getScoredEmployees({ risk: "high", limit: 40 }).items
-    .filter((employee) => !normalizedFilters.department || employee.department === normalizedFilters.department)
-    .filter((employee) => !normalizedFilters.jobTitle || employee.role === normalizedFilters.jobTitle)
+  const exitByEmployee = new Map(attrition.map((record) => [record.employee_id, record]))
+  const joinedModelRecords: AttritionEmployeeRecord[] = allModelProfiles
+    .filter(isIncluded)
+    .map((profile) => ({ profile, employee: employeeMap.get(profile.employee_id), exit: exitByEmployee.get(profile.employee_id) }))
+    .filter((row): row is { profile: AttritionModelProfile; employee: EmployeeRecord; exit: AttritionRecord | undefined } => Boolean(row.employee) && matchesEmployee(row.employee, normalizedFilters))
+    .map(({ profile, employee, exit }) => ({
+      employeeId: employee.employee_id,
+      name: [employee.preferred_name || employee.first_name, employee.last_name].filter(Boolean).join(" ").trim() || employee.employee_id,
+      department: employee.department,
+      jobTitle: employee.job_title,
+      location: employee.location,
+      manager: employee.manager,
+      employmentStatus: employee.employment_status,
+      tenureYears: employee.tenure_years,
+      observedAttrition: profile.observed_attrition,
+      exitDate: exit?.exit_date ?? null,
+      exitReason: exit?.exit_reason ?? null,
+      exitType: exit?.exit_type ?? null,
+      riskScore: Number(profile.risk_score),
+      riskLevel: profile.risk_level,
+      topDriver: profile.top_driver,
+      jobSatisfaction: Number(profile.job_satisfaction),
+      environmentSatisfaction: Number(profile.environment_satisfaction),
+      workLifeBalance: Number(profile.work_life_balance),
+      monthlyIncome: Number(profile.monthly_income),
+      dataSource: profile.data_source,
+    }))
+    .sort((left, right) => right.riskScore - left.riskScore || left.employeeId.localeCompare(right.employeeId))
+  const highRiskEmployees = joinedModelRecords
+    .filter((employee) => employee.riskLevel === "high")
     .slice(0, 12)
-    .map((employee) => ({ id: employee.id, department: employee.department, role: employee.role, riskScore: employee.riskScore, topDriver: employee.topDriver }))
+    .map((employee) => ({ id: employee.employeeId, department: employee.department, role: employee.jobTitle, riskScore: employee.riskScore, topDriver: employee.topDriver }))
 
   const hiringBySource = groupBy(hired, (record) => record.hiring_source)
   const sourceStats = hiringBySource.map((source) => {
@@ -247,6 +277,7 @@ export async function getWorkforceAnalytics(filters: HrFilters = {}): Promise<Wo
       byRole: groupBy(attrition, (record) => employeeMap.get(record.employee_id)?.job_title ?? "Unknown"),
       byTenure: groupBy(attrition, (record) => record.tenure_years < 1 ? "< 1 year" : record.tenure_years < 3 ? "1–2 years" : record.tenure_years < 5 ? "3–4 years" : "5+ years"),
       highRiskEmployees,
+      employeeRecords: joinedModelRecords,
       rows: attrition.slice(0, 250),
     },
     leave: {

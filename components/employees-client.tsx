@@ -55,7 +55,7 @@ export function EmployeesClient({ employees, total }: { employees: Employee[]; t
   return (
     <div className="flex flex-col gap-5">
       <div className="border border-border bg-muted/35 px-4 py-3 text-sm text-muted-foreground">
-        Historical dataset: {total.toLocaleString()} anonymized records. These rows are not linked to current employees.
+        Historical IBM dataset: {total.toLocaleString()} records. Each row is linked to a clearly labelled synthetic demo employee with the same ID; imported operational employees are not scored by this model.
       </div>
 
       <Card className="gap-0 overflow-hidden py-0">

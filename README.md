@@ -2,10 +2,10 @@
 
 LaidbackHR.AI is a people-operations workspace for employee records, hiring, time off, training, promotions, workforce analytics, explainable attrition-risk review, and grounded AI assistance.
 
-It deliberately separates two kinds of data:
+It deliberately distinguishes two kinds of data:
 
 - Live HR records stored in D1 and managed through People, Inbox, Data Hub, and Insights.
-- The supplied 1,470-row IBM sample dataset, used only by the validated historical attrition model and its clearly labelled review surface.
+- A correlated synthetic workforce generated from the supplied 1,470-row IBM sample. Stable demo employee IDs join model profiles to hiring, exits, leave, training, promotions, and reporting lines.
 
 ## Production architecture
 
@@ -29,7 +29,7 @@ The deployed application is a single Cloudflare-compatible web runtime:
 - `/people/{id}` — profile, reporting line, time off, growth, and attributable activity
 - `/inbox` — leave approvals plus hiring, training, and human-review follow-ups
 - `/insights` — employee, hiring, attrition, leave, training, promotion, and executive analytics
-- `/attrition` and `/risk-review` — governed historical model diagnostics and anonymized review rows
+- `/attrition` and `/risk-review` — governed historical model diagnostics and clearly labelled synthetic employee review rows
 - `/ai-agents` — grounded LangChain + MCP copilot with a visible tool trace
 - `/data` — imports, templates, data readiness, and Power BI feeds
 
@@ -42,7 +42,7 @@ The deployed application is a single Cloudflare-compatible web runtime:
 - Imports replace demo rows one HR domain at a time and remain labelled by source.
 - Age and marital status are excluded from training.
 
-The IBM source dataset has no employee names, managers, locations, dates, hiring events, leave records, training records, promotion records, or exit reasons. For that reason, the initial operational workspace contains conspicuously labelled demo records until an HR team adds or imports its own data. Demo identities never become attrition-model identities.
+The IBM source dataset has no employee names, managers, locations, dates, hiring events, leave records, training records, promotion records, or exit reasons. The initial workspace therefore derives a deterministic, internally consistent synthetic workforce from those rows. Every generated record remains labelled `data_source=demo`; imported and HR-managed records remain separate and are never assigned IBM model scores.
 
 ## Local development
 
@@ -97,7 +97,7 @@ PYTHONPATH=. .venv/bin/python scripts/export_worker_runtime.py
 | GET | `/api/v1/model` | Model metrics and provenance |
 | GET | `/api/v1/schema` | Predictor ranges and categories |
 | POST | `/api/v1/predict` | Score one employee profile |
-| GET | `/api/v1/employees` | Filterable anonymised historical model rows |
+| GET | `/api/v1/employees` | Filterable historical model rows with synthetic demo IDs |
 | GET/POST | `/api/v1/hr/people` | Search or create managed employee profiles |
 | GET/PATCH | `/api/v1/hr/people/{id}` | Read or edit one employee profile |
 | POST | `/api/v1/hr/people/{id}/archive` | Soft-archive an employee |

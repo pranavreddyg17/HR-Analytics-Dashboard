@@ -1,6 +1,7 @@
 import { env } from "cloudflare:workers"
 
-import { getEmployees } from "@/lib/server/runtime"
+import { generateCorrelatedDemoData, type CorrelatedDemoData } from "@/lib/server/correlated-demo"
+import { getEmployees, getModelMetadata } from "@/lib/server/runtime"
 import { hrDomains, importFields, type HrDomain } from "@/lib/hr-types"
 
 export type Statement = {
@@ -32,6 +33,9 @@ const createStatements = [
   "CREATE TABLE IF NOT EXISTS workspace_settings (key TEXT PRIMARY KEY, value TEXT NOT NULL, updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP)",
   "CREATE TABLE IF NOT EXISTS hiring_records (id TEXT PRIMARY KEY, position TEXT NOT NULL, department TEXT NOT NULL, application_date TEXT NOT NULL, hiring_date TEXT, hiring_source TEXT NOT NULL, time_to_hire_days INTEGER, recruitment_status TEXT NOT NULL, location TEXT NOT NULL, data_source TEXT NOT NULL DEFAULT 'imported', updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP)",
   "CREATE TABLE IF NOT EXISTS attrition_events (id TEXT PRIMARY KEY, employee_id TEXT NOT NULL, exit_date TEXT NOT NULL, exit_reason TEXT NOT NULL, exit_type TEXT NOT NULL, department TEXT NOT NULL, tenure_years REAL NOT NULL, data_source TEXT NOT NULL DEFAULT 'imported', updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP)",
+  "CREATE TABLE IF NOT EXISTS attrition_model_profiles (employee_id TEXT PRIMARY KEY, observed_attrition TEXT NOT NULL, risk_score REAL NOT NULL, risk_level TEXT NOT NULL, top_driver TEXT NOT NULL, monthly_income REAL NOT NULL, distance_from_home INTEGER NOT NULL, education_level INTEGER NOT NULL, education_field TEXT NOT NULL, environment_satisfaction INTEGER NOT NULL, job_satisfaction INTEGER NOT NULL, prior_companies INTEGER NOT NULL, work_life_balance INTEGER NOT NULL, years_at_company REAL NOT NULL, model_version TEXT NOT NULL, data_source TEXT NOT NULL DEFAULT 'demo', updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP)",
+  "CREATE INDEX IF NOT EXISTS attrition_model_risk_idx ON attrition_model_profiles(risk_level, risk_score)",
+  "CREATE INDEX IF NOT EXISTS attrition_model_observed_idx ON attrition_model_profiles(observed_attrition)",
   "CREATE TABLE IF NOT EXISTS leave_records (id TEXT PRIMARY KEY, employee_id TEXT NOT NULL, leave_type TEXT NOT NULL, start_date TEXT NOT NULL, end_date TEXT NOT NULL, leave_days REAL NOT NULL, approval_status TEXT NOT NULL, department TEXT NOT NULL, data_source TEXT NOT NULL DEFAULT 'imported', updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP)",
   "CREATE TABLE IF NOT EXISTS training_records (id TEXT PRIMARY KEY, training_program TEXT NOT NULL, employee_id TEXT NOT NULL, completion_status TEXT NOT NULL, completion_date TEXT, training_hours REAL NOT NULL, assessment_score REAL, department TEXT NOT NULL, data_source TEXT NOT NULL DEFAULT 'imported', updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP)",
   "CREATE TABLE IF NOT EXISTS promotion_records (id TEXT PRIMARY KEY, employee_id TEXT NOT NULL, previous_title TEXT NOT NULL, new_title TEXT NOT NULL, promotion_date TEXT NOT NULL, department TEXT NOT NULL, months_since_previous_promotion INTEGER NOT NULL, data_source TEXT NOT NULL DEFAULT 'imported', updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP)",
@@ -54,138 +58,21 @@ export function getHrDatabase(): Database | null {
   return (env as unknown as { DB?: Database }).DB ?? null
 }
 
-function dateShift(months: number, days = 0): string {
-  const date = new Date(Date.UTC(2026, 5, 30))
-  date.setUTCMonth(date.getUTCMonth() + months)
-  date.setUTCDate(Math.min(28, date.getUTCDate() + days))
-  return date.toISOString().slice(0, 10)
-}
+let cachedDemo: CorrelatedDemoData | null = null
 
-function numericTenure(value: string): number {
-  const parsed = Number.parseFloat(value)
-  return Number.isFinite(parsed) ? parsed : 0
+function correlatedDemo(): CorrelatedDemoData {
+  if (!cachedDemo) {
+    cachedDemo = generateCorrelatedDemoData(getEmployees({ limit: 2000 }).items, getModelMetadata().model_version)
+  }
+  return cachedDemo
 }
 
 export function generateDemoDataset(): Dataset {
-  const sourceEmployees = getEmployees({ limit: 240 }).items
-  const locations = ["Austin", "London", "New York", "Remote", "San Francisco", "Singapore"]
-  const firstNames = ["Avery", "Maya", "Noah", "Elena", "Miles", "Priya", "Theo", "Naomi", "Liam", "Sofia", "Jordan", "Amara", "Kai", "Leila", "Owen", "Nina", "Elliot", "Zara"]
-  const lastNames = ["Chen", "Patel", "Williams", "Garcia", "Kim", "Okafor", "Martin", "Singh", "Rivera", "Brown", "Davis", "Wilson", "Nguyen", "Taylor", "Johnson"]
-  const sources = ["Employee referral", "LinkedIn", "Careers site", "Agency", "University"]
-  const leaveTypes = ["Annual", "Sick", "Parental", "Personal", "Caregiver"]
-  const programs = ["Security & privacy", "Manager essentials", "Inclusive leadership", "Data literacy", "Safety"]
-  const exitReasons = ["Career growth", "Compensation", "Manager relationship", "Relocation", "Performance"]
+  return correlatedDemo().dataset
+}
 
-  const employees = sourceEmployees.slice(0, 180).map((employee, index) => {
-    const tenure = numericTenure(employee.tenure)
-    const firstName = firstNames[index % firstNames.length]
-    const lastName = lastNames[(index * 7) % lastNames.length]
-    return {
-      employee_id: employee.id,
-      first_name: firstName,
-      last_name: lastName,
-      preferred_name: index % 9 === 0 ? firstName.slice(0, Math.max(3, firstName.length - 1)) : null,
-      work_email: `${firstName}.${lastName}.${String(index + 1).padStart(3, "0")}@demo.laidbackhr.ai`.toLowerCase(),
-      phone: `+1 555 ${String(100 + (index % 900)).padStart(3, "0")} ${String(1000 + index).slice(-4)}`,
-      department: employee.department,
-      job_title: employee.role,
-      location: locations[index % locations.length],
-      manager: `${employee.department} Manager ${1 + (index % 4)}`,
-      manager_id: index < 8 ? null : sourceEmployees[Math.max(0, Math.floor(index / 8) * 8 - 8)]?.id ?? null,
-      hire_date: dateShift(-Math.max(2, Math.round(tenure * 12)), -(index % 19)),
-      employment_type: index % 12 === 0 ? "Contract" : index % 9 === 0 ? "Part-time" : "Full-time",
-      employment_status: employee.observedAttrition === "Yes" ? "Terminated" : index % 17 === 0 ? "On leave" : "Active",
-      tenure_years: tenure,
-      data_source: "demo",
-    }
-  })
-
-  const hiring = Array.from({ length: 72 }, (_, index) => {
-    const employee = employees[index % employees.length]
-    const status = index % 9 === 0 ? "Open" : index % 11 === 0 ? "Offer" : "Hired"
-    const applicationDate = dateShift(-17 + (index % 18), -(index % 17))
-    const timeToHire = 18 + ((index * 7) % 43)
-    const hiringDate = status === "Hired"
-      ? new Date(new Date(`${applicationDate}T00:00:00Z`).getTime() + timeToHire * 86_400_000).toISOString().slice(0, 10)
-      : null
-    return {
-      id: `HIR-${String(index + 1).padStart(4, "0")}`,
-      position: employee.job_title,
-      department: employee.department,
-      application_date: applicationDate,
-      hiring_date: hiringDate,
-      hiring_source: sources[index % sources.length],
-      time_to_hire_days: status === "Hired" ? timeToHire : null,
-      recruitment_status: status,
-      location: employee.location,
-      data_source: "demo",
-    }
-  })
-
-  const demoEmployeeIds = new Set(employees.map((employee) => employee.employee_id))
-  const attrition = sourceEmployees
-    .filter((employee) => employee.observedAttrition === "Yes" && demoEmployeeIds.has(employee.id))
-    .slice(0, 34)
-    .map((employee, index) => ({
-      id: `EXT-${String(index + 1).padStart(4, "0")}`,
-      employee_id: employee.id,
-      exit_date: dateShift(-16 + (index % 17), -(index % 13)),
-      exit_reason: exitReasons[index % exitReasons.length],
-      exit_type: index % 5 === 4 ? "Involuntary" : "Voluntary",
-      department: employee.department,
-      tenure_years: numericTenure(employee.tenure),
-      data_source: "demo",
-    }))
-
-  const leave = Array.from({ length: 110 }, (_, index) => {
-    const employee = employees[(index * 7) % employees.length]
-    const start = dateShift(-17 + (index % 18), -(index % 21))
-    const leaveDays = 1 + ((index * 3) % 9)
-    const end = new Date(new Date(`${start}T00:00:00Z`).getTime() + (leaveDays - 1) * 86_400_000).toISOString().slice(0, 10)
-    return {
-      id: `LEV-${String(index + 1).padStart(4, "0")}`,
-      employee_id: employee.employee_id,
-      leave_type: leaveTypes[index % leaveTypes.length],
-      start_date: start,
-      end_date: end,
-      leave_days: leaveDays,
-      approval_status: index % 8 === 0 ? "Pending" : index % 13 === 0 ? "Rejected" : "Approved",
-      department: employee.department,
-      data_source: "demo",
-    }
-  })
-
-  const training = Array.from({ length: 120 }, (_, index) => {
-    const employee = employees[(index * 11) % employees.length]
-    const incomplete = index % 7 === 0
-    return {
-      id: `TRN-${String(index + 1).padStart(4, "0")}`,
-      training_program: programs[index % programs.length],
-      employee_id: employee.employee_id,
-      completion_status: incomplete ? "Incomplete" : "Completed",
-      completion_date: incomplete ? null : dateShift(-11 + (index % 12), -(index % 14)),
-      training_hours: 2 + ((index * 2) % 14),
-      assessment_score: incomplete ? null : 68 + ((index * 5) % 31),
-      department: employee.department,
-      data_source: "demo",
-    }
-  })
-
-  const promotions = Array.from({ length: 44 }, (_, index) => {
-    const employee = employees[(index * 13) % employees.length]
-    return {
-      id: `PRO-${String(index + 1).padStart(4, "0")}`,
-      employee_id: employee.employee_id,
-      previous_title: employee.job_title,
-      new_title: index % 3 === 0 ? `Senior ${employee.job_title}` : `${employee.job_title} II`,
-      promotion_date: dateShift(-17 + (index % 18), -(index % 15)),
-      department: employee.department,
-      months_since_previous_promotion: 18 + ((index * 5) % 43),
-      data_source: "demo",
-    }
-  })
-
-  return { employees, hiring, attrition, leave, training, promotions }
+export function generateDemoModelProfiles() {
+  return correlatedDemo().modelProfiles
 }
 
 const insertSql: Record<HrDomain, string> = {
@@ -196,6 +83,8 @@ const insertSql: Record<HrDomain, string> = {
   training: "INSERT INTO training_records(id, training_program, employee_id, completion_status, completion_date, training_hours, assessment_score, department, data_source, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP) ON CONFLICT(id) DO UPDATE SET training_program=excluded.training_program, employee_id=excluded.employee_id, completion_status=excluded.completion_status, completion_date=excluded.completion_date, training_hours=excluded.training_hours, assessment_score=excluded.assessment_score, department=excluded.department, data_source=excluded.data_source, updated_at=CURRENT_TIMESTAMP",
   promotions: "INSERT INTO promotion_records(id, employee_id, previous_title, new_title, promotion_date, department, months_since_previous_promotion, data_source, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP) ON CONFLICT(id) DO UPDATE SET employee_id=excluded.employee_id, previous_title=excluded.previous_title, new_title=excluded.new_title, promotion_date=excluded.promotion_date, department=excluded.department, months_since_previous_promotion=excluded.months_since_previous_promotion, data_source=excluded.data_source, updated_at=CURRENT_TIMESTAMP",
 }
+
+const modelProfileInsertSql = "INSERT INTO attrition_model_profiles(employee_id, observed_attrition, risk_score, risk_level, top_driver, monthly_income, distance_from_home, education_level, education_field, environment_satisfaction, job_satisfaction, prior_companies, work_life_balance, years_at_company, model_version, data_source, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP) ON CONFLICT(employee_id) DO UPDATE SET observed_attrition=excluded.observed_attrition, risk_score=excluded.risk_score, risk_level=excluded.risk_level, top_driver=excluded.top_driver, monthly_income=excluded.monthly_income, distance_from_home=excluded.distance_from_home, education_level=excluded.education_level, education_field=excluded.education_field, environment_satisfaction=excluded.environment_satisfaction, job_satisfaction=excluded.job_satisfaction, prior_companies=excluded.prior_companies, work_life_balance=excluded.work_life_balance, years_at_company=excluded.years_at_company, model_version=excluded.model_version, data_source=excluded.data_source, updated_at=CURRENT_TIMESTAMP"
 
 function valuesFor(domain: HrDomain, row: Record<string, string | number | null>): unknown[] {
   return [...importFields[domain].map((field) => row[field] ?? null), row.data_source ?? "imported"]
@@ -212,6 +101,30 @@ async function seedEmptyDomains(database: Database): Promise<void> {
       await database.batch(statements.slice(index, index + 80))
     }
   }
+  const profileCount = await database.prepare("SELECT COUNT(*) AS count FROM attrition_model_profiles").first<{ count: number }>()
+  if (Number(profileCount?.count ?? 0) === 0) {
+    const profileStatements = generateDemoModelProfiles().map((profile) => database.prepare(modelProfileInsertSql).bind(
+      profile.employee_id,
+      profile.observed_attrition,
+      profile.risk_score,
+      profile.risk_level,
+      profile.top_driver,
+      profile.monthly_income,
+      profile.distance_from_home,
+      profile.education_level,
+      profile.education_field,
+      profile.environment_satisfaction,
+      profile.job_satisfaction,
+      profile.prior_companies,
+      profile.work_life_balance,
+      profile.years_at_company,
+      profile.model_version,
+      profile.data_source,
+    ))
+    for (let index = 0; index < profileStatements.length; index += 80) {
+      await database.batch(profileStatements.slice(index, index + 80))
+    }
+  }
 }
 
 async function seedDemoOnce(database: Database): Promise<void> {
@@ -219,6 +132,50 @@ async function seedDemoOnce(database: Database): Promise<void> {
   if (initialized) return
   await seedEmptyDomains(database)
   await database.prepare("INSERT INTO workspace_settings(key, value, updated_at) VALUES ('demo_seed_initialized', 'true', CURRENT_TIMESTAMP) ON CONFLICT(key) DO UPDATE SET value='true', updated_at=CURRENT_TIMESTAMP").run()
+}
+
+async function seedCorrelatedDemoOnce(database: Database): Promise<void> {
+  const initialized = await database.prepare("SELECT value FROM workspace_settings WHERE key = 'correlated_demo_seed_v2'").first<{ value: string }>()
+  if (initialized) return
+
+  const demo = correlatedDemo()
+  await database.batch([
+    database.prepare("DELETE FROM attrition_model_profiles WHERE data_source = 'demo'"),
+    ...hrDomains.map((domain) => database.prepare(`DELETE FROM ${tableByDomain[domain]} WHERE data_source = 'demo'`)),
+  ])
+
+  for (const domain of hrDomains) {
+    const statements = demo.dataset[domain].map((row) => database.prepare(insertSql[domain]).bind(...valuesFor(domain, row)))
+    for (let index = 0; index < statements.length; index += 80) {
+      await database.batch(statements.slice(index, index + 80))
+    }
+  }
+  const profileStatements = demo.modelProfiles.map((profile) => database.prepare(modelProfileInsertSql).bind(
+    profile.employee_id,
+    profile.observed_attrition,
+    profile.risk_score,
+    profile.risk_level,
+    profile.top_driver,
+    profile.monthly_income,
+    profile.distance_from_home,
+    profile.education_level,
+    profile.education_field,
+    profile.environment_satisfaction,
+    profile.job_satisfaction,
+    profile.prior_companies,
+    profile.work_life_balance,
+    profile.years_at_company,
+    profile.model_version,
+    profile.data_source,
+  ))
+  for (let index = 0; index < profileStatements.length; index += 80) {
+    await database.batch(profileStatements.slice(index, index + 80))
+  }
+  await database.batch([
+    database.prepare("INSERT INTO workspace_settings(key, value, updated_at) VALUES ('correlated_demo_seed_v2', 'true', CURRENT_TIMESTAMP) ON CONFLICT(key) DO UPDATE SET value='true', updated_at=CURRENT_TIMESTAMP"),
+    database.prepare("INSERT INTO workspace_settings(key, value, updated_at) VALUES ('leave_workflow_examples_v1', 'true', CURRENT_TIMESTAMP) ON CONFLICT(key) DO UPDATE SET value='true', updated_at=CURRENT_TIMESTAMP"),
+    database.prepare("INSERT INTO workspace_settings(key, value, updated_at) VALUES ('training_workflow_examples_v1', 'true', CURRENT_TIMESTAMP) ON CONFLICT(key) DO UPDATE SET value='true', updated_at=CURRENT_TIMESTAMP"),
+  ])
 }
 
 const profileColumnDefinitions: Record<string, string> = {
@@ -371,6 +328,7 @@ export async function ensureHrDatabase(): Promise<Database | null> {
     for (const statement of createStatements) await database.prepare(statement).run()
     await ensureEmployeeProfileColumns(database)
     await seedDemoOnce(database)
+    await seedCorrelatedDemoOnce(database)
     await backfillDemoProfiles(database)
     await seedLeaveWorkflowExamplesOnce(database)
     await seedTrainingWorkflowExamplesOnce(database)
@@ -470,6 +428,13 @@ export async function readDomainRows(domain: HrDomain): Promise<Array<Record<str
     return result.results ?? []
   }
   const result = await database.prepare(`SELECT * FROM ${tableByDomain[domain]} ORDER BY updated_at DESC LIMIT 10000`).all<Record<string, unknown>>()
+  return result.results ?? []
+}
+
+export async function readAttritionModelProfiles(): Promise<Array<Record<string, unknown>>> {
+  const database = await ensureHrDatabase()
+  if (!database) return generateDemoModelProfiles()
+  const result = await database.prepare("SELECT * FROM attrition_model_profiles ORDER BY risk_score DESC LIMIT 10000").all<Record<string, unknown>>()
   return result.results ?? []
 }
 

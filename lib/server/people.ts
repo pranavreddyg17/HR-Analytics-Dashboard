@@ -1,6 +1,6 @@
 import { z } from "zod"
 
-import type { AttritionRecord, LeaveRecord, PromotionRecord, TrainingRecord } from "@/lib/hr-types"
+import type { AttritionModelProfile, AttritionRecord, LeaveRecord, PromotionRecord, TrainingRecord } from "@/lib/hr-types"
 import type { EmployeeActivity, EmployeeDirectoryResponse, EmployeeInput, EmployeeProfileResponse, InboxItem, ManagedEmployee } from "@/lib/people-types"
 import type { RequestActor } from "@/lib/server/request-user"
 import { ensureHrDatabase, type Database } from "@/lib/server/hr-database"
@@ -151,13 +151,14 @@ export async function getPerson(employeeId: string): Promise<EmployeeProfileResp
   const database = await databaseOrThrow()
   const employee = await database.prepare(`${employeeSelect} WHERE e.employee_id = ?`).bind(employeeId).first<ManagedEmployee>()
   if (!employee) throw new PeopleError("Employee not found.", 404)
-  const [manager, directReports, leave, training, promotions, attrition, activity] = await Promise.all([
+  const [manager, directReports, leave, training, promotions, attrition, attritionModel, activity] = await Promise.all([
     employee.manager_id ? database.prepare(`${employeeSelect} WHERE e.employee_id = ?`).bind(employee.manager_id).first<ManagedEmployee>() : Promise.resolve(null),
     database.prepare(`${employeeSelect} WHERE e.manager_id = ? AND e.archived_at IS NULL ORDER BY display_name`).bind(employeeId).all<ManagedEmployee>(),
     database.prepare("SELECT * FROM leave_records WHERE employee_id = ? ORDER BY start_date DESC LIMIT 100").bind(employeeId).all<LeaveRecord>(),
     database.prepare("SELECT * FROM training_records WHERE employee_id = ? ORDER BY COALESCE(completion_date, '9999-12-31') DESC LIMIT 100").bind(employeeId).all<TrainingRecord>(),
     database.prepare("SELECT * FROM promotion_records WHERE employee_id = ? ORDER BY promotion_date DESC LIMIT 100").bind(employeeId).all<PromotionRecord>(),
     database.prepare("SELECT * FROM attrition_events WHERE employee_id = ? ORDER BY exit_date DESC LIMIT 20").bind(employeeId).all<AttritionRecord>(),
+    database.prepare("SELECT * FROM attrition_model_profiles WHERE employee_id = ?").bind(employeeId).first<AttritionModelProfile>(),
     database.prepare("SELECT * FROM employee_activity WHERE employee_id = ? ORDER BY created_at DESC LIMIT 100").bind(employeeId).all<EmployeeActivity>(),
   ])
   return {
@@ -168,6 +169,7 @@ export async function getPerson(employeeId: string): Promise<EmployeeProfileResp
     training: training.results ?? [],
     promotions: promotions.results ?? [],
     attrition: attrition.results ?? [],
+    attritionModel,
     activity: activity.results ?? [],
   }
 }

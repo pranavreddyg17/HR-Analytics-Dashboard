@@ -200,8 +200,8 @@ class ModelRuntime:
             probability = float(row["RiskProbability"])
             rows.append(
                 {
-                    "id": f"EMP-{index + 1:04d}",
-                    "name": f"Employee {index + 1:04d}",
+                    "id": f"DEMO-EMP-{index + 1:04d}",
+                    "name": f"Demo Employee {index + 1:04d}",
                     "role": f"{row['EducationField']} · education level {int(row['Education'])}",
                     "department": str(row["Department"]),
                     "tenure": format_tenure(int(row["YearsAtCompany"])),
@@ -210,8 +210,14 @@ class ModelRuntime:
                     "topDriver": self.driver_explanation(top_feature, row.to_dict()),
                     "suggestion": self.recommendation(row.to_dict(), top_feature),
                     "monthlyIncome": int(row["MonthlyIncome"]),
+                    "distanceFromHome": int(row["DistanceFromHome"]),
+                    "educationLevel": int(row["Education"]),
+                    "educationField": str(row["EducationField"]),
+                    "environmentSatisfaction": int(row["EnvironmentSatisfaction"]),
                     "jobSatisfaction": int(row["JobSatisfaction"]),
+                    "priorCompanies": int(row["NumCompaniesWorked"]),
                     "workLifeBalance": int(row["WorkLifeBalance"]),
+                    "yearsAtCompany": int(row["YearsAtCompany"]),
                     "observedAttrition": str(row["Attrition"]),
                 }
             )

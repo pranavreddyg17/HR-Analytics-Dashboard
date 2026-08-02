@@ -9,6 +9,7 @@
     "start": "WRANGLER_LOG_PATH=.wrangler/wrangler.log vinext start",
     "lint": "eslint . --ignore-pattern dist --ignore-pattern .next",
     "db:generate": "drizzle-kit generate",
+    "db:generate-demo": "node --experimental-strip-types scripts/generate-correlated-demo-migration.ts",
     "test:backend": "cd backend && PYTHONPATH=. .venv/bin/python -m pytest -q",
     "test:live": "node --test tests/api-live.test.mjs"
   },
