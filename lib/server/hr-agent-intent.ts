@@ -6,6 +6,10 @@ export type StoredToolContext = {
   tool: string
   status: string
   input?: Record<string, unknown>
+  resultContext?: {
+    employeeIds?: string[]
+    recordScope?: string
+  }
 }
 
 export type AgentHistoryMessage = {
@@ -21,6 +25,7 @@ export type PlanPurpose =
   | "department_comparison"
   | "attrition_summary"
   | "attrition_records"
+  | "attrition_record_explanations"
   | "attrition_drivers"
   | "people_operations"
   | "employee_lookup"
@@ -62,30 +67,31 @@ function directTopic(message: string): Topic | null {
   return null
 }
 
-function priorState(history: AgentHistoryMessage[]): { topic: Topic | null; input: Record<string, unknown>; userMessage: string } {
+function priorState(history: AgentHistoryMessage[]): { topic: Topic | null; input: Record<string, unknown>; employeeIds: string[]; userMessage: string } {
   const lastUser = history.filter((item) => item.role === "user").at(-1)?.content ?? ""
   const assistant = history.filter((item) => item.role === "assistant" && item.tools?.length).at(-1)
   const trace = assistant?.tools?.find((item) => item.status === "completed")
-  if (!trace) return { topic: directTopic(lastUser), input: {}, userMessage: lastUser }
-  if (trace.tool === "analyze_attrition_signals") return { topic: "attrition", input: trace.input ?? {}, userMessage: lastUser }
-  if (trace.tool === "workforce_overview") return { topic: "workforce", input: trace.input ?? {}, userMessage: lastUser }
-  if (trace.tool === "find_employee_records") return { topic: "employee", input: trace.input ?? {}, userMessage: lastUser }
+  const employeeIds = trace?.resultContext?.employeeIds?.filter((value) => typeof value === "string").slice(0, 20) ?? []
+  if (!trace) return { topic: directTopic(lastUser), input: {}, employeeIds, userMessage: lastUser }
+  if (trace.tool === "analyze_attrition_signals") return { topic: "attrition", input: trace.input ?? {}, employeeIds, userMessage: lastUser }
+  if (trace.tool === "workforce_overview") return { topic: "workforce", input: trace.input ?? {}, employeeIds, userMessage: lastUser }
+  if (trace.tool === "find_employee_records") return { topic: "employee", input: trace.input ?? {}, employeeIds, userMessage: lastUser }
   if (trace.tool === "review_people_operations") {
     const domain = trace.input?.domain
     const topic = domain === "hiring" || domain === "leave" || domain === "training" || domain === "promotions" ? domain : null
-    return { topic, input: trace.input ?? {}, userMessage: lastUser }
+    return { topic, input: trace.input ?? {}, employeeIds, userMessage: lastUser }
   }
   if (trace.tool === "compare_departments") {
     const metric = trace.input?.metric
     const topic = metric === "hires" ? "hiring" : metric === "leave_days" ? "leave" : metric === "training_hours" ? "training" : metric === "promotions" ? "promotions" : metric === "exits" ? "attrition" : "workforce"
-    return { topic, input: trace.input ?? {}, userMessage: lastUser }
+    return { topic, input: trace.input ?? {}, employeeIds, userMessage: lastUser }
   }
-  return { topic: directTopic(lastUser), input: trace.input ?? {}, userMessage: lastUser }
+  return { topic: directTopic(lastUser), input: trace.input ?? {}, employeeIds, userMessage: lastUser }
 }
 
 function isExplicitFollowUp(message: string): boolean {
   const words = message.trim().split(/\s+/).length
-  return words <= 14 && /^(?:just|only|and\b|also\b|what about|how about|why\b|explain\b|give me (?:some )?(?:analysis|detail)|show (?:me )?(?:those|them)|those\b|them\b|same\b|top\s+\d+)/i.test(message.trim())
+  return words <= 20 && /^(?:just|only|and\b|also\b|what about|how about|why\b|explain\b|give me (?:some )?(?:analysis|detail)|show (?:me )?(?:those|them)|those\b|them\b|same\b|top\s+\d+|can you tell me|could (?:this|that|the|their)|what(?:'s| is) driving|what could (?:be )?(?:the )?(?:reason|cause)|what should (?:we|hr)|how should (?:we|hr)|how come)/i.test(message.trim())
 }
 
 function requestedLimit(message: string, fallback = 10): number {
@@ -110,7 +116,11 @@ function wantsEmployeeRecords(message: string, followUp: boolean, priorInput: Re
 }
 
 function wantsExplanation(message: string): boolean {
-  return /\bwhy\b|\bexplain|\banalysis\b|\bdrivers?\b|\breasons?\b|contributing signals?/i.test(message)
+  return /\bwhy\b|\bexplain|\banalysis\b|\bdrivers?\b|\breasons?\b|\bcauses?\b|\bdriving\b|contributing signals?|what should (?:we|hr) do|recommended actions?/i.test(message)
+}
+
+function employeeIdentifier(message: string): string | undefined {
+  return message.match(/\b(?:demo-)?emp[-_ ]?[a-z0-9]+\b/i)?.[0]?.replace(/[_ ]/g, "-").toUpperCase()
 }
 
 function filtersFor(message: string, dimensions: Dimensions, previousInput: Record<string, unknown>, followUp: boolean): HrFilters {
@@ -157,6 +167,31 @@ export function resolveHrIntent(message: string, history: AgentHistoryMessage[],
   if (topic === "attrition") {
     const analysis = wantsExplanation(query)
     const records = wantsEmployeeRecords(query, followUp, previous.input)
+    const identifier = employeeIdentifier(query)
+    const priorRecordScope = ["exited", "high_risk", "all"].includes(String(previous.input.recordScope)) ? String(previous.input.recordScope) as "exited" | "high_risk" | "all" : undefined
+    const explainRecords = analysis && Boolean(identifier || records || (followUp && (previous.employeeIds.length || priorRecordScope)))
+    if (explainRecords) {
+      const scope = identifier ? "all" : recordScope(`${query} ${followUp ? previous.userMessage : ""}`, previous.input, followUp)
+      const employeeIds = identifier ? [identifier] : previous.employeeIds
+      return {
+        plans: [{
+          name: "analyze_attrition_signals",
+          input: {
+            ...filters,
+            recordScope: scope,
+            ...(identifier ? { query: identifier } : {}),
+            ...(employeeIds.length ? { employeeIds } : {}),
+            includeExplanations: true,
+            limit: identifier ? 1 : limit,
+          },
+          purpose: "attrition_record_explanations",
+          limit: identifier ? 1 : limit,
+        }],
+        inScope,
+        isFollowUp: followUp,
+        contextQuery,
+      }
+    }
     if (analysis) return { plans: [{ name: "analyze_attrition_signals", input: { ...filters, recordScope: "summary" }, purpose: "attrition_drivers", limit }], inScope, isFollowUp: followUp, contextQuery }
     if (records) {
       const scope = recordScope(`${query} ${followUp ? previous.userMessage : ""}`, previous.input, followUp)
@@ -176,7 +211,7 @@ export function resolveHrIntent(message: string, history: AgentHistoryMessage[],
   }
 
   if (topic === "employee") {
-    const identifier = query.match(/\b(?:demo-)?emp[-_ ]?[a-z0-9]+\b/i)?.[0]?.replace(/[_ ]/g, "-")
+    const identifier = employeeIdentifier(query)
     const status = /active employees/i.test(query) ? "Active" : undefined
     return { plans: [{ name: "find_employee_records", input: { ...filters, query: identifier ?? query, ...(status ? { status } : {}), limit }, purpose: "employee_lookup", limit }], inScope, isFollowUp: followUp, contextQuery }
   }

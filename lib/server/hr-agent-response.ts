@@ -65,6 +65,39 @@ function renderAttrition(plan: ToolPlan, data: Record<string, unknown>): string 
   const model = object(data.historicalModelReview)
   const distribution = object(model.riskDistribution)
 
+  if (plan.purpose === "attrition_record_explanations") {
+    const rows = records(data.joinedEmployeeRecords).slice(0, plan.limit)
+    if (!rows.length) return `${sourceLine(data)} No model-scored employee records match the prior selection.`
+    const primaryDrivers = rows.map((row) => {
+      const explanation = object(row.modelExplanation)
+      return records(explanation.topDrivers)[0]
+    }).filter(Boolean)
+    const driverCounts = new Map<string, number>()
+    for (const driver of primaryDrivers) {
+      const label = String(driver.label ?? "Other model signal")
+      driverCounts.set(label, (driverCounts.get(label) ?? 0) + 1)
+    }
+    const cohortPatterns = [...driverCounts.entries()].sort((left, right) => right[1] - left[1] || left[0].localeCompare(right[0]))
+    return [
+      sourceLine(data),
+      `Why the model flagged these ${rows.length} synthetic profiles`,
+      "Cohort pattern",
+      ...cohortPatterns.map(([label, count]) => `- ${label}: primary positive contributor for ${count} of ${rows.length} profiles.`),
+      "Record-level explanation",
+      ...rows.flatMap((row, index) => {
+        const explanation = object(row.modelExplanation)
+        const drivers = records(explanation.topDrivers).slice(0, 3)
+        const recommendedReview = String(explanation.recommendedReview ?? "Conduct a human-reviewed stay interview before taking action.")
+        return [
+          `${index + 1}. ${String(row.name)} (${String(row.employeeId)}) — ${Number(row.riskScore).toFixed(1)}% ${String(row.riskLevel)} model risk.`,
+          `   Model contributors: ${drivers.map((driver) => String(driver.explanation ?? driver.label)).join(" ")}`,
+          `   HR review: ${recommendedReview}`,
+        ]
+      }),
+      "These are local model contributions, not proven reasons for an employee to leave. Confirm them through current, consented HR evidence and a human conversation before any action.",
+    ].join("\n")
+  }
+
   if (plan.purpose === "attrition_records") {
     const rows = records(data.joinedEmployeeRecords)
     const scope = String(data.recordScope ?? "all")

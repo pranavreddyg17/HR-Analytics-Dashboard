@@ -5,7 +5,7 @@ export type ConversationMessage = {
   id: string
   role: "user" | "assistant"
   content: string
-  tools?: Array<{ tool: string; status: string; input?: Record<string, unknown> }>
+  tools?: Array<{ tool: string; status: string; input?: Record<string, unknown>; resultContext?: { employeeIds?: string[]; recordScope?: string } }>
   context?: Array<{ source: string; section: string }>
   dataMode?: string
   provider?: string
@@ -109,7 +109,7 @@ export async function getConversation(actor: RequestActor, conversationId: strin
       id: row.id,
       role: row.role,
       content: row.content,
-      tools: parseArray<{ tool: string; status: string; input?: Record<string, unknown> }>(row.tools_json),
+      tools: parseArray<{ tool: string; status: string; input?: Record<string, unknown>; resultContext?: { employeeIds?: string[]; recordScope?: string } }>(row.tools_json),
       context: parseArray<{ source: string; section: string }>(row.context_json),
       dataMode: row.data_mode ?? undefined,
       provider: row.provider ?? undefined,
@@ -122,10 +122,10 @@ export async function getConversation(actor: RequestActor, conversationId: strin
   }
 }
 
-export async function getConversationContext(actor: RequestActor, conversationId: string): Promise<Array<{ role: "user" | "assistant"; content: string; tools?: Array<{ tool: string; status: string; input?: Record<string, unknown> }> }>> {
+export async function getConversationContext(actor: RequestActor, conversationId: string): Promise<Array<{ role: "user" | "assistant"; content: string; tools?: ConversationMessage["tools"] }>> {
   const { messages } = await getConversation(actor, conversationId)
   let characters = 0
-  const selected: Array<{ role: "user" | "assistant"; content: string; tools?: Array<{ tool: string; status: string; input?: Record<string, unknown> }> }> = []
+  const selected: Array<{ role: "user" | "assistant"; content: string; tools?: ConversationMessage["tools"] }> = []
   for (const message of messages.slice().reverse()) {
     if (selected.length >= 12 || characters + message.content.length > 12_000) break
     selected.unshift({ role: message.role, content: message.content, tools: message.tools })

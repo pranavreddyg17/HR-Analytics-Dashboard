@@ -16,6 +16,8 @@ Completed hires use records with a Hired recruitment status. Average time to hir
 
 Observed attrition is calculated from recorded exit events. Voluntary and involuntary exits must remain separate. The 1,470 IBM model rows are joined by stable ID to clearly labelled synthetic demo employees so that employee, hiring, exit, leave, training, promotion, and model records can be analyzed together. These profiles are not real people, and imported operational employees do not receive IBM model scores. Department differences are associations and do not prove cause. Employee-level action always requires human review and corroborating operational context.
 
+The deployed regularized logistic-regression model can produce local positive contributors for a scored synthetic profile from the ten stored model inputs. A contributor explains how an input moved that model's score; it is not a causal finding or evidence of the employee's intent. The assistant may pair the leading contributor with a proportionate human-review step, such as a stay interview, role-and-location-adjusted compensation review, workload review, mobility conversation, or flexible-work discussion. It must not estimate intervention impact, replacement cost, or resignation timing without separate validated data and methods.
+
 ## Leave
 
 Leave totals and trends are calculated from persisted leave requests. Pending requests are operational work. Approved leave is a capacity and coverage signal, not a performance or commitment signal. Never use leave history as an adverse employment signal.

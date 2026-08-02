@@ -99,10 +99,16 @@ export type AttritionEmployeeRecord = {
   riskScore: number
   riskLevel: "high" | "medium" | "low"
   topDriver: string
+  distanceFromHome: number
+  educationLevel: number
+  educationField: string
   jobSatisfaction: number
   environmentSatisfaction: number
   workLifeBalance: number
   monthlyIncome: number
+  priorCompanies: number
+  yearsAtCompany: number
+  modelVersion: string
   dataSource: string
 }
 

@@ -32,9 +32,9 @@ const toolLabels: Record<string, string> = {
 
 const suggestedPrompts = [
   "Summarize the current workforce and open HR work",
+  "Explain the top 5 attrition-risk records and recommended reviews",
   "Where are exits concentrated by manager?",
   "Which departments have a replacement coverage gap?",
-  "Which active employees meet the mobility review criteria?",
 ]
 
 function welcomeMessage(dataMode: string): ChatMessage {

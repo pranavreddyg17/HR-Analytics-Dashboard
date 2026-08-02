@@ -15,6 +15,10 @@ export type { AgentHistoryMessage } from "@/lib/server/hr-agent-intent"
 type ToolTrace = {
   tool: string
   input: Record<string, unknown>
+  resultContext?: {
+    employeeIds?: string[]
+    recordScope?: string
+  }
   durationMs: number
   status: "completed" | "failed"
 }
@@ -66,6 +70,22 @@ function messageText(message: unknown): string {
 
 function numericTokens(value: string): Set<string> {
   return new Set((value.match(/\b\d[\d,]*(?:\.\d+)?%?/g) ?? []).map((token) => token.replace(/[,%]/g, "")))
+}
+
+function evidenceContext(data: Record<string, unknown>): ToolTrace["resultContext"] {
+  const rows = Array.isArray(data.joinedEmployeeRecords)
+    ? data.joinedEmployeeRecords
+    : Array.isArray(data.employees)
+      ? data.employees
+      : []
+  const employeeIds = rows.flatMap((item) => {
+    if (!item || typeof item !== "object") return []
+    const value = (item as Record<string, unknown>).employeeId
+    return typeof value === "string" ? [value] : []
+  }).slice(0, 20)
+  const recordScope = typeof data.recordScope === "string" ? data.recordScope : undefined
+  if (!employeeIds.length && !recordScope) return undefined
+  return { ...(employeeIds.length ? { employeeIds } : {}), ...(recordScope ? { recordScope } : {}) }
 }
 
 async function loadInProcessMcpTools() {
@@ -141,8 +161,9 @@ export async function runHrAgent({ message, history = [] }: { message: unknown; 
       const started = Date.now()
       try {
         const output = await tool.invoke(plan.input)
-        evidence.push({ plan, data: contentToJson(output) })
-        traces.push({ tool: plan.name, input: plan.input, durationMs: Date.now() - started, status: "completed" })
+        const data = contentToJson(output)
+        evidence.push({ plan, data })
+        traces.push({ tool: plan.name, input: plan.input, resultContext: evidenceContext(data), durationMs: Date.now() - started, status: "completed" })
       } catch (error) {
         traces.push({ tool: plan.name, input: plan.input, durationMs: Date.now() - started, status: "failed" })
         throw error

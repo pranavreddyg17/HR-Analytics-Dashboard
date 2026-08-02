@@ -193,10 +193,16 @@ export async function getWorkforceAnalytics(filters: HrFilters = {}): Promise<Wo
       riskScore: Number(profile.risk_score),
       riskLevel: profile.risk_level,
       topDriver: profile.top_driver,
+      distanceFromHome: Number(profile.distance_from_home),
+      educationLevel: Number(profile.education_level),
+      educationField: profile.education_field,
       jobSatisfaction: Number(profile.job_satisfaction),
       environmentSatisfaction: Number(profile.environment_satisfaction),
       workLifeBalance: Number(profile.work_life_balance),
       monthlyIncome: Number(profile.monthly_income),
+      priorCompanies: Number(profile.prior_companies),
+      yearsAtCompany: Number(profile.years_at_company),
+      modelVersion: profile.model_version,
       dataSource: profile.data_source,
     }))
     .sort((left, right) => right.riskScore - left.riskScore || left.employeeId.localeCompare(right.employeeId))

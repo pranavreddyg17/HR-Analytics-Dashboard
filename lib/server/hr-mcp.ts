@@ -2,8 +2,10 @@ import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js"
 import { z } from "zod"
 
 import type { DomainStatus, HrFilters, WorkforceAnalytics } from "@/lib/hr-types"
+import type { PredictionInput } from "@/lib/types"
 import { getWorkforceAnalytics } from "@/lib/server/hr-analytics"
 import { ensureHrDatabase } from "@/lib/server/hr-database"
+import { predict } from "@/lib/server/runtime"
 
 const filtersShape = {
   from: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional().describe("Start date in YYYY-MM-DD format"),
@@ -57,6 +59,29 @@ function countLabels(values: string[]): Array<{ label: string; value: number }> 
   const counts = new Map<string, number>()
   for (const value of values) counts.set(value, (counts.get(value) ?? 0) + 1)
   return [...counts.entries()].map(([label, value]) => ({ label, value })).sort((left, right) => right.value - left.value || left.label.localeCompare(right.label))
+}
+
+function modelExplanation(record: WorkforceAnalytics["attrition"]["employeeRecords"][number]) {
+  const input: PredictionInput = {
+    Department: record.department,
+    DistanceFromHome: record.distanceFromHome,
+    Education: record.educationLevel,
+    EducationField: record.educationField,
+    EnvironmentSatisfaction: record.environmentSatisfaction,
+    JobSatisfaction: record.jobSatisfaction,
+    MonthlyIncome: record.monthlyIncome,
+    NumCompaniesWorked: record.priorCompanies,
+    WorkLifeBalance: record.workLifeBalance,
+    YearsAtCompany: record.yearsAtCompany,
+  }
+  const explanation = predict(input)
+  return {
+    modelVersion: record.modelVersion,
+    method: "Local contributions from the deployed regularized logistic-regression model",
+    topDrivers: explanation.topDrivers,
+    recommendedReview: explanation.recommendation,
+    limits: "The contributors explain the model score, not the employee's intent and not a proven cause of future attrition.",
+  }
 }
 
 async function workflowSnapshot() {
@@ -173,11 +198,13 @@ export function createHrMcpServer(): McpServer {
     inputSchema: {
       recordScope: z.enum(["summary", "exited", "high_risk", "all"]).optional().describe("Optional joined employee record cohort to return"),
       query: z.string().trim().max(120).optional().describe("Optional employee ID, name, department, job title, or location search"),
+      employeeIds: z.array(z.string().trim().min(1).max(80)).max(20).optional().describe("Exact employee IDs retained from a previous tool result"),
+      includeExplanations: z.boolean().optional().describe("Calculate local model contributors for the selected records"),
       limit: z.number().int().min(1).max(20).optional(),
       ...filtersShape,
     },
     annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false },
-  }, async ({ recordScope = "summary", query = "", limit = 10, ...filters }: FilterArgs & { recordScope?: "summary" | "exited" | "high_risk" | "all"; query?: string; limit?: number }) => {
+  }, async ({ recordScope = "summary", query = "", employeeIds = [], includeExplanations = false, limit = 10, ...filters }: FilterArgs & { recordScope?: "summary" | "exited" | "high_risk" | "all"; query?: string; employeeIds?: string[]; includeExplanations?: boolean; limit?: number }) => {
     const analytics = await getWorkforceAnalytics(filters)
     const activeModelRecords = analytics.attrition.employeeRecords.filter((record) => !/terminated/i.test(record.employmentStatus))
     const activeHighRiskRecords = activeModelRecords.filter((record) => record.riskLevel === "high")
@@ -201,13 +228,16 @@ export function createHrMcpServer(): McpServer {
       highRiskCount: values.highRiskCount,
     })).sort((left, right) => right.averageRisk - left.averageRisk || right.highRiskCount - left.highRiskCount)
     const terms = query.toLowerCase().split(/[^a-z0-9-]+/).filter((term) => term.length > 1)
+    const exactEmployeeIds = new Set(employeeIds.map((value) => value.toUpperCase()))
     const scopedRecords = analytics.attrition.employeeRecords.filter((record) => {
       if (recordScope === "summary") return false
       if (recordScope === "exited" && !record.exitDate) return false
       if (recordScope === "high_risk" && (record.riskLevel !== "high" || /terminated/i.test(record.employmentStatus))) return false
+      if (exactEmployeeIds.size && !exactEmployeeIds.has(record.employeeId.toUpperCase())) return false
       const searchable = `${record.employeeId} ${record.name} ${record.department} ${record.jobTitle} ${record.location}`.toLowerCase()
       return terms.every((term) => searchable.includes(term))
     })
+    const selectedRecords = scopedRecords.slice(0, limit)
     return result({
       ...evidence(analytics),
       observedAttrition: {
@@ -231,7 +261,10 @@ export function createHrMcpServer(): McpServer {
       },
       recordScope,
       matchCount: scopedRecords.length,
-      joinedEmployeeRecords: scopedRecords.slice(0, limit),
+      joinedEmployeeRecords: selectedRecords.map((record) => ({
+        ...record,
+        ...(includeExplanations ? { modelExplanation: modelExplanation(record) } : {}),
+      })),
       governance: "Patterns are associations, not proven causes. Model signals require human review and must not be used as automatic employment decisions.",
     })
   })

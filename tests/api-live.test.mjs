@@ -162,6 +162,7 @@ test("analytics assistant resolves focused follow-ups without topic contaminatio
   assert.equal(first.body.tools[0].tool, "analyze_attrition_signals")
   assert.equal(first.body.tools[0].input.recordScope, "high_risk")
   assert.equal(first.body.tools[0].input.limit, 5)
+  assert.equal(first.body.tools[0].resultContext.employeeIds.length, 5)
   assert.equal((first.body.answer.match(/Demo Employee/g) ?? []).length, 5)
 
   const limited = await json("/api/v1/chat", {
@@ -178,14 +179,17 @@ test("analytics assistant resolves focused follow-ups without topic contaminatio
   const explanation = await json("/api/v1/chat", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ message: "Give me some analysis on why", conversationId: first.body.conversationId }),
+    body: JSON.stringify({ message: "Can you tell me what could the reason be?", conversationId: first.body.conversationId }),
   })
   assert.equal(explanation.response.status, 200)
   assert.equal(explanation.body.tools.length, 1)
-  assert.equal(explanation.body.tools[0].input.recordScope, "summary")
-  assert.match(explanation.body.answer, /Observed exit reasons/)
-  assert.match(explanation.body.answer, /Model-associated signals/)
-  assert.doesNotMatch(explanation.body.answer, /Demo Employee/)
+  assert.equal(explanation.body.tools[0].input.recordScope, "high_risk")
+  assert.deepEqual(explanation.body.tools[0].input.employeeIds, first.body.tools[0].resultContext.employeeIds)
+  assert.match(explanation.body.answer, /Why the model flagged these 5 synthetic profiles/)
+  assert.match(explanation.body.answer, /Model contributors:/)
+  assert.match(explanation.body.answer, /HR review:/)
+  assert.match(explanation.body.answer, /not proven reasons/)
+  assert.equal((explanation.body.answer.match(/Demo Employee/g) ?? []).length, 5)
 
   const managers = await json("/api/v1/chat", {
     method: "POST",
@@ -225,6 +229,21 @@ test("analytics assistant resolves focused follow-ups without topic contaminatio
   assert.deepEqual(mobility.body.tools.map((trace) => trace.tool), ["review_people_operations"])
   assert.equal(mobility.body.tools[0].input.domain, "promotions")
   assert.match(mobility.body.answer, /Mobility review/)
+})
+
+test("analytics assistant explains an explicitly named model-scored profile", async () => {
+  const { response, body } = await json("/api/v1/chat", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ message: "Why is DEMO-EMP-0537 at high attrition risk?" }),
+  })
+  assert.equal(response.status, 200)
+  assert.equal(body.tools.length, 1)
+  assert.deepEqual(body.tools[0].input.query, "DEMO-EMP-0537")
+  assert.match(body.answer, /Demo Employee 0537/)
+  assert.match(body.answer, /Environment satisfaction is 1\/4/)
+  assert.match(body.answer, /HR review:/)
+  assert.doesNotMatch(body.answer, /proven cause/i)
 })
 
 test("analytics assistant returns employee records joined to observed attrition", async () => {
