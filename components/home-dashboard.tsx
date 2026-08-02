@@ -1,16 +1,13 @@
 "use client"
 
 import Link from "next/link"
-import {
-  ChevronRight,
-  Inbox,
-  UserPlus,
-} from "lucide-react"
+import { Inbox, UserPlus } from "lucide-react"
 
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { formatWorkspaceDateTime } from "@/lib/date-format"
 import type { WorkforceAnalytics } from "@/lib/hr-types"
 import type { InboxItem, ManagedEmployee } from "@/lib/people-types"
+import { cn } from "@/lib/utils"
 
 type HomeDashboardProps = {
   analytics: WorkforceAnalytics
@@ -18,279 +15,106 @@ type HomeDashboardProps = {
   people: ManagedEmployee[]
 }
 
-const compactNumber = new Intl.NumberFormat("en", { notation: "compact", maximumFractionDigits: 1 })
 const percent = new Intl.NumberFormat("en", { maximumFractionDigits: 1 })
 
-function readableDate(value: string): string {
-  const parsed = new Date(`${value}T00:00:00`)
+function readableDate(value: string | null): string {
+  if (!value) return "Not scheduled"
+  const normalized = value.slice(0, 10)
+  const parsed = new Date(`${normalized}T00:00:00`)
   if (!Number.isFinite(parsed.getTime())) return value
-  return new Intl.DateTimeFormat("en", { month: "short", day: "numeric", year: "numeric" }).format(parsed)
+  return new Intl.DateTimeFormat("en", { month: "short", day: "numeric", year: parsed.getFullYear() === new Date().getFullYear() ? undefined : "numeric" }).format(parsed)
 }
 
-function personInitials(person: ManagedEmployee): string {
-  return person.initials || `${person.first_name?.[0] ?? ""}${person.last_name?.[0] ?? ""}` || "HR"
+function itemHref(item: InboxItem): string {
+  if (item.employeeId) return `/people/${encodeURIComponent(item.employeeId)}`
+  return item.type === "hiring" ? "/hiring" : item.type === "training" ? "/learning" : "/time-off"
 }
 
-function SummaryMetric({
-  label,
-  value,
-  detail,
-  href,
-}: {
-  label: string
-  value: string
-  detail: string
-  href: string
-}) {
-  return (
-    <Link
-      href={href}
-      className="group rounded-lg border border-border bg-card p-4 transition-colors hover:border-foreground/25 hover:bg-muted/20 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-    >
-      <p className="text-xs font-medium text-muted-foreground">{label}</p>
-      <p className="mt-2 text-2xl font-semibold tracking-tight tabular-nums">{value}</p>
-      <div className="mt-2 flex items-center justify-between gap-2">
-        <p className="text-xs text-muted-foreground">{detail}</p>
-        <span className="text-[11px] font-medium text-foreground">View</span>
-      </div>
-    </Link>
-  )
+function dueLabel(item: InboxItem): string {
+  if (item.slaStatus === "overdue") return `Overdue · ${readableDate(item.dueDate)}`
+  if (item.slaStatus === "due_today") return "Due today"
+  return `Due ${readableDate(item.dueDate)}`
 }
 
-function StatusLabel({ count }: { count: number }) {
-  if (count === 0) {
-    return <span className="text-xs font-medium text-muted-foreground">Clear</span>
-  }
-
-  return <span className="text-xs font-medium text-foreground">{count} open</span>
+function SummaryMetric({ label, value, detail, href }: { label: string; value: string; detail: string; href: string }) {
+  return <Link href={href} className="rounded-md border border-border bg-card px-4 py-3 hover:bg-muted/20"><p className="text-meta font-medium text-muted-foreground">{label}</p><p className="mt-1 text-lg font-semibold tabular-nums">{value}</p><p className="mt-1 text-meta text-muted-foreground">{detail}</p></Link>
 }
 
 export function HomeDashboard({ analytics, inbox, people }: HomeDashboardProps) {
   const generatedAt = new Date(analytics.generatedAt)
-  const pendingLeave = inbox.filter((item) => item.type === "leave").length
-  const hiringItems = inbox.filter((item) => item.type === "hiring").length
-  const incompleteTraining = analytics.training.requiringMandatoryTraining
-  const mobilityReviews = analytics.promotions.withoutPromotionOver36Months
-  const peopleById = new Map(people.map((person) => [person.employee_id, person]))
-  const activePeople = people.filter((person) => person.employment_status.toLowerCase() !== "terminated")
-  const newStarters = [...activePeople]
-    .sort((left, right) => right.hire_date.localeCompare(left.hire_date))
-    .slice(0, 5)
-  const awayToday = analytics.leave.currentlyAway
-    .filter((leave, index, rows) => rows.findIndex((candidate) => candidate.employee_id === leave.employee_id) === index)
-    .slice(0, 5)
-  const departments = analytics.employeeAnalytics.activeByDepartment.slice(0, 8)
-  const largestDepartment = Math.max(1, ...departments.map((item) => item.value))
+  const today = new Date().toISOString().slice(0, 10)
+  const sevenDaysAgoDate = new Date()
+  sevenDaysAgoDate.setUTCDate(sevenDaysAgoDate.getUTCDate() - 7)
+  const sevenDaysAgo = sevenDaysAgoDate.toISOString().slice(0, 10)
+  const thirtyDaysDate = new Date()
+  thirtyDaysDate.setUTCDate(thirtyDaysDate.getUTCDate() + 30)
+  const thirtyDays = thirtyDaysDate.toISOString().slice(0, 10)
 
-  const workQueue = [
-    {
-      label: "Leave requests",
-      definition: "Pending requests requiring an approval decision",
-      count: pendingLeave,
-      href: "/time-off#pending-decisions",
-      action: "Review leave",
-    },
-    {
-      label: "Mandatory training",
-      definition: "Employees with an incomplete mandatory assignment",
-      count: incompleteTraining,
-      href: "/learning",
-      action: "Review training",
-    },
-    {
-      label: "Hiring activity",
-      definition: "Open hiring items currently in the workflow",
-      count: hiringItems,
-      href: "/hiring",
-      action: "Open hiring",
-    },
-    {
-      label: "Career reviews",
-      definition: "Active employees without a recorded move in 36 months",
-      count: mobilityReviews,
-      href: "/insights",
-      action: "Review workforce",
-    },
+  const openItems = inbox.filter((item) => !item.isCompleted)
+  const decisions = openItems.filter((item) => item.requiresDecision).slice(0, 6)
+  const overdueItems = openItems.filter((item) => item.slaStatus === "overdue")
+  const dueSoonItems = openItems.filter((item) => item.slaStatus === "due_today" || item.slaStatus === "due_soon")
+  const managerActions = openItems.filter((item) => item.assignedTo === "manager").slice(0, 5)
+
+  const alerts = [
+    { label: "Leave decisions overdue", count: overdueItems.filter((item) => item.type === "leave").length, href: "/inbox?view=overdue&type=leave" },
+    { label: "Hiring follow-ups overdue", count: overdueItems.filter((item) => item.type === "hiring").length, href: "/inbox?view=overdue&type=hiring" },
+    { label: "Training assignments overdue", count: overdueItems.filter((item) => item.type === "training").length, href: "/inbox?view=overdue&type=training" },
+    { label: "Items due within three days", count: dueSoonItems.length, href: "/inbox" },
   ]
 
+  const recentCreated = inbox.filter((item) => item.createdAt.slice(0, 10) >= sevenDaysAgo)
+  const recentCompleted = inbox.filter((item) => item.completedAt && item.completedAt.slice(0, 10) >= sevenDaysAgo)
+  const recentExits = analytics.attrition.rows.filter((row) => row.exit_date >= sevenDaysAgo && row.exit_date <= today).length
+  const recentPromotions = analytics.promotions.rows.filter((row) => row.promotion_date >= sevenDaysAgo && row.promotion_date <= today).length
+  const changes = [
+    { label: "Leave requests submitted", value: recentCreated.filter((item) => item.type === "leave").length },
+    { label: "Hiring requests opened", value: recentCreated.filter((item) => item.type === "hiring").length },
+    { label: "Training completions recorded", value: recentCompleted.filter((item) => item.type === "training").length },
+    { label: "Recorded exits", value: recentExits },
+    { label: "Promotions recorded", value: recentPromotions },
+  ]
+
+  const upcomingEvents = [
+    ...people.filter((person) => person.hire_date >= today && person.hire_date <= thirtyDays).map((person) => ({ id: `start-${person.employee_id}`, date: person.hire_date, label: `${person.display_name} starts`, detail: `${person.job_title} · ${person.department}`, href: `/people/${encodeURIComponent(person.employee_id)}` })),
+    ...analytics.leave.upcoming.filter((leave) => leave.start_date >= today && leave.start_date <= thirtyDays && leave.approval_status.toLowerCase() === "approved").map((leave) => ({ id: `leave-${leave.id}`, date: leave.start_date, label: `${leave.leave_type} leave begins`, detail: `${leave.employee_id} · ${leave.department}`, href: `/people/${encodeURIComponent(leave.employee_id)}` })),
+    ...openItems.filter((item) => item.type === "training" && item.dueDate && item.dueDate >= today && item.dueDate <= thirtyDays).map((item) => ({ id: `due-${item.id}`, date: item.dueDate as string, label: `${item.title} due`, detail: item.person || item.owner, href: itemHref(item) })),
+  ].sort((left, right) => left.date.localeCompare(right.date)).slice(0, 8)
+
   return (
-    <div className="mx-auto flex w-full max-w-[1440px] flex-col gap-6 pb-10">
+    <div className="mx-auto flex w-full max-w-7xl flex-col gap-6 pb-10">
       <header className="flex flex-col gap-4 border-b border-border pb-5 sm:flex-row sm:items-end sm:justify-between">
-        <div>
-          <h1 className="text-2xl font-semibold tracking-tight">Home</h1>
-          <p className="mt-1 text-sm text-muted-foreground">Current workforce status and work requiring attention.</p>
-          <p className="mt-2 text-xs text-muted-foreground">
-            Updated {formatWorkspaceDateTime(generatedAt)}
-          </p>
-        </div>
+        <div><h1 className="text-2xl font-semibold">My HR workday</h1><p className="mt-1 text-sm text-muted-foreground">Decisions, deadlines, and workforce events requiring attention.</p><p className="mt-2 text-xs text-muted-foreground">Updated {formatWorkspaceDateTime(generatedAt)}</p></div>
         <div className="flex flex-wrap items-center gap-2">
-          <Link href="/inbox" className="inline-flex h-9 items-center gap-2 rounded-md border border-border bg-background px-3 text-sm font-medium transition-colors hover:bg-muted">
-            <Inbox className="size-4" />
-            Inbox
-            {inbox.length > 0 && <span className="rounded bg-muted px-1.5 py-0.5 text-[11px] tabular-nums">{inbox.length}</span>}
-          </Link>
-          <Link href="/people?new=1" className="inline-flex h-9 items-center gap-2 rounded-md bg-foreground px-3 text-sm font-medium text-background transition-opacity hover:opacity-90">
-            <UserPlus className="size-4" /> Add employee
-          </Link>
+          <Link href="/inbox" className="inline-flex h-9 items-center gap-2 rounded-md border border-border bg-background px-3 text-sm font-medium hover:bg-muted"><Inbox className="size-4" />Inbox{openItems.length > 0 && <span className="rounded bg-muted px-1.5 py-0.5 text-meta tabular-nums">{openItems.length}</span>}</Link>
+          <Link href="/people?new=1" className="inline-flex h-9 items-center gap-2 rounded-md bg-foreground px-3 text-sm font-medium text-background hover:opacity-90"><UserPlus className="size-4" />Add employee</Link>
         </div>
       </header>
 
-      <section aria-labelledby="workforce-summary-heading">
-        <div className="mb-3">
-          <h2 id="workforce-summary-heading" className="text-sm font-semibold">Workforce summary</h2>
-          <p className="mt-0.5 text-xs text-muted-foreground">Operational measures from the current database view.</p>
-        </div>
-        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6">
-          <SummaryMetric label="Active employees" value={compactNumber.format(analytics.kpis.activeEmployees)} detail={`${analytics.employeeAnalytics.onLeave} recorded on leave`} href="/people" />
-          <SummaryMetric label="Hires" value={compactNumber.format(analytics.kpis.hires)} detail={`${percent.format(analytics.kpis.averageTimeToHire)} day average`} href="/hiring" />
-          <SummaryMetric label="Attrition rate" value={`${percent.format(analytics.kpis.attritionRate)}%`} detail={`${analytics.attrition.totalExits} recorded exits`} href="/attrition" />
-          <SummaryMetric label="Pending leave" value={compactNumber.format(analytics.leave.pending)} detail={`${analytics.leave.approved} approved requests`} href="/time-off" />
-          <SummaryMetric label="Training complete" value={`${percent.format(analytics.kpis.trainingCompletionRate)}%`} detail={`${incompleteTraining} require follow-up`} href="/learning" />
-          <SummaryMetric label="Open requisitions" value={compactNumber.format(analytics.hiring.activeRequisitions)} detail={`${analytics.hiring.offers} active offers`} href="/hiring" />
-        </div>
+      <section aria-labelledby="decision-heading">
+        <div className="mb-3 flex items-end justify-between gap-3"><div><h2 id="decision-heading" className="text-base font-semibold">Needs your decision</h2><p className="mt-0.5 text-xs text-muted-foreground">Requests that cannot progress without an HR or manager decision.</p></div><Link href="/inbox?view=decisions" className="text-xs font-semibold hover:underline">View decision queue</Link></div>
+        <Card className="gap-0 overflow-hidden py-0 shadow-none"><CardContent className="divide-y divide-border p-0">
+          {decisions.length ? decisions.map((item) => <Link key={`${item.type}-${item.id}`} href={itemHref(item)} className="grid gap-3 px-5 py-4 hover:bg-muted/20 sm:grid-cols-[minmax(0,1fr)_minmax(220px,0.8fr)_auto] sm:items-center">
+            <div className="min-w-0"><p className="truncate text-sm font-semibold">{item.title}</p><p className="mt-1 truncate text-xs text-muted-foreground">{item.person ? `${item.person} · ` : ""}{item.detail}</p></div>
+            <div className="min-w-0"><p className="text-meta font-medium text-muted-foreground">Decision needed</p><p className="mt-1 text-xs">{item.nextAction}</p><p className="mt-1 truncate text-meta text-muted-foreground">{item.attentionReason}</p></div>
+            <div className="text-left sm:text-right"><p className={cn("text-xs font-semibold", item.slaStatus === "overdue" || item.slaStatus === "due_today" ? "text-destructive" : "text-foreground")}>{dueLabel(item)}</p><p className="mt-1 text-meta text-muted-foreground">{item.owner}</p></div>
+          </Link>) : <div className="px-5 py-10 text-center"><p className="text-sm font-semibold">No decisions are waiting</p><p className="mt-1 text-xs text-muted-foreground">New requests requiring approval will appear here.</p></div>}
+        </CardContent></Card>
       </section>
 
-      <Card className="gap-0 rounded-lg py-0 shadow-none">
-        <CardHeader className="border-b border-border px-5 py-4">
-          <CardTitle className="text-base">HR work queue</CardTitle>
-          <CardDescription>Items that need review or follow-up.</CardDescription>
-        </CardHeader>
-        <CardContent className="p-0">
-          <div className="overflow-x-auto">
-            <table className="w-full min-w-[720px] text-left text-sm">
-              <thead className="bg-muted/35 text-xs text-muted-foreground">
-                <tr>
-                  <th className="px-5 py-3 font-medium">Work item</th>
-                  <th className="px-5 py-3 font-medium">Definition</th>
-                  <th className="px-5 py-3 font-medium">Status</th>
-                  <th className="px-5 py-3 text-right font-medium">Action</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-border">
-                {workQueue.map((item) => (
-                  <tr key={item.label} className="hover:bg-muted/20">
-                    <td className="px-5 py-3.5 font-medium">{item.label}</td>
-                    <td className="px-5 py-3.5 text-muted-foreground">{item.definition}</td>
-                    <td className="px-5 py-3.5"><StatusLabel count={item.count} /></td>
-                    <td className="px-5 py-3.5 text-right">
-                      <Link href={item.href} className="inline-flex items-center gap-1 text-xs font-semibold hover:underline">
-                        {item.action} <ChevronRight className="size-3.5" />
-                      </Link>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        </CardContent>
-      </Card>
+      <div className="grid gap-4 xl:grid-cols-2">
+        <Card className="gap-0 py-0 shadow-none"><CardHeader className="border-b border-border px-5 py-4"><CardTitle className="text-base">Deadlines and exceptions</CardTitle><CardDescription>Open work that is overdue or approaching its due date.</CardDescription></CardHeader><CardContent className="divide-y divide-border p-0">{alerts.map((alert) => <Link key={alert.label} href={alert.href} className="flex items-center gap-4 px-5 py-3.5 hover:bg-muted/20"><span className="min-w-0 flex-1 text-sm font-medium">{alert.label}</span><span className={cn("text-sm font-semibold tabular-nums", alert.count > 0 ? "text-foreground" : "text-muted-foreground")}>{alert.count}</span></Link>)}</CardContent></Card>
+
+        <Card className="gap-0 py-0 shadow-none"><CardHeader className="border-b border-border px-5 py-4"><CardTitle className="text-base">Changes in the last seven days</CardTitle><CardDescription>Recorded operational changes, not all-time totals.</CardDescription></CardHeader><CardContent className="divide-y divide-border p-0">{changes.map((change) => <div key={change.label} className="flex items-center gap-4 px-5 py-3.5"><span className="min-w-0 flex-1 text-sm font-medium">{change.label}</span><span className="text-sm font-semibold tabular-nums">{change.value}</span></div>)}</CardContent></Card>
+      </div>
 
       <div className="grid gap-4 xl:grid-cols-2">
-        <Card className="gap-0 rounded-lg py-0 shadow-none">
-          <CardHeader className="flex-row items-start justify-between gap-4 border-b border-border px-5 py-4">
-            <div>
-              <CardTitle className="text-base">Recent starters</CardTitle>
-              <CardDescription>Most recent active employee records.</CardDescription>
-            </div>
-            <Link href="/people" className="shrink-0 text-xs font-semibold hover:underline">View directory</Link>
-          </CardHeader>
-          <CardContent className="divide-y divide-border p-0">
-            {newStarters.length ? newStarters.map((person) => (
-              <Link key={person.employee_id} href={`/people/${encodeURIComponent(person.employee_id)}`} className="flex items-center gap-3 px-5 py-3.5 transition-colors hover:bg-muted/20">
-                <span className="flex size-8 shrink-0 items-center justify-center rounded-md bg-muted text-[11px] font-semibold text-foreground">{personInitials(person)}</span>
-                <span className="min-w-0 flex-1">
-                  <span className="block truncate text-sm font-medium">{person.display_name}</span>
-                  <span className="block truncate text-xs text-muted-foreground">{person.job_title} · {person.department}</span>
-                </span>
-                <span className="shrink-0 text-xs text-muted-foreground">{readableDate(person.hire_date)}</span>
-              </Link>
-            )) : (
-              <p className="px-5 py-8 text-center text-sm text-muted-foreground">No active employee records are available.</p>
-            )}
-          </CardContent>
-        </Card>
+        <Card className="gap-0 py-0 shadow-none"><CardHeader className="flex-row items-start justify-between gap-3 border-b border-border px-5 py-4"><div><CardTitle className="text-base">Manager actions awaiting completion</CardTitle><CardDescription>Work currently assigned to a people manager.</CardDescription></div><Link href="/inbox?view=managers" className="text-xs font-semibold hover:underline">View all</Link></CardHeader><CardContent className="divide-y divide-border p-0">{managerActions.length ? managerActions.map((item) => <Link key={`${item.type}-${item.id}`} href={itemHref(item)} className="flex gap-4 px-5 py-3.5 hover:bg-muted/20"><span className="min-w-0 flex-1"><span className="block truncate text-sm font-medium">{item.title}</span><span className="mt-0.5 block truncate text-xs text-muted-foreground">{item.owner} · {item.nextAction}</span></span><span className={cn("shrink-0 text-xs", item.slaStatus === "overdue" ? "font-semibold text-destructive" : "text-muted-foreground")}>{dueLabel(item)}</span></Link>) : <p className="px-5 py-8 text-center text-sm text-muted-foreground">No manager-owned actions are open.</p>}</CardContent></Card>
 
-        <Card className="gap-0 rounded-lg py-0 shadow-none">
-          <CardHeader className="flex-row items-start justify-between gap-4 border-b border-border px-5 py-4">
-            <div>
-              <CardTitle className="text-base">Away today</CardTitle>
-              <CardDescription>Approved leave overlapping today.</CardDescription>
-            </div>
-            <Link href="/time-off" className="shrink-0 text-xs font-semibold hover:underline">Open time off</Link>
-          </CardHeader>
-          <CardContent className="divide-y divide-border p-0">
-            {awayToday.length ? awayToday.map((leave) => {
-              const person = peopleById.get(leave.employee_id)
-              return (
-                <Link key={leave.id} href={person ? `/people/${encodeURIComponent(person.employee_id)}` : "/time-off"} className="flex items-center gap-3 px-5 py-3.5 transition-colors hover:bg-muted/20">
-                  <span className="flex size-8 shrink-0 items-center justify-center rounded-md bg-muted text-[11px] font-semibold text-foreground">
-                    {person ? personInitials(person) : leave.employee_id.slice(0, 2).toUpperCase()}
-                  </span>
-                  <span className="min-w-0 flex-1">
-                    <span className="block truncate text-sm font-medium">{person?.display_name ?? leave.employee_id}</span>
-                    <span className="block truncate text-xs text-muted-foreground">{leave.leave_type} · {leave.department}</span>
-                  </span>
-                  <span className="shrink-0 text-xs text-muted-foreground">Returns {readableDate(leave.end_date)}</span>
-                </Link>
-              )
-            }) : (
-              <p className="px-5 py-8 text-center text-sm text-muted-foreground">No approved leave overlaps today.</p>
-            )}
-          </CardContent>
-        </Card>
+        <Card className="gap-0 py-0 shadow-none"><CardHeader className="border-b border-border px-5 py-4"><CardTitle className="text-base">Upcoming workforce events</CardTitle><CardDescription>Starts, approved leave, and recorded training deadlines in the next 30 days.</CardDescription></CardHeader><CardContent className="divide-y divide-border p-0">{upcomingEvents.length ? upcomingEvents.map((event) => <Link key={event.id} href={event.href} className="flex gap-4 px-5 py-3.5 hover:bg-muted/20"><span className="min-w-0 flex-1"><span className="block truncate text-sm font-medium">{event.label}</span><span className="mt-0.5 block truncate text-xs text-muted-foreground">{event.detail}</span></span><span className="shrink-0 text-xs text-muted-foreground">{readableDate(event.date)}</span></Link>) : <p className="px-5 py-8 text-center text-sm text-muted-foreground">No recorded workforce events are scheduled in the next 30 days.</p>}</CardContent></Card>
       </div>
 
-      <div className="grid gap-4 xl:grid-cols-[1.15fr_0.85fr]">
-        <Card className="gap-0 rounded-lg py-0 shadow-none">
-          <CardHeader className="border-b border-border px-5 py-4">
-            <CardTitle className="text-base">Active employees by department</CardTitle>
-            <CardDescription>Distribution of active employee records.</CardDescription>
-          </CardHeader>
-          <CardContent className="p-0">
-            {departments.length ? (
-              <div className="divide-y divide-border">
-                {departments.map((department) => (
-                  <div key={department.label} className="grid grid-cols-[minmax(0,1fr)_120px_56px] items-center gap-4 px-5 py-3">
-                    <span className="truncate text-sm font-medium">{department.label}</span>
-                    <span className="h-1.5 overflow-hidden rounded-full bg-muted" aria-hidden="true">
-                      <span className="block h-full rounded-full bg-foreground/70" style={{ width: `${Math.max(4, (department.value / largestDepartment) * 100)}%` }} />
-                    </span>
-                    <span className="text-right text-sm tabular-nums text-muted-foreground">{department.value}</span>
-                  </div>
-                ))}
-              </div>
-            ) : (
-              <p className="px-5 py-8 text-center text-sm text-muted-foreground">No department data is available.</p>
-            )}
-          </CardContent>
-        </Card>
-
-        <Card className="gap-0 rounded-lg py-0 shadow-none">
-          <CardHeader className="border-b border-border px-5 py-4">
-            <CardTitle className="text-base">Workforce programs</CardTitle>
-            <CardDescription>Operational status across core HR workflows.</CardDescription>
-          </CardHeader>
-          <CardContent className="divide-y divide-border p-0">
-            {[
-              { label: "Leaves", value: `${awayToday.length} away · ${analytics.leave.pending} pending`, href: "/time-off" },
-              { label: "Assign Courses", value: `${percent.format(analytics.training.completionRate)}% complete`, href: "/learning" },
-              { label: "Hiring", value: `${analytics.hiring.activeRequisitions} open roles · ${analytics.hiring.offers} offers`, href: "/hiring" },
-              { label: "Attrition", value: `${percent.format(analytics.attrition.rate)}% rate · ${analytics.attrition.totalExits} exits`, href: "/attrition" },
-              { label: "People", value: `${analytics.kpis.activeEmployees} active employee records`, href: "/people" },
-            ].map((program) => {
-              return (
-                <Link key={program.label} href={program.href} className="group flex items-center gap-3 px-5 py-3.5 transition-colors hover:bg-muted/20">
-                  <span className="min-w-0 flex-1">
-                    <span className="block text-sm font-medium">{program.label}</span>
-                    <span className="block truncate text-xs text-muted-foreground">{program.value}</span>
-                  </span>
-                  <ChevronRight className="size-4 text-muted-foreground transition-transform" />
-                </Link>
-              )
-            })}
-          </CardContent>
-        </Card>
-      </div>
+      <section aria-labelledby="summary-heading"><div className="mb-3"><h2 id="summary-heading" className="text-sm font-semibold">Workforce summary</h2><p className="mt-0.5 text-xs text-muted-foreground">Small reference measures for the current workspace.</p></div><div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4"><SummaryMetric label="Active employees" value={analytics.kpis.activeEmployees.toLocaleString()} detail={`${analytics.employeeAnalytics.onLeave} currently on leave`} href="/people" /><SummaryMetric label="Open HR work" value={openItems.length.toLocaleString()} detail={`${overdueItems.length} overdue`} href="/inbox" /><SummaryMetric label="Open requisitions" value={analytics.hiring.activeRequisitions.toLocaleString()} detail={`${analytics.hiring.offers} at offer`} href="/hiring" /><SummaryMetric label="Recorded attrition" value={`${percent.format(analytics.kpis.attritionRate)}%`} detail={`${analytics.attrition.totalExits} recorded exits`} href="/attrition" /></div></section>
     </div>
   )
 }

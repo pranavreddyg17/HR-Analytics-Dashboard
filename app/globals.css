@@ -45,9 +45,53 @@
   --radius-2xl: calc(var(--radius) * 1.75);
   --radius-3xl: calc(var(--radius) * 2.2);
   --radius-4xl: calc(var(--radius) * 2.6);
-  --font-sans: "Segoe UI", "Helvetica Neue", Arial, ui-sans-serif, system-ui, sans-serif;
-  --font-serif: Georgia, "Times New Roman", serif;
-  --font-mono: "SFMono-Regular", Consolas, "Liberation Mono", monospace;
+  --font-sans: "Segoe UI Variable", "Segoe UI", -apple-system, BlinkMacSystemFont, Roboto, "Helvetica Neue", Arial, sans-serif;
+  --font-serif: "Segoe UI Variable", "Segoe UI", -apple-system, BlinkMacSystemFont, Roboto, "Helvetica Neue", Arial, sans-serif;
+  --font-mono: "Segoe UI Variable", "Segoe UI", -apple-system, BlinkMacSystemFont, Roboto, "Helvetica Neue", Arial, sans-serif;
+  --font-weight-normal: 400;
+  --font-weight-medium: 400;
+  --font-weight-semibold: 600;
+  --font-weight-bold: 600;
+  --font-weight-extrabold: 600;
+  --font-weight-black: 600;
+  --text-status: 11px;
+  --text-status--line-height: 16px;
+  --text-meta: 12px;
+  --text-meta--line-height: 16px;
+  --text-label: 12px;
+  --text-label--line-height: 16px;
+  --text-body: 13px;
+  --text-body--line-height: 20px;
+  --text-control: 13px;
+  --text-control--line-height: 20px;
+  --text-card-title: 13px;
+  --text-card-title--line-height: 20px;
+  --text-description: 13px;
+  --text-description--line-height: 20px;
+  --text-subsection: 15px;
+  --text-subsection--line-height: 22px;
+  --text-section: 18px;
+  --text-section--line-height: 24px;
+  --text-page: 24px;
+  --text-page--line-height: 32px;
+  --text-kpi: 24px;
+  --text-kpi--line-height: 32px;
+  --text-xs: 12px;
+  --text-xs--line-height: 16px;
+  --text-sm: 13px;
+  --text-sm--line-height: 20px;
+  --text-base: 15px;
+  --text-base--line-height: 22px;
+  --text-lg: 18px;
+  --text-lg--line-height: 24px;
+  --text-xl: 18px;
+  --text-xl--line-height: 24px;
+  --text-2xl: 24px;
+  --text-2xl--line-height: 32px;
+  --text-3xl: 24px;
+  --text-3xl--line-height: 32px;
+  --text-4xl: 24px;
+  --text-4xl--line-height: 32px;
 }
 
 :root {
@@ -134,7 +178,59 @@
     @apply bg-background text-foreground;
     min-width: 320px;
     min-height: 100dvh;
+    font-family: "Segoe UI Variable", "Segoe UI", -apple-system, BlinkMacSystemFont, Roboto, "Helvetica Neue", Arial, sans-serif;
+    font-size: 13px;
+    font-weight: 400;
+    line-height: 20px;
     letter-spacing: 0;
+  }
+
+  h1 {
+    font-size: 24px !important;
+    font-weight: 600 !important;
+    line-height: 32px !important;
+    letter-spacing: 0 !important;
+  }
+
+  h2 {
+    font-size: 18px !important;
+    font-weight: 600 !important;
+    line-height: 24px !important;
+    letter-spacing: 0 !important;
+  }
+
+  h3 {
+    font-size: 15px !important;
+    font-weight: 600 !important;
+    line-height: 22px !important;
+    letter-spacing: 0 !important;
+  }
+
+  label,
+  th {
+    font-size: 12px !important;
+    font-weight: 600 !important;
+    line-height: 16px !important;
+  }
+
+  td,
+  button,
+  input,
+  select,
+  textarea {
+    font-size: 13px !important;
+    line-height: 20px !important;
+  }
+
+  input,
+  select,
+  textarea {
+    font-weight: 400;
+  }
+
+  strong,
+  b {
+    font-weight: 600;
   }
 
   button,
@@ -154,6 +250,16 @@
   ::selection {
     background: #cfe8f7;
     color: #0b3155;
+  }
+
+  .recharts-text,
+  .recharts-cartesian-axis-tick-value,
+  .recharts-legend-wrapper {
+    font-family: inherit;
+    font-size: 12px;
+    font-weight: 400;
+    line-height: 16px;
+    letter-spacing: 0;
   }
 }
 
@@ -195,27 +301,28 @@
 
 .eyebrow {
   color: var(--primary);
-  font-size: 11px;
+  font-size: 12px;
   font-weight: 600;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
+  line-height: 16px;
+  letter-spacing: 0;
 }
 
 .page-title {
   margin-top: 4px;
   font-family: inherit;
-  font-size: clamp(1.65rem, 2.5vw, 2.15rem);
-  font-weight: 650;
-  line-height: 1.2;
-  letter-spacing: -0.025em;
+  font-size: 24px;
+  font-weight: 600;
+  line-height: 32px;
+  letter-spacing: 0;
 }
 
 .page-description {
   max-width: 720px;
   margin-top: 10px;
   color: var(--muted-foreground);
-  font-size: 14px;
-  line-height: 1.65;
+  font-size: 13px;
+  font-weight: 400;
+  line-height: 20px;
 }
 
 [data-slot="card"] {
@@ -248,22 +355,24 @@
 .brand-logo__monogram {
   color: #ffffff;
   font-size: 11px;
-  font-weight: 700;
-  letter-spacing: 0.02em;
+  font-weight: 600;
+  line-height: 16px;
+  letter-spacing: 0;
 }
 
 .brand-logo__wordmark {
   overflow: hidden;
   color: inherit;
   font-size: 15px;
-  font-weight: 650;
-  letter-spacing: -0.02em;
+  font-weight: 600;
+  line-height: 22px;
+  letter-spacing: 0;
   white-space: nowrap;
 }
 
 .brand-logo__ai {
   color: #8bc8ec;
-  font-weight: 650;
+  font-weight: 600;
 }
 
 .brand-logo--compact .brand-logo__mark {
@@ -282,10 +391,10 @@ aside .brand-logo__ai {
 .sidebar-group-label {
   padding: 7px 10px 5px;
   color: #7898b2;
-  font-size: 10px;
+  font-size: 12px;
   font-weight: 600;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
+  line-height: 16px;
+  letter-spacing: 0;
 }
 
 .sidebar-nav-item {
@@ -298,7 +407,8 @@ aside .brand-logo__ai {
   border-radius: 6px;
   color: #bfd0de;
   font-size: 13px;
-  font-weight: 500;
+  font-weight: 400;
+  line-height: 20px;
   transition: background 160ms ease, color 160ms ease;
 }
 
@@ -351,6 +461,7 @@ aside .brand-logo__ai {
   color: #92abc0;
   font-size: 11px;
   font-weight: 600;
+  line-height: 16px;
   transition: color 180ms ease, background 180ms ease;
 }
 
@@ -371,14 +482,15 @@ aside .brand-logo__ai {
   color: #ffffff;
   background: #1a577e;
   font-size: 11px;
-  font-weight: 650;
+  font-weight: 600;
+  line-height: 16px;
 }
 
 .avatar-soft--small {
   width: 32px;
   height: 32px;
   border-radius: 5px;
-  font-size: 10px;
+  font-size: 11px;
 }
 
 .topbar {
@@ -410,7 +522,9 @@ aside .brand-logo__ai {
   border-radius: 6px;
   color: var(--muted-foreground);
   background: #f8fafc;
-  font-size: 12px;
+  font-size: 13px;
+  font-weight: 400;
+  line-height: 20px;
   text-align: left;
   transition: border-color 160ms ease, background 160ms ease, box-shadow 160ms ease;
 }
@@ -484,8 +598,9 @@ aside .brand-logo__ai {
   padding: 9px;
   border-radius: 5px;
   color: var(--muted-foreground);
-  font-size: 12px;
-  font-weight: 650;
+  font-size: 13px;
+  font-weight: 400;
+  line-height: 20px;
 }
 
 .user-menu__item:hover {
@@ -535,7 +650,9 @@ aside .brand-logo__ai {
   flex: 1;
   color: var(--foreground);
   background: transparent;
-  font-size: 15px;
+  font-size: 13px;
+  font-weight: 400;
+  line-height: 20px;
   outline: none;
 }
 
@@ -552,10 +669,10 @@ aside .brand-logo__ai {
 .command-section-label {
   padding: 7px 9px 5px;
   color: #8b9690;
-  font-size: 10px;
-  font-weight: 750;
-  letter-spacing: 0.09em;
-  text-transform: uppercase;
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 16px;
+  letter-spacing: 0;
 }
 
 .command-result {
@@ -585,8 +702,9 @@ aside .brand-logo__ai {
 
 .command-result__avatar {
   color: var(--foreground);
-  font-size: 10px;
-  font-weight: 800;
+  font-size: 11px;
+  font-weight: 600;
+  line-height: 16px;
 }
 
 .command-empty {
@@ -598,6 +716,8 @@ aside .brand-logo__ai {
   gap: 10px;
   color: var(--muted-foreground);
   font-size: 13px;
+  font-weight: 400;
+  line-height: 20px;
 }
 
 input,
@@ -658,8 +778,9 @@ textarea:focus {
     gap: 3px;
     border-radius: 6px;
     color: #6e7d8f;
-    font-size: 9px;
-    font-weight: 700;
+    font-size: 11px;
+    font-weight: 600;
+    line-height: 16px;
   }
 
   .mobile-dock__item--active {
@@ -702,8 +823,9 @@ textarea:focus {
     border-radius: 7px;
     color: #536478;
     background: #fff;
-    font-size: 12px;
-    font-weight: 700;
+    font-size: 13px;
+    font-weight: 400;
+    line-height: 20px;
   }
 
   .mobile-more-link--active {

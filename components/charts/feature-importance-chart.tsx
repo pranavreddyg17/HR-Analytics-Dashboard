@@ -27,7 +27,7 @@ export function FeatureImportanceChart({ data }: { data: Feature[] }) {
           axisLine={false}
           width={175}
           tickMargin={4}
-          className="text-[11px]"
+          className="text-meta"
         />
         <ChartTooltip
           cursor={{ fill: "var(--muted)", opacity: 0.4 }}

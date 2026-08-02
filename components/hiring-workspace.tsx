@@ -54,7 +54,7 @@ function Metric({ label, value, detail }: { label: string; value: string; detail
   return (
     <Card className="gap-2 p-4 shadow-none">
       <p className="text-xs font-medium text-muted-foreground">{label}</p>
-      <div><p className="text-2xl font-semibold tracking-tight tabular-nums">{value}</p><p className="mt-1 text-[11px] text-muted-foreground">{detail}</p></div>
+      <div><p className="text-2xl font-semibold tabular-nums">{value}</p><p className="mt-1 text-meta text-muted-foreground">{detail}</p></div>
     </Card>
   )
 }
@@ -72,8 +72,8 @@ function TrendChart({ data, name, color = "var(--chart-1)" }: { data: TimePoint[
         <AreaChart data={data} margin={{ left: -22, right: 8, top: 8, bottom: 2 }}>
           <defs><linearGradient id={`hiring-${name.replace(/\W/g, "")}`} x1="0" y1="0" x2="0" y2="1"><stop offset="5%" stopColor={color} stopOpacity={0.3}/><stop offset="95%" stopColor={color} stopOpacity={0}/></linearGradient></defs>
           <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="var(--border)" />
-          <XAxis dataKey="period" axisLine={false} tickLine={false} tick={{ fontSize: 10, fill: "var(--muted-foreground)" }} />
-          <YAxis allowDecimals={false} axisLine={false} tickLine={false} tick={{ fontSize: 10, fill: "var(--muted-foreground)" }} />
+          <XAxis dataKey="period" axisLine={false} tickLine={false} tick={{ fill: "var(--muted-foreground)" }} />
+          <YAxis allowDecimals={false} axisLine={false} tickLine={false} tick={{ fill: "var(--muted-foreground)" }} />
           <Tooltip content={<HiringTooltip />} />
           <Area type="monotone" dataKey="value" name={name} stroke={color} strokeWidth={2.5} fill={`url(#hiring-${name.replace(/\W/g, "")})`} />
         </AreaChart>
@@ -89,8 +89,8 @@ function BarBreakdown({ data, name, onSelect }: { data: BreakdownPoint[]; name: 
       <ResponsiveContainer width="100%" height="100%">
         <BarChart data={data.slice(0, 8)} layout="vertical" margin={{ left: 32, right: 14, top: 4, bottom: 2 }}>
           <CartesianGrid strokeDasharray="3 3" horizontal={false} stroke="var(--border)" />
-          <XAxis type="number" allowDecimals={false} axisLine={false} tickLine={false} tick={{ fontSize: 10, fill: "var(--muted-foreground)" }} />
-          <YAxis type="category" dataKey="label" width={110} axisLine={false} tickLine={false} tick={{ fontSize: 10, fill: "var(--muted-foreground)" }} />
+          <XAxis type="number" allowDecimals={false} axisLine={false} tickLine={false} tick={{ fill: "var(--muted-foreground)" }} />
+          <YAxis type="category" dataKey="label" width={110} axisLine={false} tickLine={false} tick={{ fill: "var(--muted-foreground)" }} />
           <Tooltip content={<HiringTooltip />} />
           <Bar dataKey="value" name={name} fill="var(--chart-1)" radius={[0, 6, 6, 0]} cursor={onSelect ? "pointer" : "default"} onClick={(entry) => {
             const item = entry as unknown as { label?: string; payload?: { label?: string } }
@@ -144,15 +144,15 @@ function HiringRecords({ rows }: { rows: HiringRecord[] }) {
           <table className="w-full min-w-[900px] text-left text-xs">
             <thead className="sticky top-0 z-10 bg-muted"><tr>{["Role", "Department", "Opened", "Location", "Recruitment source", "Time to hire", "Status"].map((heading) => <th key={heading} className="px-4 py-3 font-semibold text-muted-foreground">{heading}</th>)}</tr></thead>
             <tbody>{visible.map((row) => <tr key={row.id} className="border-t border-border/60 transition hover:bg-muted/25">
-              <td className="px-4 py-3"><p className="font-semibold">{row.position}</p><p className="mt-0.5 text-[10px] text-muted-foreground">{row.id}</p></td>
+              <td className="px-4 py-3"><p className="font-semibold">{row.position}</p><p className="mt-0.5 text-meta text-muted-foreground">{row.id}</p></td>
               <td className="px-4 py-3">{row.department}</td><td className="px-4 py-3 whitespace-nowrap">{formatDate(row.application_date)}</td><td className="px-4 py-3">{row.location}</td><td className="px-4 py-3">{row.hiring_source}</td>
               <td className="px-4 py-3 tabular-nums">{row.time_to_hire_days === null ? "—" : `${row.time_to_hire_days} days`}</td>
-              <td className="px-4 py-3"><span className={cn("text-[11px] font-medium", statusTone(row.recruitment_status))}>{row.recruitment_status}</span></td>
+              <td className="px-4 py-3"><span className={cn("text-meta font-medium", statusTone(row.recruitment_status))}>{row.recruitment_status}</span></td>
             </tr>)}</tbody>
           </table>
           {!visible.length && <div className="p-10 text-center text-sm text-muted-foreground">No hiring records match your search.</div>}
         </div>
-        <div className="border-t border-border bg-muted/20 px-4 py-2.5 text-[10px] text-muted-foreground">Showing {visible.length} of {rows.length} records</div>
+        <div className="border-t border-border bg-muted/20 px-4 py-2.5 text-meta text-muted-foreground">Showing {visible.length} of {rows.length} records</div>
       </CardContent>
     </Card>
   )
@@ -185,7 +185,7 @@ export function HiringWorkspace({ canRequestHiring }: { canRequestHiring: boolea
     <div className="mx-auto flex w-full max-w-[1520px] flex-col gap-5 pb-10">
       <header className="border-b border-border pb-5">
         <div className="flex flex-col gap-5 lg:flex-row lg:items-end lg:justify-between">
-          <div><h1 className="text-2xl font-semibold tracking-tight">Hiring</h1><p className="mt-1 max-w-2xl text-sm text-muted-foreground">Manage requisitions and review recruiting performance.</p></div>
+          <div><h1 className="text-2xl font-semibold">Hiring</h1><p className="mt-1 max-w-2xl text-sm text-muted-foreground">Manage requisitions and review recruiting performance.</p></div>
           <div className="flex flex-wrap gap-2"><Button nativeButton={false} variant="outline" render={<Link href="/inbox?type=hiring"/>}>Review approvals</Button>{canRequestHiring && <Button nativeButton={false} render={<Link href="/inbox?new=hiring"/>}><Plus className="size-4"/>New requisition</Button>}</div>
         </div>
         <div className="mt-3 flex flex-wrap gap-x-5 gap-y-1 text-xs text-muted-foreground"><span>{hiringStatus?.count ?? 0} records</span><span>Updated {formatWorkspaceDateTime(data.generatedAt)}</span></div>
@@ -221,7 +221,7 @@ export function HiringWorkspace({ canRequestHiring }: { canRequestHiring: boolea
 
       <div className="grid gap-4 xl:grid-cols-[1.05fr_0.95fr]">
         <Card className="shadow-none"><CardHeader><CardTitle>Active demand by department</CardTitle><CardDescription>Select a department to filter the report</CardDescription></CardHeader><CardContent><BarBreakdown data={data.hiring.pipelineByDepartment} name="Open roles" onSelect={(department) => setFilters({ ...filters, department })}/></CardContent></Card>
-        <Card className="shadow-none"><CardHeader><CardTitle>Source performance</CardTitle><CardDescription>Completed hires and average time to hire</CardDescription></CardHeader><CardContent className="divide-y divide-border">{data.hiring.sourceStats.length ? data.hiring.sourceStats.slice(0, 8).map((source, index) => <div key={source.label} className="grid grid-cols-[32px_minmax(0,1fr)_auto] items-center gap-3 py-3"><span className="text-xs tabular-nums text-muted-foreground">{index + 1}</span><div className="min-w-0"><p className="truncate text-sm font-medium">{source.label}</p><p className="text-[10px] text-muted-foreground">{source.hires} completed hire{source.hires === 1 ? "" : "s"}</p></div><div className="text-right"><p className="text-sm font-semibold tabular-nums">{source.averageDays}d</p><p className="text-[9px] text-muted-foreground">average</p></div></div>) : <EmptyChart/>}</CardContent></Card>
+        <Card className="shadow-none"><CardHeader><CardTitle>Source performance</CardTitle><CardDescription>Completed hires and average time to hire</CardDescription></CardHeader><CardContent className="divide-y divide-border">{data.hiring.sourceStats.length ? data.hiring.sourceStats.slice(0, 8).map((source, index) => <div key={source.label} className="grid grid-cols-[32px_minmax(0,1fr)_auto] items-center gap-3 py-3"><span className="text-xs tabular-nums text-muted-foreground">{index + 1}</span><div className="min-w-0"><p className="truncate text-sm font-medium">{source.label}</p><p className="text-meta text-muted-foreground">{source.hires} completed hire{source.hires === 1 ? "" : "s"}</p></div><div className="text-right"><p className="text-sm font-semibold tabular-nums">{source.averageDays}d</p><p className="text-meta text-muted-foreground">average</p></div></div>) : <EmptyChart/>}</CardContent></Card>
       </div>
 
       <div className="grid gap-4 xl:grid-cols-2">
@@ -236,5 +236,5 @@ export function HiringWorkspace({ canRequestHiring }: { canRequestHiring: boolea
 }
 
 function Filter({ label, children }: { label: string; children: React.ReactNode }) {
-  return <label className="text-[11px] font-medium text-muted-foreground">{label}<span className="mt-1 block [&_input]:h-9 [&_input]:w-full [&_input]:rounded-md [&_input]:border [&_input]:border-border [&_input]:bg-background [&_input]:px-3 [&_input]:text-xs [&_input]:font-normal [&_select]:h-9 [&_select]:w-full [&_select]:rounded-md [&_select]:border [&_select]:border-border [&_select]:bg-background [&_select]:px-3 [&_select]:text-xs [&_select]:font-normal">{children}</span></label>
+  return <label className="text-meta font-medium text-muted-foreground">{label}<span className="mt-1 block [&_input]:h-9 [&_input]:w-full [&_input]:rounded-md [&_input]:border [&_input]:border-border [&_input]:bg-background [&_input]:px-3 [&_input]:text-xs [&_input]:font-normal [&_select]:h-9 [&_select]:w-full [&_select]:rounded-md [&_select]:border [&_select]:border-border [&_select]:bg-background [&_select]:px-3 [&_select]:text-xs [&_select]:font-normal">{children}</span></label>
 }

@@ -58,7 +58,7 @@ export function WorkflowCreator({ actor, people, initialType, onCreated }: { act
           return (
             <button key={card.type} type="button" disabled={!card.enabled} onClick={() => { setError(""); setType(card.type) }} className="rounded-lg border border-border bg-card p-4 text-left transition-colors hover:bg-muted/25 disabled:cursor-not-allowed disabled:opacity-45">
               <span className="block text-sm font-semibold">{card.title}</span>
-              <span className="mt-0.5 block text-[11px] leading-relaxed text-muted-foreground">{card.detail}</span>
+              <span className="mt-0.5 block text-meta text-muted-foreground">{card.detail}</span>
             </button>
           )
         })}
@@ -69,7 +69,7 @@ export function WorkflowCreator({ actor, people, initialType, onCreated }: { act
           <button type="button" aria-label="Close workflow form" className="absolute inset-0 bg-slate-950/40" onClick={() => !saving && setType(null)} />
           <form onSubmit={submit} className="relative max-h-[90dvh] w-full max-w-lg overflow-y-auto rounded-lg border border-border bg-background p-6 shadow-none">
             <button type="button" aria-label="Close" onClick={() => setType(null)} className="absolute right-5 top-5 text-muted-foreground hover:text-foreground"><X className="size-4" /></button>
-            <h3 className="text-xl font-semibold tracking-tight">{type === "leave" ? "Request leave" : type === "hiring" ? "Request a new position" : "Assign training"}</h3>
+            <h3 className="text-xl font-semibold">{type === "leave" ? "Request leave" : type === "hiring" ? "Request a new position" : "Assign training"}</h3>
             <p className="mt-1 text-sm text-muted-foreground">{type === "leave" ? "Submit dates and leave details for approval." : type === "hiring" ? "Submit a requisition for HR review." : "Create an employee training assignment."}</p>
 
             <div className="mt-6 space-y-4">
@@ -164,10 +164,10 @@ export function SelectEmployee({ value, people, onChange }: { value: string; peo
                 onClick={() => { onChange(person.employee_id); setOpen(false); setQuery("") }}
                 className="flex w-full items-center gap-3 rounded-md px-3 py-2.5 text-left transition hover:bg-muted focus-visible:bg-muted focus-visible:outline-none"
               >
-                <span className="flex size-8 shrink-0 items-center justify-center rounded-md bg-secondary text-[11px] font-semibold text-secondary-foreground">{person.initials}</span>
+                <span className="flex size-8 shrink-0 items-center justify-center rounded-md bg-secondary text-meta font-semibold text-secondary-foreground">{person.initials}</span>
                 <span className="min-w-0 flex-1">
                   <span className="truncate text-sm font-medium">{person.display_name}</span>
-                  <span className="block truncate text-[11px] text-muted-foreground">{person.employee_id} · {person.job_title} · {person.department}</span>
+                  <span className="block truncate text-meta text-muted-foreground">{person.employee_id} · {person.job_title} · {person.department}</span>
                 </span>
                 {person.employee_id === value && <Check className="size-4 shrink-0 text-primary" />}
               </button>

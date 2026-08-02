@@ -136,8 +136,8 @@ export function DataManager() {
   return <div className="mx-auto flex w-full max-w-[1520px] flex-col gap-5 pb-10">
     <header className="flex flex-col gap-4 border-b border-border pb-5 sm:flex-row sm:items-end sm:justify-between">
       <div>
-        <h1 className="text-2xl font-semibold tracking-[-0.02em]">Import / Export Data</h1>
-        <p className="mt-1 max-w-2xl text-sm leading-6 text-muted-foreground">Import HR records, download templates, and connect reporting feeds.</p>
+        <h1 className="text-2xl font-semibold">Import / Export Data</h1>
+        <p className="mt-1 max-w-2xl text-sm text-muted-foreground">Import HR records, download templates, and connect reporting feeds.</p>
       </div>
       <Button type="button" variant="outline" onClick={() => void refreshStatus()} disabled={statusBusy}>
         <RefreshCw className={cn("size-4", statusBusy && "animate-spin")} />
@@ -149,8 +149,8 @@ export function DataManager() {
       <div className="flex flex-col gap-3 border-b border-border px-5 py-4 sm:flex-row sm:items-center sm:justify-between">
         <div><CardTitle>Data coverage</CardTitle><CardDescription className="mt-1">Current records available to dashboards and reports</CardDescription></div>
         <div className="flex gap-5 text-sm">
-          <div><span className="block text-[10px] text-muted-foreground">Total records</span><b className="font-semibold tabular-nums">{totalRows.toLocaleString()}</b></div>
-          <div><span className="block text-[10px] text-muted-foreground">Data domains</span><b className="font-semibold tabular-nums">{hrDomains.length}</b></div>
+          <div><span className="block text-meta text-muted-foreground">Total records</span><b className="font-semibold tabular-nums">{totalRows.toLocaleString()}</b></div>
+          <div><span className="block text-meta text-muted-foreground">Data domains</span><b className="font-semibold tabular-nums">{hrDomains.length}</b></div>
         </div>
       </div>
       <div className="overflow-x-auto">
@@ -176,8 +176,8 @@ export function DataManager() {
           <div className="rounded-md border border-dashed border-input p-6">
             <label className="flex cursor-pointer flex-col items-center gap-2 text-center"><span className="text-sm font-medium">Choose a CSV file</span><span className="text-xs text-muted-foreground">Maximum 5,000 rows</span><input type="file" accept=".csv,text/csv" className="sr-only" onChange={(event)=>void loadFile(event.target.files?.[0])}/></label>
           </div>
-          <div className="rounded-md bg-muted/40 p-3"><p className="text-xs font-medium">Required columns</p><p className="mt-1 font-mono text-[11px] leading-relaxed text-muted-foreground">{importFields[domain].join(", ")}</p></div>
-          {rows.length > 0 && <div className="rounded-md border border-border p-3"><div className="flex items-center gap-2"><span className="text-sm font-medium">{filename}</span><span className="ml-auto font-mono text-xs">{rows.length} rows</span></div><div className="mt-3 overflow-x-auto"><table className="min-w-full text-left text-[11px]"><thead><tr>{Object.keys(rows[0]).slice(0,6).map((key)=><th key={key} className="border-b px-2 py-1.5 text-muted-foreground">{key}</th>)}</tr></thead><tbody>{rows.slice(0,3).map((row,index)=><tr key={index}>{Object.keys(rows[0]).slice(0,6).map((key)=><td key={key} className="max-w-36 truncate border-b border-border/50 px-2 py-1.5">{row[key]}</td>)}</tr>)}</tbody></table></div></div>}
+          <div className="rounded-md bg-muted/40 p-3"><p className="text-xs font-medium">Required columns</p><p className="mt-1 font-mono text-meta text-muted-foreground">{importFields[domain].join(", ")}</p></div>
+          {rows.length > 0 && <div className="rounded-md border border-border p-3"><div className="flex items-center gap-2"><span className="text-sm font-medium">{filename}</span><span className="ml-auto font-mono text-xs">{rows.length} rows</span></div><div className="mt-3 overflow-x-auto"><table className="min-w-full text-left text-meta"><thead><tr>{Object.keys(rows[0]).slice(0,6).map((key)=><th key={key} className="border-b px-2 py-1.5 text-muted-foreground">{key}</th>)}</tr></thead><tbody>{rows.slice(0,3).map((row,index)=><tr key={index}>{Object.keys(rows[0]).slice(0,6).map((key)=><td key={key} className="max-w-36 truncate border-b border-border/50 px-2 py-1.5">{row[key]}</td>)}</tr>)}</tbody></table></div></div>}
           <label className="flex items-start gap-2 text-sm"><input type="checkbox" checked={replace} onChange={(event)=>setReplace(event.target.checked)} className="mt-1 accent-primary"/><span><b>Replace this domain</b><span className="block text-xs text-muted-foreground">Recommended for full HRIS refresh files. Turn off to upsert by ID while preserving other imported rows.</span></span></label>
           {error && <pre className="max-h-40 overflow-auto whitespace-pre-wrap rounded-md bg-destructive/10 p-3 text-xs text-destructive">{error}</pre>}
           {message && <p className="rounded-md bg-success/10 p-3 text-sm text-success">{message}</p>}
@@ -203,7 +203,7 @@ export function DataManager() {
               >
                 <span className="min-w-0 flex-1">
                   <span className="block text-sm font-medium capitalize">{item}</span>
-                  <span className="mt-0.5 block truncate font-mono text-[10px] text-muted-foreground">/api/v1/power-bi/{item}</span>
+                  <span className="mt-0.5 block truncate font-mono text-meta text-muted-foreground">/api/v1/power-bi/{item}</span>
                 </span>
                 <span className={cn("flex items-center gap-1.5 text-xs font-medium", copied ? "text-success" : "text-muted-foreground group-hover:text-primary")}>
                   {copied ? <Check className="size-3.5" /> : <Clipboard className="size-3.5" />}
@@ -212,7 +212,7 @@ export function DataManager() {
               </button>
             )
           })}
-          <p aria-live="polite" className={cn("pt-2 text-[11px] leading-5", copyError ? "text-destructive" : "text-muted-foreground")}>
+          <p aria-live="polite" className={cn("pt-2 text-meta", copyError ? "text-destructive" : "text-muted-foreground")}>
             {copyError || "Use an authenticated Power BI Web connector or gateway for scheduled refreshes."}
           </p>
         </CardContent>

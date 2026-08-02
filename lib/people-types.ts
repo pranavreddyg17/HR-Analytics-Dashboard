@@ -67,6 +67,20 @@ export type InboxItem = {
   dueDate: string | null
   status: string
   priority: "high" | "medium" | "low"
+  owner: string
+  ownerEmail: string | null
+  nextAction: string
+  attentionReason: string
+  completionEffect: string
+  assignedTo: "hr" | "manager" | "employee"
+  requiresDecision: boolean
+  isCompleted: boolean
+  slaStatus: "overdue" | "due_today" | "due_soon" | "on_track" | "complete" | "unscheduled"
+  timeInStatusDays: number
+  createdAt: string
+  completedAt: string | null
+  completionNotes: string | null
+  blockedReason: string | null
   actionable: boolean
   actions?: Array<"approve" | "reject" | "complete">
 }

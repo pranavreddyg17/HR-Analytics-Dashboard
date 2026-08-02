@@ -229,11 +229,70 @@ export async function setPersonArchived(employeeId: string, archived: boolean, a
 
 export async function listInboxItems(actor?: RequestActor): Promise<InboxItem[]> {
   const database = await databaseOrThrow()
-  type WorkflowPerson = { first_name?: string; last_name?: string; preferred_name?: string | null; work_email?: string | null; manager_id?: string | null; requested_by_email?: string | null; details_json?: string | null }
+  type WorkflowPerson = {
+    first_name?: string
+    last_name?: string
+    preferred_name?: string | null
+    work_email?: string | null
+    manager_id?: string | null
+    manager_email?: string | null
+    owner_name?: string | null
+    requested_by_email?: string | null
+    details_json?: string | null
+    workflow_status?: string | null
+    workflow_priority?: string | null
+    owner_email?: string | null
+    due_at?: string | null
+    next_action?: string | null
+    assigned_at?: string | null
+    blocked_reason?: string | null
+    completed_at?: string | null
+    completion_notes?: string | null
+    workflow_created_at?: string | null
+    workflow_updated_at?: string | null
+    updated_at?: string
+  }
+  const workflowColumns = `
+    w.requested_by_email,
+    w.details_json,
+    w.status AS workflow_status,
+    w.priority AS workflow_priority,
+    w.owner_email,
+    w.due_at,
+    w.next_action,
+    w.assigned_at,
+    w.blocked_reason,
+    w.completed_at,
+    w.completion_notes,
+    w.created_at AS workflow_created_at,
+    w.updated_at AS workflow_updated_at,
+    COALESCE(NULLIF(au.display_name, ''), NULLIF(TRIM(COALESCE(oe.preferred_name, oe.first_name, '') || ' ' || COALESCE(oe.last_name, '')), '')) AS owner_name`
   const [leave, hiring, training, actorEmployee] = await Promise.all([
-    database.prepare("SELECT l.*, e.first_name, e.last_name, e.preferred_name, e.work_email, e.manager_id, w.requested_by_email, w.details_json FROM leave_records l LEFT JOIN employees e ON e.employee_id=l.employee_id LEFT JOIN workflow_requests w ON w.id=l.id WHERE LOWER(l.approval_status)='pending' AND LOWER(l.data_source) <> 'demo' ORDER BY l.start_date LIMIT 100").all<LeaveRecord & WorkflowPerson>(),
-    database.prepare("SELECT h.*, w.requested_by_email, w.details_json FROM hiring_records h LEFT JOIN workflow_requests w ON w.id=h.id WHERE LOWER(h.recruitment_status) IN ('requested','offer') AND LOWER(h.data_source) <> 'demo' ORDER BY h.application_date LIMIT 100").all<Record<string, unknown> & WorkflowPerson>(),
-    database.prepare("SELECT t.*, e.first_name, e.last_name, e.preferred_name, e.work_email, e.manager_id, w.requested_by_email, w.details_json FROM training_records t LEFT JOIN employees e ON e.employee_id=t.employee_id LEFT JOIN workflow_requests w ON w.id=t.id WHERE LOWER(t.completion_status) <> 'completed' AND LOWER(t.data_source) <> 'demo' LIMIT 100").all<TrainingRecord & WorkflowPerson>(),
+    database.prepare(`SELECT l.*, e.first_name, e.last_name, e.preferred_name, e.work_email, e.manager_id, m.work_email AS manager_email, ${workflowColumns}
+      FROM leave_records l
+      JOIN workflow_requests w ON w.id=l.id AND w.type='leave'
+      LEFT JOIN employees e ON e.employee_id=l.employee_id
+      LEFT JOIN employees m ON m.employee_id=e.manager_id
+      LEFT JOIN app_users au ON LOWER(au.email)=LOWER(w.owner_email)
+      LEFT JOIN employees oe ON LOWER(oe.work_email)=LOWER(w.owner_email) AND oe.archived_at IS NULL
+      WHERE LOWER(l.data_source) <> 'demo'
+      ORDER BY COALESCE(w.completed_at, w.updated_at) DESC LIMIT 160`).all<LeaveRecord & WorkflowPerson>(),
+    database.prepare(`SELECT h.*, ${workflowColumns}
+      FROM hiring_records h
+      JOIN workflow_requests w ON w.id=h.id AND w.type='hiring'
+      LEFT JOIN app_users au ON LOWER(au.email)=LOWER(w.owner_email)
+      LEFT JOIN employees oe ON LOWER(oe.work_email)=LOWER(w.owner_email) AND oe.archived_at IS NULL
+      WHERE LOWER(h.data_source) <> 'demo'
+      ORDER BY COALESCE(w.completed_at, w.updated_at) DESC LIMIT 160`).all<Record<string, unknown> & WorkflowPerson>(),
+    database.prepare(`SELECT t.*, e.first_name, e.last_name, e.preferred_name, e.work_email, e.manager_id, m.work_email AS manager_email, ${workflowColumns}
+      FROM training_records t
+      JOIN workflow_requests w ON w.id=t.id AND w.type='training'
+      LEFT JOIN employees e ON e.employee_id=t.employee_id
+      LEFT JOIN employees m ON m.employee_id=e.manager_id
+      LEFT JOIN app_users au ON LOWER(au.email)=LOWER(w.owner_email)
+      LEFT JOIN employees oe ON LOWER(oe.work_email)=LOWER(w.owner_email) AND oe.archived_at IS NULL
+      WHERE LOWER(t.data_source) <> 'demo'
+      ORDER BY COALESCE(w.completed_at, w.updated_at) DESC LIMIT 160`).all<TrainingRecord & WorkflowPerson>(),
     actor ? database.prepare("SELECT employee_id FROM employees WHERE LOWER(work_email)=LOWER(?) AND archived_at IS NULL").bind(actor.email).first<{ employee_id: string }>() : Promise.resolve(null),
   ])
   const personName = (row: { first_name?: string; last_name?: string; preferred_name?: string | null; employee_id: string }) => `${row.preferred_name || row.first_name || row.employee_id} ${row.last_name || ""}`.trim()
@@ -243,23 +302,96 @@ export async function listInboxItems(actor?: RequestActor): Promise<InboxItem[]>
   const visibleLeave = (leave.results ?? []).filter((row) => isPeopleTeam || row.work_email?.toLowerCase() === ownEmail || actor?.role === "manager" && row.manager_id === employeeId)
   const visibleHiring = (hiring.results ?? []).filter((row) => isPeopleTeam || actor?.role === "manager" && String(row.requested_by_email ?? "").toLowerCase() === ownEmail)
   const visibleTraining = (training.results ?? []).filter((row) => isPeopleTeam || row.work_email?.toLowerCase() === ownEmail || actor?.role === "manager" && row.manager_id === employeeId)
-  const workflowDate = (row: WorkflowPerson): string | null => {
-    try { return String(JSON.parse(row.details_json ?? "{}").dueDate ?? "") || null } catch { return null }
+  const detailValue = (row: WorkflowPerson, field: string): string | null => {
+    try { return String((JSON.parse(row.details_json ?? "{}") as Record<string, unknown>)[field] ?? "") || null } catch { return null }
+  }
+  const nowIso = new Date().toISOString()
+  const today = nowIso.slice(0, 10)
+  const dateAfterToday = new Date()
+  dateAfterToday.setUTCDate(dateAfterToday.getUTCDate() + 3)
+  const dueSoonLimit = dateAfterToday.toISOString().slice(0, 10)
+  const daysSince = (value: string | null | undefined): number => {
+    if (!value) return 0
+    const timestamp = new Date(value.includes("T") ? value : `${value.replace(" ", "T")}Z`).getTime()
+    return Number.isFinite(timestamp) ? Math.max(0, Math.floor((Date.now() - timestamp) / 86_400_000)) : 0
+  }
+  const slaStatus = (dueDate: string | null, completed: boolean): InboxItem["slaStatus"] => {
+    if (completed) return "complete"
+    const normalized = dueDate?.slice(0, 10) ?? null
+    if (!normalized) return "unscheduled"
+    if (normalized < today) return "overdue"
+    if (normalized === today) return "due_today"
+    if (normalized <= dueSoonLimit) return "due_soon"
+    return "on_track"
+  }
+  const ownerLabel = (row: WorkflowPerson, fallback: string): string => {
+    if (row.owner_name) return row.owner_name
+    const email = row.owner_email?.toLowerCase()
+    if (email === "people-ops@laidbackhr.cloud") return "People Operations"
+    if (email === "talent@laidbackhr.cloud") return "Talent Acquisition"
+    if (email === "learning@laidbackhr.cloud") return "Learning team"
+    return row.owner_email || fallback
+  }
+  const priority = (row: WorkflowPerson, sla: InboxItem["slaStatus"]): InboxItem["priority"] => {
+    if (sla === "complete") return "low"
+    if (sla === "overdue" || sla === "due_today") return "high"
+    return row.workflow_priority === "high" || row.workflow_priority === "low" ? row.workflow_priority : "medium"
   }
   return [
     ...visibleLeave.map((row): InboxItem => {
-      const canDecide = Boolean(row.requested_by_email && actor && row.work_email?.toLowerCase() !== ownEmail && (isPeopleTeam || actor.role === "manager" && row.manager_id === employeeId))
-      return { id: row.id, type: "leave", title: `${row.leave_type} leave request`, detail: `${row.leave_days} days · ${row.start_date} to ${row.end_date}`, person: personName(row), employeeId: row.employee_id, dueDate: row.start_date, status: row.approval_status, priority: row.start_date <= new Date().toISOString().slice(0, 10) ? "high" : "medium", actionable: canDecide, actions: canDecide ? ["reject", "approve"] : [] }
+      const isCompleted = Boolean(row.completed_at) || ["approved", "rejected"].includes(row.approval_status.toLowerCase())
+      const dueDate = row.due_at?.slice(0, 10) || detailValue(row, "decisionDueDate") || row.start_date
+      const sla = slaStatus(dueDate, isCompleted)
+      const canDecide = Boolean(!isCompleted && row.requested_by_email && actor && row.work_email?.toLowerCase() !== ownEmail && (isPeopleTeam || actor.role === "manager" && row.manager_id === employeeId))
+      const attentionReason = row.blocked_reason || (sla === "overdue" ? "The decision deadline has passed." : `A decision is required before leave begins on ${row.start_date}.`)
+      return {
+        id: row.id, type: "leave", title: `${row.leave_type} leave request`, detail: `${row.leave_days} days · ${row.start_date} to ${row.end_date}`, person: personName(row), employeeId: row.employee_id,
+        dueDate, status: row.approval_status, priority: priority(row, sla), owner: ownerLabel(row, "People Operations"), ownerEmail: row.owner_email ?? null,
+        nextAction: row.next_action || (isCompleted ? "No further action." : "Approve or decline the request."), attentionReason,
+        completionEffect: "The decision is recorded and the employee leave schedule is updated.", assignedTo: row.manager_email && row.owner_email?.toLowerCase() === row.manager_email.toLowerCase() ? "manager" : "hr",
+        requiresDecision: !isCompleted, isCompleted, slaStatus: sla, timeInStatusDays: daysSince(row.assigned_at || row.workflow_updated_at || row.workflow_created_at),
+        createdAt: row.workflow_created_at || row.updated_at || nowIso, completedAt: row.completed_at ?? null, completionNotes: row.completion_notes ?? null, blockedReason: row.blocked_reason ?? null,
+        actionable: canDecide, actions: canDecide ? ["reject", "approve"] : [],
+      }
     }),
     ...visibleHiring.map((row): InboxItem => {
-      const canDecide = Boolean(row.requested_by_email && actor && ["admin", "hr"].includes(actor.role) && String(row.recruitment_status).toLowerCase() === "requested")
-      return { id: String(row.id), type: "hiring", title: `${row.recruitment_status}: ${row.position}`, detail: `${row.department} · ${row.location} · requested by ${row.requested_by_email ?? "HR"}`, person: null, employeeId: null, dueDate: String(row.application_date), status: String(row.recruitment_status), priority: String(row.recruitment_status).toLowerCase() === "offer" ? "high" : "medium", actionable: canDecide, actions: canDecide ? ["reject", "approve"] : [] }
+      const status = String(row.recruitment_status)
+      const isCompleted = Boolean(row.completed_at) || ["closed", "rejected", "hired"].includes(status.toLowerCase())
+      const dueDate = row.due_at?.slice(0, 10) || String(row.application_date)
+      const sla = slaStatus(dueDate, isCompleted)
+      const requiresDecision = status.toLowerCase() === "requested"
+      const canDecide = Boolean(!isCompleted && row.requested_by_email && actor && ["admin", "hr"].includes(actor.role) && requiresDecision)
+      const attentionReason = row.blocked_reason || (sla === "overdue" ? "No required update was recorded before the follow-up deadline." : requiresDecision ? "HR approval is required before recruiting begins." : status.toLowerCase() === "offer" ? "The offer needs a recorded response or owner follow-up." : "The requisition remains open and needs a current progress update.")
+      return {
+        id: String(row.id), type: "hiring", title: `${status}: ${row.position}`, detail: `${row.department} · ${row.location} · requested by ${row.requested_by_email ?? "HR"}`, person: null, employeeId: null,
+        dueDate, status, priority: priority(row, sla), owner: ownerLabel(row, "Talent Acquisition"), ownerEmail: row.owner_email ?? null,
+        nextAction: row.next_action || (requiresDecision ? "Approve or decline the requisition." : "Record the next recruiting update."), attentionReason,
+        completionEffect: requiresDecision ? "Approval opens the requisition; rejection closes the request." : "The recruiting record and its next follow-up date are updated.",
+        assignedTo: "hr", requiresDecision, isCompleted, slaStatus: sla, timeInStatusDays: daysSince(row.assigned_at || row.workflow_updated_at || row.workflow_created_at),
+        createdAt: row.workflow_created_at || String(row.updated_at || nowIso), completedAt: row.completed_at ?? null, completionNotes: row.completion_notes ?? null, blockedReason: row.blocked_reason ?? null,
+        actionable: canDecide, actions: canDecide ? ["reject", "approve"] : [],
+      }
     }),
     ...visibleTraining.map((row): InboxItem => {
-      const canComplete = Boolean(row.requested_by_email && actor && (isPeopleTeam || row.work_email?.toLowerCase() === ownEmail))
-      return { id: row.id, type: "training", title: row.training_program, detail: `${row.training_hours} hours · assigned training`, person: personName(row), employeeId: row.employee_id, dueDate: workflowDate(row) ?? row.completion_date, status: row.completion_status, priority: workflowDate(row) && workflowDate(row)! < new Date().toISOString().slice(0, 10) ? "high" : "medium", actionable: canComplete, actions: canComplete ? ["complete"] : [] }
+      const isCompleted = Boolean(row.completed_at) || row.completion_status.toLowerCase() === "completed"
+      const dueDate = row.due_at?.slice(0, 10) || detailValue(row, "dueDate") || row.completion_date
+      const sla = slaStatus(dueDate, isCompleted)
+      const canComplete = Boolean(!isCompleted && row.requested_by_email && actor && (isPeopleTeam || row.work_email?.toLowerCase() === ownEmail))
+      const attentionReason = row.blocked_reason || (sla === "overdue" ? "The assignment is past its recorded due date." : "The assignment remains incomplete.")
+      return {
+        id: row.id, type: "training", title: row.training_program, detail: `${row.training_hours} hours · assigned training`, person: personName(row), employeeId: row.employee_id,
+        dueDate, status: row.completion_status, priority: priority(row, sla), owner: ownerLabel(row, personName(row)), ownerEmail: row.owner_email ?? null,
+        nextAction: row.next_action || (isCompleted ? "No further action." : "Complete the assigned course and record completion."), attentionReason,
+        completionEffect: "Completion is added to the employee timeline and removed from the open compliance queue.", assignedTo: "employee", requiresDecision: false,
+        isCompleted, slaStatus: sla, timeInStatusDays: daysSince(row.assigned_at || row.workflow_updated_at || row.workflow_created_at),
+        createdAt: row.workflow_created_at || row.updated_at || nowIso, completedAt: row.completed_at ?? null, completionNotes: row.completion_notes ?? null, blockedReason: row.blocked_reason ?? null,
+        actionable: canComplete, actions: canComplete ? ["complete"] : [],
+      }
     }),
-  ].sort((left, right) => ({ high: 0, medium: 1, low: 2 })[left.priority] - ({ high: 0, medium: 1, low: 2 })[right.priority])
+  ].sort((left, right) => Number(left.isCompleted) - Number(right.isCompleted)
+    || ({ high: 0, medium: 1, low: 2 })[left.priority] - ({ high: 0, medium: 1, low: 2 })[right.priority]
+    || (left.dueDate ?? "9999-12-31").localeCompare(right.dueDate ?? "9999-12-31")
+    || right.createdAt.localeCompare(left.createdAt))
 }
 
 export async function decideLeave(leaveId: string, decision: "Approved" | "Rejected", actor: RequestActor): Promise<void> {
@@ -277,7 +409,8 @@ export async function decideLeave(leaveId: string, decision: "Approved" | "Rejec
   }
   await database.batch([
     database.prepare("UPDATE leave_records SET approval_status=?, updated_at=CURRENT_TIMESTAMP WHERE id=?").bind(decision, leaveId),
-    database.prepare("UPDATE workflow_requests SET status=?, resolved_by_email=?, resolved_at=CURRENT_TIMESTAMP, updated_at=CURRENT_TIMESTAMP WHERE id=? AND type='leave'").bind(decision, actor.email, leaveId),
+    database.prepare("UPDATE workflow_requests SET status=?, next_action='No further action.', assigned_at=CURRENT_TIMESTAMP, resolved_by_email=?, resolved_at=CURRENT_TIMESTAMP, completed_at=CURRENT_TIMESTAMP, completion_notes=?, updated_at=CURRENT_TIMESTAMP WHERE id=? AND type='leave'")
+      .bind(decision, actor.email, `${actor.displayName} ${decision.toLowerCase()} the leave request.`, leaveId),
     database.prepare("INSERT INTO employee_activity(id, employee_id, event_type, summary, changes_json, actor_email, created_at) VALUES (?, ?, 'leave_decision', ?, ?, ?, CURRENT_TIMESTAMP)")
       .bind(crypto.randomUUID(), leave.employee_id, `${actor.displayName} ${decision.toLowerCase()} a ${leave.leave_type} leave request`, JSON.stringify({ leaveId, from: leave.approval_status, to: decision }), actor.email),
   ])

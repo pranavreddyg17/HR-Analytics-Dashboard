@@ -158,12 +158,12 @@ export function AgentWorkflows({ canPrepare }: { canPrepare: boolean }) {
             <CalendarDays className="size-4 text-primary" />
             <h3 className="text-sm font-semibold">Scheduling agent</h3>
           </div>
-          <p className="mt-2 text-xs leading-5 text-muted-foreground">Describe the participants and timing. The agent resolves employees from operational records and prepares a review before any invitation is sent.</p>
+          <p className="mt-2 text-xs text-muted-foreground">Describe the participants and timing. The agent resolves employees from operational records and prepares a review before any invitation is sent.</p>
 
           <div className="mt-4 flex items-center justify-between rounded-md border border-border bg-background px-3 py-2.5">
             <div>
               <p className="text-xs font-medium">Google Calendar</p>
-              <p className="mt-0.5 text-[10px] text-muted-foreground">
+              <p className="mt-0.5 text-meta text-muted-foreground">
                 {calendarConnection === "loading" ? "Checking connection" : calendarConnection === "connected" ? "Connected for event creation" : "Not connected"}
               </p>
             </div>
@@ -178,7 +178,7 @@ export function AgentWorkflows({ canPrepare }: { canPrepare: boolean }) {
               onChange={(event) => setPrompt(event.target.value)}
               rows={5}
               placeholder="Schedule a career progression review with Pranav G next Friday at 10am for 30 minutes."
-              className="mt-1.5 w-full resize-y rounded-md border border-border bg-background px-3 py-2.5 text-sm leading-6 outline-none focus:ring-2 focus:ring-ring/30"
+              className="mt-1.5 w-full resize-y rounded-md border border-border bg-background px-3 py-2.5 text-sm outline-none focus:ring-2 focus:ring-ring/30"
             />
             <Button type="submit" className="mt-3" disabled={!canPrepare || prompt.trim().length < 10 || planning}>
               {planning ? <LoaderCircle className="size-4 animate-spin" /> : <CalendarDays className="size-4" />}
@@ -187,10 +187,10 @@ export function AgentWorkflows({ canPrepare }: { canPrepare: boolean }) {
           </form>
 
           <div className="mt-5 border-t border-border pt-4">
-            <p className="text-[10px] font-medium uppercase tracking-[0.08em] text-muted-foreground">Examples</p>
+            <p className="text-meta font-medium text-muted-foreground">Examples</p>
             <div className="mt-2 space-y-1">
               {examples.map((example) => (
-                <button key={example} type="button" onClick={() => void createPlan(example)} className="block w-full rounded-md px-2 py-2 text-left text-xs leading-5 text-muted-foreground hover:bg-muted hover:text-foreground">
+                <button key={example} type="button" onClick={() => void createPlan(example)} className="block w-full rounded-md px-2 py-2 text-left text-xs text-muted-foreground hover:bg-muted hover:text-foreground">
                   {example}
                 </button>
               ))}
@@ -204,7 +204,7 @@ export function AgentWorkflows({ canPrepare }: { canPrepare: boolean }) {
             <div className="flex h-full min-h-[360px] flex-col items-center justify-center px-6 text-center">
               <CalendarDays className="size-7 text-muted-foreground" />
               <h3 className="mt-3 text-sm font-semibold">No meeting plan yet</h3>
-              <p className="mt-1 max-w-sm text-xs leading-5 text-muted-foreground">The agent will show matched employees, source evidence, timing, and agenda here for confirmation.</p>
+              <p className="mt-1 max-w-sm text-xs text-muted-foreground">The agent will show matched employees, source evidence, timing, and agenda here for confirmation.</p>
             </div>
           )}
           {planning && <div className="flex min-h-[360px] items-center justify-center gap-2 text-sm text-muted-foreground"><LoaderCircle className="size-4 animate-spin" />Reviewing employee and promotion records</div>}
@@ -212,8 +212,8 @@ export function AgentWorkflows({ canPrepare }: { canPrepare: boolean }) {
             <div>
               <div className="flex flex-col gap-3 border-b border-border pb-4 sm:flex-row sm:items-start sm:justify-between">
                 <div>
-                  <p className="text-[10px] font-medium uppercase tracking-[0.08em] text-muted-foreground">Review before sending</p>
-                  <h3 className="mt-1 text-lg font-semibold tracking-tight">{plan.title}</h3>
+                  <p className="text-meta font-medium text-muted-foreground">Review before sending</p>
+                  <h3 className="mt-1 text-lg font-semibold">{plan.title}</h3>
                   <p className="mt-1 text-xs text-muted-foreground">{dateTimeLabel(plan.start)}–{dateTimeLabel(plan.end).split(", ").at(-1)} · {plan.timezone}</p>
                 </div>
                 <span className="text-xs font-medium text-muted-foreground">{plan.employees.length} attendee{plan.employees.length === 1 ? "" : "s"}</span>
@@ -228,7 +228,7 @@ export function AgentWorkflows({ canPrepare }: { canPrepare: boolean }) {
                         <UserRound className="mt-0.5 size-4 shrink-0 text-muted-foreground" />
                         <div className="min-w-0">
                           <p className="truncate text-xs font-medium">{employee.name}</p>
-                          <p className="mt-0.5 truncate text-[10px] text-muted-foreground">{employee.jobTitle} · {employee.department} · {employee.employeeId}</p>
+                          <p className="mt-0.5 truncate text-meta text-muted-foreground">{employee.jobTitle} · {employee.department} · {employee.employeeId}</p>
                         </div>
                       </div>
                     ))}
@@ -236,10 +236,10 @@ export function AgentWorkflows({ canPrepare }: { canPrepare: boolean }) {
                 </div>
                 <div>
                   <p className="text-xs font-semibold">Agenda</p>
-                  <p className="mt-2 text-xs leading-5 text-muted-foreground">{plan.agenda}</p>
+                  <p className="mt-2 text-xs text-muted-foreground">{plan.agenda}</p>
                   <div className="mt-4 rounded-md bg-muted/45 p-3">
-                    <p className="text-[10px] font-medium text-foreground">Evidence used</p>
-                    <p className="mt-1 text-[11px] leading-5 text-muted-foreground">{plan.evidence}</p>
+                    <p className="text-meta font-medium text-foreground">Evidence used</p>
+                    <p className="mt-1 text-meta text-muted-foreground">{plan.evidence}</p>
                   </div>
                 </div>
               </div>
@@ -251,7 +251,7 @@ export function AgentWorkflows({ canPrepare }: { canPrepare: boolean }) {
               {notice && <div className="mb-3 flex items-center gap-2 rounded-md border border-emerald-200 bg-emerald-50 px-3 py-2 text-xs text-emerald-900"><Check className="size-4" />{notice}</div>}
 
               <div className="flex flex-wrap items-center justify-between gap-3 border-t border-border pt-4">
-                <p className="max-w-md text-[10px] leading-4 text-muted-foreground">Creating the event sends Google Calendar invitations to the listed employees. Confirm the participants and agenda first.</p>
+                <p className="max-w-md text-meta text-muted-foreground">Creating the event sends Google Calendar invitations to the listed employees. Confirm the participants and agenda first.</p>
                 <div className="flex gap-2">
                   {eventUrl && <Button nativeButton={false} variant="outline" render={<a href={eventUrl} target="_blank" rel="noreferrer" />}><ExternalLink className="size-4" />Open event</Button>}
                   {!notice && calendarConnection === "connected" && <Button type="button" onClick={() => void createEvent()} disabled={sending}>{sending ? <LoaderCircle className="size-4 animate-spin" /> : <CalendarDays className="size-4" />}Create event and send invites</Button>}

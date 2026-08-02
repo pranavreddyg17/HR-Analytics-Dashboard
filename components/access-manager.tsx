@@ -64,7 +64,7 @@ export function AccessManager({ ownerEmail }: { ownerEmail: string }) {
   return (
     <div className="page-stack">
       <header className="border-b border-border pb-5">
-        <h1 className="text-2xl font-semibold tracking-tight">Access management</h1>
+        <h1 className="text-2xl font-semibold">Access management</h1>
         <p className="mt-1 text-sm text-muted-foreground">Manage approved Google accounts, roles, and account status.</p>
       </header>
 
@@ -109,7 +109,7 @@ export function AccessManager({ ownerEmail }: { ownerEmail: string }) {
                 <div className="min-w-0">
                   <p className="truncate text-sm font-semibold">
                     {user.display_name || user.email.split("@")[0]}
-                    {user.email === ownerEmail && <span className="ml-2 text-[10px] font-medium text-muted-foreground">Current user</span>}
+                    {user.email === ownerEmail && <span className="ml-2 text-meta font-medium text-muted-foreground">Current user</span>}
                   </p>
                   <p className="truncate text-xs text-muted-foreground">{user.email} · {user.last_login_at ? `Last sign-in ${new Date(user.last_login_at).toLocaleDateString()}` : "No sign-in recorded"}</p>
                 </div>
@@ -151,7 +151,7 @@ export function AccessManager({ ownerEmail }: { ownerEmail: string }) {
             <div className="flex items-start justify-between gap-4">
               <div>
                 <h2 id="remove-access-title" className="text-lg font-semibold">Remove access?</h2>
-                <p className="mt-1 text-sm leading-6 text-muted-foreground"><b className="text-foreground">{removeTarget.email}</b> will no longer be able to sign in.</p>
+                <p className="mt-1 text-sm text-muted-foreground"><b className="text-foreground">{removeTarget.email}</b> will no longer be able to sign in.</p>
               </div>
               <button type="button" onClick={() => setRemoveTarget(null)} className="inline-flex size-8 shrink-0 items-center justify-center rounded-md text-muted-foreground hover:bg-muted" aria-label="Cancel removal"><X className="size-4" /></button>
             </div>

@@ -60,6 +60,10 @@ test("operational workspaces contain actionable software-company workflows", asy
   assert.ok(items.filter((item) => item.type === "hiring").length >= 5)
   assert.ok(items.filter((item) => item.type === "training").length >= 10)
   assert.ok(items.filter((item) => item.actionable).length >= 15)
+  assert.ok(items.some((item) => item.isCompleted && item.completionNotes))
+  assert.ok(items.some((item) => item.slaStatus === "overdue" && !item.isCompleted))
+  assert.ok(items.every((item) => item.owner && item.nextAction && item.attentionReason && item.completionEffect))
+  assert.ok(items.every((item) => ["overdue", "due_today", "due_soon", "on_track", "complete", "unscheduled"].includes(item.slaStatus)))
 
   assert.ok(workforce.body.leave.pending >= 6)
   assert.ok(workforce.body.leave.currentlyAway.length > 0)
@@ -68,6 +72,57 @@ test("operational workspaces contain actionable software-company workflows", asy
   assert.ok(workforce.body.hiring.rows.some((row) => row.position === "Senior Backend Engineer"))
   assert.ok(workforce.body.training.rows.some((row) => row.training_program === "Secure Coding Fundamentals"))
   assert.ok(workforce.body.training.rows.some((row) => row.training_program === "Incident Response Tabletop"))
+})
+
+test("hiring work moves from decision to owned follow-up and records completion", async () => {
+  const created = await json("/api/v1/hr/workflows", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      type: "hiring",
+      position: "Workflow Validation Engineer",
+      department: "Research & Development",
+      location: "Remote",
+      employmentType: "Full-time",
+      justification: "Validate accountable hiring workflow state transitions.",
+    }),
+  })
+  assert.equal(created.response.status, 201)
+
+  const requested = await json("/api/v1/hr/inbox")
+  const requestedItem = requested.body.items.find((item) => item.id === created.body.id)
+  assert.equal(requestedItem.status, "Requested")
+  assert.equal(requestedItem.requiresDecision, true)
+  assert.equal(requestedItem.nextAction, "Approve or decline the requisition.")
+  assert.ok(requestedItem.ownerEmail)
+  assert.ok(requestedItem.dueDate)
+
+  const approved = await json("/api/v1/hr/workflows/action", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ id: created.body.id, type: "hiring", action: "approve" }),
+  })
+  assert.equal(approved.response.status, 200)
+  assert.equal(approved.body.status, "Open")
+
+  const opened = await json("/api/v1/hr/inbox")
+  const openedItem = opened.body.items.find((item) => item.id === created.body.id)
+  assert.equal(openedItem.status, "Open")
+  assert.equal(openedItem.requiresDecision, false)
+  assert.equal(openedItem.isCompleted, false)
+  assert.match(openedItem.nextAction, /Record recruiting progress/)
+
+  const closed = await json("/api/v1/hr/workflows/action", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ id: created.body.id, type: "hiring", action: "reject" }),
+  })
+  assert.equal(closed.response.status, 200)
+  const completed = await json("/api/v1/hr/inbox")
+  const completedItem = completed.body.items.find((item) => item.id === created.body.id)
+  assert.equal(completedItem.isCompleted, true)
+  assert.ok(completedItem.completedAt)
+  assert.match(completedItem.completionNotes, /rejected the hiring requisition/i)
 })
 
 test("grounded data endpoints expose the real dataset", async () => {
@@ -185,6 +240,29 @@ test("analytics assistant persists conversation history and uses it for follow-u
   const listed = await json("/api/v1/chat/conversations")
   assert.equal(listed.response.status, 200)
   assert.ok(listed.body.conversations.some((conversation) => conversation.id === first.body.conversationId && conversation.messageCount === 4))
+})
+
+test("analytics assistant deletes an owned conversation and its message history", async () => {
+  const created = await json("/api/v1/chat", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ message: "Summarize hiring activity for this deletion test" }),
+  })
+  assert.equal(created.response.status, 200)
+  const conversationId = created.body.conversationId
+
+  const deleted = await json(`/api/v1/chat/conversations/${conversationId}`, { method: "DELETE" })
+  assert.equal(deleted.response.status, 200)
+  assert.equal(deleted.body.deleted, true)
+  assert.equal(deleted.body.conversation.id, conversationId)
+
+  const stored = await json(`/api/v1/chat/conversations/${conversationId}`)
+  assert.equal(stored.response.status, 404)
+  const listed = await json("/api/v1/chat/conversations")
+  assert.equal(listed.response.status, 200)
+  assert.ok(!listed.body.conversations.some((conversation) => conversation.id === conversationId))
+  const repeated = await json(`/api/v1/chat/conversations/${conversationId}`, { method: "DELETE" })
+  assert.equal(repeated.response.status, 404)
 })
 
 test("analytics assistant resolves focused follow-ups without topic contamination", async () => {

@@ -19,10 +19,10 @@ export default async function LoginPage({ searchParams }: { searchParams: Promis
 
         <div className="my-8 border-t border-[#e3e7ec]" />
 
-        <h1 className="text-xl font-semibold tracking-[-0.015em] text-[#17243a]">Sign in</h1>
+        <h1 className="text-xl font-semibold text-[#17243a]">Sign in</h1>
 
         {denied && (
-          <div role="alert" className="mt-5 rounded-md border border-amber-200 bg-amber-50 px-4 py-3 text-sm leading-6 text-amber-900">
+          <div role="alert" className="mt-5 rounded-md border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
             This account does not have access. Contact your administrator.
           </div>
         )}

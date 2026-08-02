@@ -179,14 +179,27 @@ export const workflowRequests = sqliteTable("workflow_requests", {
   status: text("status").notNull(),
   detailsJson: text("details_json").notNull().default("{}"),
   requestedByEmail: text("requested_by_email").notNull(),
+  priority: text("priority").notNull().default("medium"),
+  ownerEmail: text("owner_email"),
+  dueAt: text("due_at"),
+  nextAction: text("next_action"),
+  sourceEntityType: text("source_entity_type"),
+  sourceEntityId: text("source_entity_id"),
+  assignedAt: text("assigned_at"),
+  blockedReason: text("blocked_reason"),
+  confidentialityLevel: text("confidentiality_level").notNull().default("internal"),
   resolvedByEmail: text("resolved_by_email"),
   resolvedAt: text("resolved_at"),
+  completedAt: text("completed_at"),
+  completionNotes: text("completion_notes"),
   createdAt: text("created_at").notNull().default(sql`CURRENT_TIMESTAMP`),
   updatedAt: text("updated_at").notNull().default(sql`CURRENT_TIMESTAMP`),
 }, (table) => [
   index("workflow_type_status_idx").on(table.type, table.status),
   index("workflow_employee_idx").on(table.employeeId),
   index("workflow_requester_idx").on(table.requestedByEmail),
+  index("workflow_owner_status_idx").on(table.ownerEmail, table.status),
+  index("workflow_due_status_idx").on(table.dueAt, table.status),
 ])
 
 export const aiWorkflowDrafts = sqliteTable("ai_workflow_drafts", {

@@ -23,7 +23,7 @@ export function SkillGapChart({ data }: { data: SkillGap[] }) {
     <ChartContainer config={config} className="mx-auto aspect-square h-72">
       <RadarChart data={data} outerRadius="72%">
         <ChartTooltip content={<ChartTooltipContent />} />
-        <PolarAngleAxis dataKey="skill" className="text-[11px]" />
+        <PolarAngleAxis dataKey="skill" className="text-meta" />
         <PolarGrid stroke="var(--border)" />
         <Radar dataKey="target" fill="var(--color-target)" fillOpacity={0.12} stroke="var(--color-target)" strokeWidth={2} />
         <Radar dataKey="current" fill="var(--color-current)" fillOpacity={0.35} stroke="var(--color-current)" strokeWidth={2} />

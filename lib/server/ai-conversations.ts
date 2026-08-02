@@ -122,6 +122,17 @@ export async function getConversation(actor: RequestActor, conversationId: strin
   }
 }
 
+export async function deleteConversation(actor: RequestActor, conversationId: string): Promise<{ id: string; title: string }> {
+  const conversation = await ownedConversation(actor, conversationId)
+  const database = await ensureHrDatabase()
+  if (!database) throw new Error("Conversation storage is unavailable.")
+  await database.batch([
+    database.prepare("DELETE FROM ai_conversation_messages WHERE conversation_id = ?").bind(conversationId),
+    database.prepare("DELETE FROM ai_conversations WHERE id = ? AND user_email = ?").bind(conversationId, actor.email),
+  ])
+  return conversation
+}
+
 export async function getConversationContext(actor: RequestActor, conversationId: string): Promise<Array<{ role: "user" | "assistant"; content: string; tools?: ConversationMessage["tools"] }>> {
   const { messages } = await getConversation(actor, conversationId)
   let characters = 0

@@ -12,7 +12,7 @@ export function KpiCard({ kpi }: { kpi: Kpi }) {
   return (
     <Card className="gap-2 p-4">
       <p className="text-xs font-medium text-muted-foreground">{kpi.label}</p>
-      <p className="font-mono text-2xl font-semibold tracking-tight tabular-nums">{kpi.value}</p>
+      <p className="font-mono text-2xl font-semibold tabular-nums">{kpi.value}</p>
       <div className="flex items-center gap-1.5 text-xs">
         {kpi.delta !== 0 && (
           <span

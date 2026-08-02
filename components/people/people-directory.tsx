@@ -123,7 +123,7 @@ export function PeopleDirectory() {
       <header className="border-b border-border pb-5">
         <div className="flex flex-col gap-5 lg:flex-row lg:items-end lg:justify-between">
           <div className="max-w-2xl">
-            <h1 className="text-2xl font-semibold tracking-tight">People</h1>
+            <h1 className="text-2xl font-semibold">People</h1>
             <p className="mt-1 max-w-xl text-sm text-muted-foreground">Manage employee profiles, reporting lines, and employment records.</p>
           </div>
           <div className="flex flex-wrap items-center gap-2">
@@ -201,11 +201,11 @@ export function PeopleDirectory() {
 }
 
 function MiniStat({ value, label }: { value: number; label: string }) {
-  return <div><p className="text-xl font-semibold tracking-tight tabular-nums">{value.toLocaleString()}</p><p className="text-xs text-muted-foreground">{label}</p></div>
+  return <div><p className="text-xl font-semibold tabular-nums">{value.toLocaleString()}</p><p className="text-xs text-muted-foreground">{label}</p></div>
 }
 
 function FilterSelect({ label, value, options, allLabel, onChange }: { label: string; value: string; options: Array<string | { value: string; label: string }>; allLabel: string; onChange: (value: string) => void }) {
-  return <label className="block"><span className="mb-1.5 block text-[11px] font-semibold text-muted-foreground">{label}</span><select value={value} onChange={(event) => onChange(event.target.value)} className="h-10 w-full rounded-md border border-border bg-background px-3 text-sm text-foreground outline-none transition focus:border-ring focus:ring-2 focus:ring-ring/20"><option value="">{allLabel}</option>{options.map((option) => { const item = typeof option === "string" ? { value: option, label: option } : option; return <option key={item.value} value={item.value}>{item.label}</option> })}</select></label>
+  return <label className="block"><span className="mb-1.5 block text-meta font-semibold text-muted-foreground">{label}</span><select value={value} onChange={(event) => onChange(event.target.value)} className="h-10 w-full rounded-md border border-border bg-background px-3 text-sm text-foreground outline-none transition focus:border-ring focus:ring-2 focus:ring-ring/20"><option value="">{allLabel}</option>{options.map((option) => { const item = typeof option === "string" ? { value: option, label: option } : option; return <option key={item.value} value={item.value}>{item.label}</option> })}</select></label>
 }
 
 function PersonRow({ employee }: { employee: ManagedEmployee }) {
@@ -214,7 +214,7 @@ function PersonRow({ employee }: { employee: ManagedEmployee }) {
         <div className="flex min-w-0 items-center gap-3.5">
           <PersonAvatar employeeId={employee.employee_id} initials={employee.initials} size="lg" />
           <div className="min-w-0 flex-1">
-            <p className="truncate text-sm font-semibold tracking-tight group-hover:text-primary">{employee.display_name}</p>
+            <p className="truncate text-sm font-semibold group-hover:text-primary">{employee.display_name}</p>
             <p className="mt-0.5 truncate text-xs text-muted-foreground">{employee.job_title} · {employee.employee_id}</p>
           </div>
         </div>

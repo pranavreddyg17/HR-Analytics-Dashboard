@@ -127,14 +127,14 @@ export function AttritionPredictor({ schema }: { schema: PredictionSchema }) {
           {!result ? (
             <div className="flex min-h-72 flex-col items-center justify-center gap-2 rounded-md border border-border p-6 text-center">
               <p className="text-sm font-medium">No assessment calculated</p>
-              <p className="max-w-sm text-xs leading-relaxed text-muted-foreground">Review the profile inputs, then calculate a score to see the model estimate and its strongest contributing signals.</p>
+              <p className="max-w-sm text-xs text-muted-foreground">Review the profile inputs, then calculate a score to see the model estimate and its strongest contributing signals.</p>
             </div>
           ) : (
             <div className="flex flex-col gap-4">
               <div className="flex items-center justify-between rounded-md border border-border p-4">
                 <div>
                   <p className="text-xs text-muted-foreground">Predicted attrition probability</p>
-                  <p className="text-3xl font-semibold tracking-tight tabular-nums">{result.riskScore.toFixed(1)}%</p>
+                  <p className="text-3xl font-semibold tabular-nums">{result.riskScore.toFixed(1)}%</p>
                 </div>
                 <RiskBadge level={result.riskLevel} />
               </div>

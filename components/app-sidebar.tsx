@@ -119,9 +119,9 @@ export function AppSidebar({
         <div className="border-t border-sidebar-border p-4">
           <div className="flex items-center gap-3 rounded-md bg-sidebar-accent/65 p-2.5">
             <span className="avatar-soft" title={user.displayName}>{initials(user.displayName)}</span>
-            <span className="min-w-0 flex-1 leading-tight">
+            <span className="min-w-0 flex-1">
               <span className="block truncate text-sm font-semibold text-sidebar-foreground">{user.displayName}</span>
-              <span className="mt-0.5 flex items-center gap-1.5 truncate text-[11px] text-muted-foreground">
+              <span className="mt-0.5 flex items-center gap-1.5 truncate text-meta text-muted-foreground">
                 <span className="capitalize">{user.role ?? "member"}</span> · Google
               </span>
             </span>

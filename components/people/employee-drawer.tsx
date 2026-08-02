@@ -198,7 +198,7 @@ function EmployeeDrawerPanel({
               <div className="flex items-start gap-4">
                 <PersonAvatar employeeId={form.employee_id || "new-person"} initials={previewInitials} size="lg" />
                 <div className="min-w-0 flex-1">
-                  <h2 id="employee-drawer-title" className="truncate text-xl font-semibold tracking-tight">{mode === "create" ? "Add employee" : `Edit ${previewName}`}</h2>
+                  <h2 id="employee-drawer-title" className="truncate text-xl font-semibold">{mode === "create" ? "Add employee" : `Edit ${previewName}`}</h2>
                   <p className="mt-1 text-sm text-muted-foreground">Enter the employee&apos;s personal and employment information.</p>
                 </div>
                 <Button type="button" variant="ghost" size="icon" aria-label="Close" onClick={onClose} disabled={saving}><X className="size-4" /></Button>

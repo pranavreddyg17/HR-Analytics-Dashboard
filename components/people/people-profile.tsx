@@ -83,7 +83,7 @@ export function PeopleProfile({ employeeId }: { employeeId: string }) {
   if (!data && loading) return <ProfileSkeleton />
   if (!data) return (
     <div className="mx-auto flex min-h-[65vh] max-w-xl flex-col items-center justify-center text-center">
-      <h2 className="text-xl font-semibold tracking-tight">Profile unavailable</h2>
+      <h2 className="text-xl font-semibold">Profile unavailable</h2>
       <p className="mt-2 text-sm text-muted-foreground">{error || "We could not find this employee."}</p>
       <Button nativeButton={false} variant="outline" className="mt-5" render={<Link href="/people" />}><ArrowLeft className="size-4" />Back to people</Button>
     </div>
@@ -101,8 +101,8 @@ export function PeopleProfile({ employeeId }: { employeeId: string }) {
         <div className="flex flex-col gap-5 px-5 pb-6 pt-6 sm:px-6 lg:flex-row lg:items-end">
           <PersonAvatar employeeId={employee.employee_id} initials={employee.initials} size="xl" />
           <div className="min-w-0 flex-1">
-            {employee.archived_at && <div className="mb-2 text-[11px] font-medium text-muted-foreground">Archived {formatDate(employee.archived_at)}</div>}
-            <h2 className="truncate text-2xl font-semibold tracking-[-0.02em] sm:text-3xl">{employee.display_name}</h2>
+            {employee.archived_at && <div className="mb-2 text-meta font-medium text-muted-foreground">Archived {formatDate(employee.archived_at)}</div>}
+            <h2 className="truncate text-2xl font-semibold sm:text-3xl">{employee.display_name}</h2>
             <p className="mt-2 text-sm text-muted-foreground">{employee.job_title} · {employee.department} · {employee.location}</p>
           </div>
           <div className="flex flex-wrap items-center gap-2">
@@ -218,7 +218,7 @@ function GrowthTab({ data }: { data: EmployeeProfileResponse }) {
     <div className="grid gap-4 sm:grid-cols-3"><MetricCard label="Completed" value={`${completed.length}/${data.training.length}`} detail="Assigned programmes" /><MetricCard label="Learning hours" value={totalHours.toLocaleString()} detail="Total assigned time" /><MetricCard label="Average score" value={averageScore === null ? "—" : `${averageScore}%`} detail="Completed assessments" /></div>
     <div className="grid gap-5 xl:grid-cols-[1.25fr_.75fr]">
       <Card className="gap-0 overflow-hidden rounded-lg border-border/70 shadow-none"><SectionHeader title="Learning" detail="Training programmes and progress" icon={GraduationCap} />{data.training.length ? <div className="divide-y divide-border/60">{data.training.map((training) => <div key={training.id} className="grid gap-3 px-5 py-4 sm:grid-cols-[1fr_auto] sm:items-center"><div><p className="text-sm font-semibold">{training.training_program}</p><p className="mt-1 text-xs text-muted-foreground">{training.training_hours} hours{training.completion_date ? ` · Completed ${formatDate(training.completion_date)}` : ""}</p></div><div className="flex items-center gap-3"><RecordStatus status={training.completion_status} />{training.assessment_score !== null && <span className="font-mono text-sm font-semibold">{training.assessment_score}%</span>}</div></div>)}</div> : <div className="p-10"><EmptyState icon={GraduationCap} title="No learning assigned" detail="Training progress will appear here." /></div>}</Card>
-      <Card className="gap-0 overflow-hidden rounded-lg border-border/70 shadow-none"><SectionHeader title="Promotions" detail={plural(data.promotions.length, "promotion")} icon={TrendingUp} /><div className="p-5">{data.promotions.length ? <div className="space-y-4">{data.promotions.map((promotion) => <div key={promotion.id} className="relative border-l-2 border-primary/25 pl-4"><span className="absolute -left-[5px] top-1 size-2 rounded-full bg-primary" /><p className="text-sm font-semibold">{promotion.new_title}</p><p className="mt-1 text-xs text-muted-foreground">Previous title: {promotion.previous_title}</p><p className="mt-2 text-[11px] font-medium text-primary">{formatDate(promotion.promotion_date)}</p></div>)}</div> : <EmptyState icon={TrendingUp} title="No promotions recorded" detail="Promotion records will appear here." />}</div></Card>
+      <Card className="gap-0 overflow-hidden rounded-lg border-border/70 shadow-none"><SectionHeader title="Promotions" detail={plural(data.promotions.length, "promotion")} icon={TrendingUp} /><div className="p-5">{data.promotions.length ? <div className="space-y-4">{data.promotions.map((promotion) => <div key={promotion.id} className="relative border-l-2 border-primary/25 pl-4"><span className="absolute -left-[5px] top-1 size-2 rounded-full bg-primary" /><p className="text-sm font-semibold">{promotion.new_title}</p><p className="mt-1 text-xs text-muted-foreground">Previous title: {promotion.previous_title}</p><p className="mt-2 text-meta font-medium text-primary">{formatDate(promotion.promotion_date)}</p></div>)}</div> : <EmptyState icon={TrendingUp} title="No promotions recorded" detail="Promotion records will appear here." />}</div></Card>
     </div>
   </div>
 }
@@ -232,7 +232,7 @@ function ActivityTab({ data }: { data: EmployeeProfileResponse }) {
         <InfoLine label="Risk band" value={`${data.attritionModel.risk_level} · ${Number(data.attritionModel.risk_score).toFixed(1)}%`} />
         <InfoLine label="Observed outcome" value={data.attritionModel.observed_attrition === "Yes" ? "Recorded exit" : "No recorded exit"} />
         <InfoLine label="Model version" value={data.attritionModel.model_version} />
-        <p className="border-t border-border/60 pt-3 text-xs leading-relaxed text-muted-foreground">{data.attritionModel.top_driver} This context belongs to the synthetic IBM demo record and is not an employment decision.</p>
+        <p className="border-t border-border/60 pt-3 text-xs text-muted-foreground">{data.attritionModel.top_driver} This context belongs to the synthetic IBM demo record and is not an employment decision.</p>
       </InfoCard>}
       {data.attrition.length > 0 && <Card className="gap-0 overflow-hidden rounded-lg border-border/70 shadow-none"><SectionHeader title="Exit records" detail="Recorded employee departures" icon={Archive} /><div className="divide-y divide-border/60">{data.attrition.map((item) => <div key={item.id} className="p-4"><div className="flex items-center justify-between gap-3"><p className="text-sm font-semibold">{item.exit_reason}</p><RecordStatus status={item.exit_type} /></div><p className="mt-1 text-xs text-muted-foreground">{formatDate(item.exit_date)} · {item.tenure_years} years tenure</p></div>)}</div></Card>}
     </div>
@@ -257,19 +257,19 @@ function PersonLink({ employee, detail, roomy = false }: { employee: ManagedEmpl
 }
 
 function MetricCard({ label, value, detail }: { label: string; value: string; detail: string }) {
-  return <Card className="gap-1 rounded-lg border-border/70 p-5 shadow-none"><p className="text-xs font-medium text-muted-foreground">{label}</p><p className="mt-2 text-2xl font-semibold tracking-tight tabular-nums">{value}</p><p className="mt-1 text-xs text-muted-foreground">{detail}</p></Card>
+  return <Card className="gap-1 rounded-lg border-border/70 p-5 shadow-none"><p className="text-xs font-medium text-muted-foreground">{label}</p><p className="mt-2 text-2xl font-semibold tabular-nums">{value}</p><p className="mt-1 text-xs text-muted-foreground">{detail}</p></Card>
 }
 
 function RecordStatus({ status }: { status: string }) {
   const positive = /approved|completed|voluntary/i.test(status)
   const pending = /pending|incomplete|open/i.test(status)
-  return <span className={cn("inline-flex w-fit items-center rounded-sm border px-2.5 py-1 text-[11px] font-medium", positive ? "border-emerald-200 bg-emerald-50 text-emerald-800 dark:border-emerald-900/60 dark:bg-emerald-950/30 dark:text-emerald-300" : pending ? "border-amber-200 bg-amber-50 text-amber-800 dark:border-amber-900/60 dark:bg-amber-950/30 dark:text-amber-300" : "border-border bg-muted text-muted-foreground")}>{status}</span>
+  return <span className={cn("inline-flex w-fit items-center rounded-sm border px-2.5 py-1 text-meta font-medium", positive ? "border-emerald-200 bg-emerald-50 text-emerald-800 dark:border-emerald-900/60 dark:bg-emerald-950/30 dark:text-emerald-300" : pending ? "border-amber-200 bg-amber-50 text-amber-800 dark:border-amber-900/60 dark:bg-amber-950/30 dark:text-amber-300" : "border-border bg-muted text-muted-foreground")}>{status}</span>
 }
 
 function Timeline({ activity, compact = false }: { activity: EmployeeActivity[]; compact?: boolean }) {
   return <div className="divide-y divide-border">{activity.map((item) => {
     const changedFields = parseChangedFields(item.changes_json)
-    return <div key={item.id} className="py-3 first:pt-0 last:pb-0"><p className="text-sm font-medium leading-relaxed">{item.summary}</p><p className="mt-1 text-[11px] text-muted-foreground">{formatWorkspaceDateTime(item.created_at)} · {item.actor_email}</p>{!compact && changedFields.length > 0 && <p className="mt-2 text-[10px] text-muted-foreground">Fields changed: {changedFields.map(friendlyField).join(", ")}</p>}</div>
+    return <div key={item.id} className="py-3 first:pt-0 last:pb-0"><p className="text-sm font-medium">{item.summary}</p><p className="mt-1 text-meta text-muted-foreground">{formatWorkspaceDateTime(item.created_at)} · {item.actor_email}</p>{!compact && changedFields.length > 0 && <p className="mt-2 text-meta text-muted-foreground">Fields changed: {changedFields.map(friendlyField).join(", ")}</p>}</div>
   })}</div>
 }
 
@@ -304,7 +304,7 @@ function ArchiveDialog({ open, employee, onClose, onChanged }: { open: boolean; 
     finally { setBusy(false) }
   }
 
-  return <AnimatePresence>{open && <div className="fixed inset-0 z-[90] flex items-center justify-center p-4"><motion.button type="button" aria-label="Close" className="absolute inset-0 bg-slate-950/30" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} onClick={onClose} /><motion.div role="alertdialog" aria-modal="true" className="relative w-full max-w-md rounded-lg border border-border bg-background p-6" initial={{ opacity: 0, scale: reduceMotion ? 1 : .98 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0 }}><button type="button" onClick={onClose} aria-label="Close" className="absolute right-4 top-4 text-muted-foreground hover:text-foreground"><X className="size-4" /></button><h3 className="text-lg font-semibold tracking-tight">{restoring ? "Restore employee?" : "Archive employee?"}</h3><p className="mt-2 text-sm leading-relaxed text-muted-foreground">{restoring ? `${employee.display_name} will return to the active directory with an Active status.` : `${employee.display_name} will be removed from the active directory. The employee history will be retained.`}</p>{error && <p className="mt-4 rounded-md bg-destructive/10 p-3 text-xs text-destructive">{error}</p>}<div className="mt-6 flex justify-end gap-2"><Button variant="ghost" onClick={onClose} disabled={busy}>Cancel</Button><Button variant={restoring ? "default" : "destructive"} onClick={() => void changeStatus()} disabled={busy}>{busy ? "Updating…" : restoring ? "Restore employee" : "Archive employee"}</Button></div></motion.div></div>}</AnimatePresence>
+  return <AnimatePresence>{open && <div className="fixed inset-0 z-[90] flex items-center justify-center p-4"><motion.button type="button" aria-label="Close" className="absolute inset-0 bg-slate-950/30" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} onClick={onClose} /><motion.div role="alertdialog" aria-modal="true" className="relative w-full max-w-md rounded-lg border border-border bg-background p-6" initial={{ opacity: 0, scale: reduceMotion ? 1 : .98 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0 }}><button type="button" onClick={onClose} aria-label="Close" className="absolute right-4 top-4 text-muted-foreground hover:text-foreground"><X className="size-4" /></button><h3 className="text-lg font-semibold">{restoring ? "Restore employee?" : "Archive employee?"}</h3><p className="mt-2 text-sm text-muted-foreground">{restoring ? `${employee.display_name} will return to the active directory with an Active status.` : `${employee.display_name} will be removed from the active directory. The employee history will be retained.`}</p>{error && <p className="mt-4 rounded-md bg-destructive/10 p-3 text-xs text-destructive">{error}</p>}<div className="mt-6 flex justify-end gap-2"><Button variant="ghost" onClick={onClose} disabled={busy}>Cancel</Button><Button variant={restoring ? "default" : "destructive"} onClick={() => void changeStatus()} disabled={busy}>{busy ? "Updating…" : restoring ? "Restore employee" : "Archive employee"}</Button></div></motion.div></div>}</AnimatePresence>
 }
 
 function ProfileSkeleton() {

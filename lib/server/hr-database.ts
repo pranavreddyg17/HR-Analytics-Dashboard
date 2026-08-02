@@ -40,7 +40,7 @@ const createStatements = [
   "CREATE TABLE IF NOT EXISTS training_records (id TEXT PRIMARY KEY, training_program TEXT NOT NULL, employee_id TEXT NOT NULL, completion_status TEXT NOT NULL, completion_date TEXT, training_hours REAL NOT NULL, assessment_score REAL, department TEXT NOT NULL, data_source TEXT NOT NULL DEFAULT 'imported', updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP)",
   "CREATE TABLE IF NOT EXISTS promotion_records (id TEXT PRIMARY KEY, employee_id TEXT NOT NULL, previous_title TEXT NOT NULL, new_title TEXT NOT NULL, promotion_date TEXT NOT NULL, department TEXT NOT NULL, months_since_previous_promotion INTEGER NOT NULL, data_source TEXT NOT NULL DEFAULT 'imported', updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP)",
   "CREATE TABLE IF NOT EXISTS data_imports (id TEXT PRIMARY KEY, domain TEXT NOT NULL, filename TEXT NOT NULL, row_count INTEGER NOT NULL, status TEXT NOT NULL, imported_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP)",
-  "CREATE TABLE IF NOT EXISTS workflow_requests (id TEXT PRIMARY KEY, type TEXT NOT NULL, employee_id TEXT, title TEXT NOT NULL, status TEXT NOT NULL, details_json TEXT NOT NULL DEFAULT '{}', requested_by_email TEXT NOT NULL, resolved_by_email TEXT, resolved_at TEXT, created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP, updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP)",
+  "CREATE TABLE IF NOT EXISTS workflow_requests (id TEXT PRIMARY KEY, type TEXT NOT NULL, employee_id TEXT, title TEXT NOT NULL, status TEXT NOT NULL, details_json TEXT NOT NULL DEFAULT '{}', requested_by_email TEXT NOT NULL, priority TEXT NOT NULL DEFAULT 'medium', owner_email TEXT, due_at TEXT, next_action TEXT, source_entity_type TEXT, source_entity_id TEXT, assigned_at TEXT, blocked_reason TEXT, confidentiality_level TEXT NOT NULL DEFAULT 'internal', resolved_by_email TEXT, resolved_at TEXT, completed_at TEXT, completion_notes TEXT, created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP, updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP)",
   "CREATE INDEX IF NOT EXISTS workflow_type_status_idx ON workflow_requests(type, status)",
   "CREATE INDEX IF NOT EXISTS workflow_employee_idx ON workflow_requests(employee_id)",
   "CREATE INDEX IF NOT EXISTS workflow_requester_idx ON workflow_requests(requested_by_email)",
@@ -197,12 +197,176 @@ const profileColumnDefinitions: Record<string, string> = {
   created_at: "TEXT",
 }
 
+const workflowColumnDefinitions: Record<string, string> = {
+  priority: "TEXT NOT NULL DEFAULT 'medium'",
+  owner_email: "TEXT",
+  due_at: "TEXT",
+  next_action: "TEXT",
+  source_entity_type: "TEXT",
+  source_entity_id: "TEXT",
+  assigned_at: "TEXT",
+  blocked_reason: "TEXT",
+  confidentiality_level: "TEXT NOT NULL DEFAULT 'internal'",
+  completed_at: "TEXT",
+  completion_notes: "TEXT",
+}
+
 async function ensureEmployeeProfileColumns(database: Database): Promise<void> {
   const result = await database.prepare("PRAGMA table_info(employees)").all<{ name: string }>()
   const present = new Set((result.results ?? []).map((column) => column.name))
   for (const [name, definition] of Object.entries(profileColumnDefinitions)) {
     if (!present.has(name)) await database.prepare(`ALTER TABLE employees ADD COLUMN ${name} ${definition}`).run()
   }
+}
+
+async function ensureWorkflowAccountabilityColumns(database: Database): Promise<void> {
+  const result = await database.prepare("PRAGMA table_info(workflow_requests)").all<{ name: string }>()
+  const present = new Set((result.results ?? []).map((column) => column.name))
+  for (const [name, definition] of Object.entries(workflowColumnDefinitions)) {
+    if (!present.has(name)) await database.prepare(`ALTER TABLE workflow_requests ADD COLUMN ${name} ${definition}`).run()
+  }
+  await database.batch([
+    database.prepare("CREATE INDEX IF NOT EXISTS workflow_owner_status_idx ON workflow_requests(owner_email, status)"),
+    database.prepare("CREATE INDEX IF NOT EXISTS workflow_due_status_idx ON workflow_requests(due_at, status)"),
+  ])
+  await database.prepare("PRAGMA optimize").run()
+}
+
+async function backfillWorkflowAccountabilityOnce(database: Database): Promise<void> {
+  const settingKey = "workflow_accountability_v1"
+  const initialized = await database.prepare("SELECT value FROM workspace_settings WHERE key = ?").bind(settingKey).first<{ value: string }>()
+  if (initialized) return
+
+  await database.batch([
+    database.prepare(`
+      UPDATE workflow_requests
+      SET owner_email = COALESCE(NULLIF(owner_email, ''), (
+            SELECT NULLIF(m.work_email, '')
+            FROM employees e
+            LEFT JOIN employees m ON m.employee_id = e.manager_id
+            WHERE e.employee_id = workflow_requests.employee_id
+          ), 'people-ops@laidbackhr.cloud'),
+          due_at = COALESCE(due_at, MIN(date(created_at, '+3 days'), date(json_extract(details_json, '$.startDate'), '-1 day'))),
+          priority = CASE
+            WHEN LOWER(status) IN ('approved', 'rejected') THEN 'low'
+            WHEN COALESCE(due_at, MIN(date(created_at, '+3 days'), date(json_extract(details_json, '$.startDate'), '-1 day'))) <= date('now', '+1 day') THEN 'high'
+            ELSE 'medium'
+          END,
+          next_action = COALESCE(NULLIF(next_action, ''), CASE WHEN LOWER(status) = 'pending' THEN 'Approve or decline the request.' ELSE 'No further action.' END),
+          source_entity_type = COALESCE(source_entity_type, 'leave_record'),
+          source_entity_id = COALESCE(source_entity_id, id),
+          assigned_at = COALESCE(assigned_at, created_at),
+          confidentiality_level = 'restricted',
+          completed_at = CASE WHEN LOWER(status) IN ('approved', 'rejected') THEN COALESCE(completed_at, resolved_at, updated_at) ELSE completed_at END,
+          completion_notes = CASE WHEN LOWER(status) IN ('approved', 'rejected') THEN COALESCE(completion_notes, 'Leave request ' || LOWER(status) || '.') ELSE completion_notes END
+      WHERE type = 'leave'
+    `),
+    database.prepare(`
+      UPDATE workflow_requests
+      SET owner_email = COALESCE(NULLIF(owner_email, ''), 'talent@laidbackhr.cloud'),
+          due_at = COALESCE(due_at, CASE
+            WHEN LOWER(status) = 'requested' THEN date(created_at, '+3 days')
+            WHEN LOWER(status) = 'offer' THEN date(created_at, '+5 days')
+            ELSE date(created_at, '+14 days')
+          END),
+          priority = CASE
+            WHEN LOWER(status) IN ('rejected', 'closed', 'hired') THEN 'low'
+            WHEN COALESCE(due_at, date(created_at, CASE WHEN LOWER(status) = 'requested' THEN '+3 days' ELSE '+14 days' END)) <= date('now') THEN 'high'
+            ELSE 'medium'
+          END,
+          next_action = COALESCE(NULLIF(next_action, ''), CASE
+            WHEN LOWER(status) = 'requested' THEN 'Approve or decline the requisition.'
+            WHEN LOWER(status) = 'offer' THEN 'Confirm the offer response and next step.'
+            WHEN LOWER(status) IN ('open', 'approved') THEN 'Record recruiting progress or confirm the requisition remains active.'
+            ELSE 'No further action.'
+          END),
+          source_entity_type = COALESCE(source_entity_type, 'hiring_record'),
+          source_entity_id = COALESCE(source_entity_id, id),
+          assigned_at = COALESCE(assigned_at, created_at),
+          confidentiality_level = COALESCE(NULLIF(confidentiality_level, ''), 'internal'),
+          completed_at = CASE WHEN LOWER(status) IN ('rejected', 'closed', 'hired') THEN COALESCE(completed_at, resolved_at, updated_at) ELSE completed_at END,
+          completion_notes = CASE WHEN LOWER(status) IN ('rejected', 'closed', 'hired') THEN COALESCE(completion_notes, 'Hiring workflow ' || LOWER(status) || '.') ELSE completion_notes END
+      WHERE type = 'hiring'
+    `),
+    database.prepare(`
+      UPDATE workflow_requests
+      SET owner_email = COALESCE(NULLIF(owner_email, ''), (SELECT NULLIF(work_email, '') FROM employees WHERE employee_id = workflow_requests.employee_id), requested_by_email),
+          due_at = COALESCE(due_at, json_extract(details_json, '$.dueDate')),
+          priority = CASE
+            WHEN LOWER(status) = 'completed' THEN 'low'
+            WHEN COALESCE(due_at, json_extract(details_json, '$.dueDate')) < date('now') THEN 'high'
+            ELSE 'medium'
+          END,
+          next_action = COALESCE(NULLIF(next_action, ''), CASE WHEN LOWER(status) = 'completed' THEN 'No further action.' ELSE 'Complete the assigned course and record completion.' END),
+          source_entity_type = COALESCE(source_entity_type, 'training_record'),
+          source_entity_id = COALESCE(source_entity_id, id),
+          assigned_at = COALESCE(assigned_at, created_at),
+          confidentiality_level = COALESCE(NULLIF(confidentiality_level, ''), 'internal'),
+          completed_at = CASE WHEN LOWER(status) = 'completed' THEN COALESCE(completed_at, resolved_at, updated_at) ELSE completed_at END,
+          completion_notes = CASE WHEN LOWER(status) = 'completed' THEN COALESCE(completion_notes, 'Training completion recorded.') ELSE completion_notes END
+      WHERE type = 'training'
+    `),
+    database.prepare("INSERT INTO workspace_settings(key, value, updated_at) VALUES (?, 'true', CURRENT_TIMESTAMP) ON CONFLICT(key) DO UPDATE SET value='true', updated_at=CURRENT_TIMESTAMP").bind(settingKey),
+  ])
+}
+
+async function syncOpenOperationalWork(database: Database): Promise<void> {
+  await database.batch([
+    database.prepare(`
+      INSERT OR IGNORE INTO workflow_requests(
+        id, type, employee_id, title, status, details_json, requested_by_email,
+        priority, owner_email, due_at, next_action, source_entity_type, source_entity_id,
+        assigned_at, confidentiality_level, created_at, updated_at
+      )
+      SELECT l.id, 'leave', l.employee_id, l.leave_type || ' leave request', l.approval_status,
+        json_object('leaveType', l.leave_type, 'startDate', l.start_date, 'endDate', l.end_date, 'days', l.leave_days),
+        'data-import@laidbackhr.cloud',
+        CASE WHEN MIN(date('now', '+3 days'), date(l.start_date, '-1 day')) <= date('now', '+1 day') THEN 'high' ELSE 'medium' END,
+        COALESCE(NULLIF(m.work_email, ''), 'people-ops@laidbackhr.cloud'),
+        MIN(date('now', '+3 days'), date(l.start_date, '-1 day')),
+        'Approve or decline the request.', 'leave_record', l.id, CURRENT_TIMESTAMP, 'restricted', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP
+      FROM leave_records l
+      LEFT JOIN employees e ON e.employee_id = l.employee_id
+      LEFT JOIN employees m ON m.employee_id = e.manager_id
+      WHERE LOWER(l.data_source) <> 'demo' AND LOWER(l.approval_status) = 'pending'
+    `),
+    database.prepare(`
+      INSERT OR IGNORE INTO workflow_requests(
+        id, type, employee_id, title, status, details_json, requested_by_email,
+        priority, owner_email, due_at, next_action, source_entity_type, source_entity_id,
+        assigned_at, confidentiality_level, created_at, updated_at
+      )
+      SELECT h.id, 'hiring', NULL, 'New ' || h.position || ' requisition', h.recruitment_status,
+        json_object('employmentType', 'Full-time', 'justification', 'Imported hiring record.'),
+        'data-import@laidbackhr.cloud',
+        CASE WHEN date(h.application_date, CASE WHEN LOWER(h.recruitment_status) = 'requested' THEN '+3 days' ELSE '+14 days' END) <= date('now') THEN 'high' ELSE 'medium' END,
+        'talent@laidbackhr.cloud',
+        date(h.application_date, CASE WHEN LOWER(h.recruitment_status) = 'requested' THEN '+3 days' ELSE '+14 days' END),
+        CASE
+          WHEN LOWER(h.recruitment_status) = 'requested' THEN 'Approve or decline the requisition.'
+          WHEN LOWER(h.recruitment_status) = 'offer' THEN 'Confirm the offer response and next step.'
+          ELSE 'Record recruiting progress or confirm the requisition remains active.'
+        END,
+        'hiring_record', h.id, CURRENT_TIMESTAMP, 'internal', h.application_date, CURRENT_TIMESTAMP
+      FROM hiring_records h
+      WHERE LOWER(h.data_source) <> 'demo' AND LOWER(h.recruitment_status) IN ('requested', 'open', 'offer')
+    `),
+    database.prepare(`
+      INSERT OR IGNORE INTO workflow_requests(
+        id, type, employee_id, title, status, details_json, requested_by_email,
+        priority, owner_email, due_at, next_action, source_entity_type, source_entity_id,
+        assigned_at, blocked_reason, confidentiality_level, created_at, updated_at
+      )
+      SELECT t.id, 'training', t.employee_id, t.training_program || ' assignment', t.completion_status,
+        json_object('program', t.training_program, 'hours', t.training_hours),
+        'data-import@laidbackhr.cloud', 'medium', COALESCE(NULLIF(e.work_email, ''), 'learning@laidbackhr.cloud'), NULL,
+        'Set a due date before escalation.', 'training_record', t.id, CURRENT_TIMESTAMP,
+        'No assignment due date was included in the imported record.', 'internal', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP
+      FROM training_records t
+      LEFT JOIN employees e ON e.employee_id = t.employee_id
+      WHERE LOWER(t.data_source) <> 'demo' AND LOWER(t.completion_status) <> 'completed'
+    `),
+  ])
 }
 
 async function backfillDemoProfiles(database: Database): Promise<void> {
@@ -471,12 +635,15 @@ export async function ensureHrDatabase(): Promise<Database | null> {
   setupPromise = (async () => {
     for (const statement of createStatements) await database.prepare(statement).run()
     await ensureEmployeeProfileColumns(database)
+    await ensureWorkflowAccountabilityColumns(database)
     await seedDemoOnce(database)
     await seedCorrelatedDemoOnce(database)
     await backfillDemoProfiles(database)
     await seedLeaveWorkflowExamplesOnce(database)
     await seedTrainingWorkflowExamplesOnce(database)
     await seedSoftwareCompanyWorkflowsOnce(database)
+    await backfillWorkflowAccountabilityOnce(database)
+    await syncOpenOperationalWork(database)
     await database.prepare("INSERT OR IGNORE INTO app_users(email, display_name, role, status, invited_by) VALUES ('pranavreddyg17@gmail.com', 'Pranav Reddy', 'admin', 'active', 'system')").run()
   })()
   try {
@@ -562,6 +729,7 @@ export async function importHrData({
   await database.prepare("INSERT INTO data_imports(id, domain, filename, row_count, status, imported_at) VALUES (?, ?, ?, ?, 'completed', CURRENT_TIMESTAMP)")
     .bind(crypto.randomUUID(), domain, filename.slice(0, 240) || `${domain}.csv`, clean.length)
     .run()
+  await syncOpenOperationalWork(database)
   return { domain, imported: clean.length, filename }
 }
 

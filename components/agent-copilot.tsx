@@ -52,6 +52,9 @@ export function AgentCopilot({ dataMode }: { dataMode: string }) {
   const [input, setInput] = useState("")
   const [thinking, setThinking] = useState(false)
   const [loadingHistory, setLoadingHistory] = useState(true)
+  const [deleteOpen, setDeleteOpen] = useState(false)
+  const [deleting, setDeleting] = useState(false)
+  const [conversationError, setConversationError] = useState("")
   const scrollRef = useRef<HTMLDivElement>(null)
   const conversationIdRef = useRef("")
 
@@ -94,12 +97,37 @@ export function AgentCopilot({ dataMode }: { dataMode: string }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
-  function newConversation() {
-    if (thinking) return
+  function resetConversationState() {
     conversationIdRef.current = ""
     setConversationId("")
     setMessages([welcomeMessage(dataMode)])
     setInput("")
+    setConversationError("")
+  }
+
+  function newConversation() {
+    if (thinking || deleting) return
+    resetConversationState()
+  }
+
+  async function deleteActiveConversation() {
+    const activeId = conversationIdRef.current
+    if (!activeId || deleting || thinking) return
+    setDeleting(true)
+    setConversationError("")
+    try {
+      const response = await fetch(`/api/v1/chat/conversations/${encodeURIComponent(activeId)}`, { method: "DELETE" })
+      const body = await response.json() as { detail?: string }
+      if (!response.ok) throw new Error(body.detail ?? "The conversation could not be deleted.")
+      setDeleteOpen(false)
+      resetConversationState()
+      const nextId = await refreshConversations()
+      if (nextId) await loadConversation(nextId)
+    } catch (error) {
+      setConversationError(error instanceof Error ? error.message : "The conversation could not be deleted.")
+    } finally {
+      setDeleting(false)
+    }
   }
 
   async function send(text: string) {
@@ -149,7 +177,7 @@ export function AgentCopilot({ dataMode }: { dataMode: string }) {
   return (
     <div className="flex h-full min-h-0 flex-col">
       <div className="flex items-center gap-2 border-b border-border bg-card px-4 py-2.5">
-        <label className="min-w-0 flex-1 text-[10px] font-medium text-muted-foreground">
+        <label className="min-w-0 flex-1 text-meta font-medium text-muted-foreground">
           Conversation
           <select
             value={conversationId}
@@ -162,8 +190,11 @@ export function AgentCopilot({ dataMode }: { dataMode: string }) {
             {conversations.map((conversation) => <option key={conversation.id} value={conversation.id}>{conversation.title}</option>)}
           </select>
         </label>
-        <Button type="button" size="sm" variant="outline" onClick={newConversation} disabled={thinking || loadingHistory}>Reset context</Button>
+        <Button type="button" size="sm" variant="outline" onClick={newConversation} disabled={thinking || loadingHistory || deleting}>New chat</Button>
+        <Button type="button" size="sm" variant="outline" onClick={() => { setConversationError(""); setDeleteOpen(true) }} disabled={!conversationId || thinking || loadingHistory || deleting}>Delete chat</Button>
       </div>
+
+      {conversationError && !deleteOpen && <div role="alert" className="border-b border-border bg-destructive/5 px-4 py-2 text-xs text-destructive">{conversationError}</div>}
 
       <div ref={scrollRef} className="min-h-0 flex-1 space-y-5 overflow-y-auto px-5 py-5">
         {loadingHistory ? (
@@ -172,13 +203,13 @@ export function AgentCopilot({ dataMode }: { dataMode: string }) {
           <article key={message.id ?? index} className={cn("flex", message.role === "user" && "justify-end")}>
             <div className="max-w-[88%]">
               <div className={cn(
-                "whitespace-pre-wrap rounded-md px-3.5 py-3 text-sm leading-6",
+                "whitespace-pre-wrap rounded-md px-3.5 py-3 text-sm",
                 message.role === "assistant" ? "border border-border bg-background text-foreground" : "bg-secondary text-secondary-foreground",
               )}>
                 {message.content.replace(/\*\*/g, "").replace(/_([^_]+)_/g, "$1")}
               </div>
               {message.role === "assistant" && ((message.tools?.length ?? 0) > 0 || (message.context?.length ?? 0) > 0) && (
-                <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 px-1 text-[10px] text-muted-foreground">
+                <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 px-1 text-meta text-muted-foreground">
                   <span>Sources:</span>
                   {message.tools?.map((trace) => <span key={trace.tool}>{toolLabels[trace.tool] ?? trace.tool}</span>)}
                   {message.context?.map((item) => <span key={`${item.source}-${item.section}`}>{item.section}</span>)}
@@ -219,8 +250,22 @@ export function AgentCopilot({ dataMode }: { dataMode: string }) {
           />
           <Button type="submit" size="icon" disabled={!input.trim() || thinking || loadingHistory} aria-label="Send question"><ArrowUp className="size-4" /></Button>
         </form>
-        <p className="mt-2 text-[10px] text-muted-foreground">Context is stored for your account. Start a new conversation to clear it. Employee actions still require human review.</p>
+        <p className="mt-2 text-meta text-muted-foreground">Context is stored for your account. Start a new chat to clear it. Employee actions still require human review.</p>
       </div>
+
+      {deleteOpen && conversationId && (
+        <div className="fixed inset-0 z-[120] flex items-center justify-center bg-foreground/25 p-4" role="dialog" aria-modal="true" aria-labelledby="delete-conversation-title">
+          <div className="w-full max-w-md rounded-lg border border-border bg-card p-5 shadow-none">
+            <h3 id="delete-conversation-title" className="text-base font-semibold">Delete conversation?</h3>
+            <p className="mt-2 text-sm text-muted-foreground">This permanently removes “{conversations.find((conversation) => conversation.id === conversationId)?.title ?? "this conversation"}” and its message history.</p>
+            {conversationError && <p role="alert" className="mt-3 text-xs text-destructive">{conversationError}</p>}
+            <div className="mt-5 flex justify-end gap-2">
+              <Button type="button" variant="ghost" onClick={() => { setDeleteOpen(false); setConversationError("") }} disabled={deleting}>Cancel</Button>
+              <Button type="button" variant="destructive" onClick={() => void deleteActiveConversation()} disabled={deleting}>{deleting ? <><LoaderCircle className="size-4 animate-spin"/>Deleting</> : "Delete conversation"}</Button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }

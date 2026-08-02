@@ -22,8 +22,8 @@ function SummaryMetric({ label, value, detail }: { label: string; value: string;
   return (
     <div className="rounded-lg border border-border bg-card p-4">
       <p className="text-xs font-medium text-muted-foreground">{label}</p>
-      <p className="mt-2 text-2xl font-semibold tracking-tight tabular-nums">{value}</p>
-      <p className="mt-2 text-xs leading-relaxed text-muted-foreground">{detail}</p>
+      <p className="mt-2 text-2xl font-semibold tabular-nums">{value}</p>
+      <p className="mt-2 text-xs text-muted-foreground">{detail}</p>
     </div>
   )
 }
@@ -115,7 +115,7 @@ export default async function AttritionPage() {
     <div className="mx-auto flex w-full max-w-[1440px] flex-col gap-6 pb-10">
       <header className="flex flex-col gap-4 border-b border-border pb-5 sm:flex-row sm:items-end sm:justify-between">
         <div>
-          <h1 className="text-2xl font-semibold tracking-tight">Attrition risk</h1>
+          <h1 className="text-2xl font-semibold">Attrition risk</h1>
           <p className="mt-1 max-w-3xl text-sm text-muted-foreground">
             Review current attrition patterns, identify retention priorities, and evaluate explainable prediction scenarios.
           </p>
@@ -134,7 +134,7 @@ export default async function AttritionPage() {
         <div className="rounded-lg border border-border bg-card p-4">
             <div>
               <p className="text-sm font-semibold">Current workforce evidence</p>
-              <p className="mt-1 text-xs leading-relaxed text-muted-foreground">
+              <p className="mt-1 text-xs text-muted-foreground">
                 Recorded attrition outcomes, exit reasons, departments, and tenure cohorts.
               </p>
             </div>
@@ -142,7 +142,7 @@ export default async function AttritionPage() {
         <div className="rounded-lg border border-border bg-card p-4">
             <div>
               <p className="text-sm font-semibold">Historical prediction benchmark</p>
-              <p className="mt-1 text-xs leading-relaxed text-muted-foreground">
+              <p className="mt-1 text-xs text-muted-foreground">
                 {historicalRows.toLocaleString()} historical model records linked to employee profiles for joined analysis.
               </p>
             </div>
@@ -284,7 +284,7 @@ export default async function AttritionPage() {
                   <div key={metric.label} className="bg-card px-4 py-3">
                     <p className="text-xs text-muted-foreground">{metric.label}</p>
                     <p className="mt-1 text-sm font-semibold tabular-nums">{metric.value}</p>
-                    <p className="mt-1 text-[11px] text-muted-foreground">{metric.hint}</p>
+                    <p className="mt-1 text-meta text-muted-foreground">{metric.hint}</p>
                   </div>
                 ))}
               </CardContent>
@@ -293,7 +293,7 @@ export default async function AttritionPage() {
         </div>
       </section>
 
-      <div className="rounded-lg border border-border bg-muted/25 px-4 py-3 text-xs leading-relaxed text-muted-foreground">
+      <div className="rounded-lg border border-border bg-muted/25 px-4 py-3 text-xs text-muted-foreground">
         Predicted risk is a statistical estimate for qualified human review. Do not use it as the sole basis for an employment decision. Historical payroll associated with records above threshold is approximately ${(dashboard.highRiskPayroll / 1_000_000).toFixed(1)}M; this is payroll exposure, not a replacement-cost or savings estimate.
       </div>
     </div>
