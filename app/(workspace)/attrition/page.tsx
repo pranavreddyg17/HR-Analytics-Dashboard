@@ -5,6 +5,7 @@ import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { getWorkforceAnalytics } from "@/lib/server/hr-analytics"
 import { getDashboard, getPredictionSchema } from "@/lib/server/runtime"
+import { MetricStrip, WorkspaceHeader, WorkspacePage } from "@/components/workspace-ui"
 
 export const dynamic = "force-dynamic"
 
@@ -12,16 +13,6 @@ const percentage = new Intl.NumberFormat("en", { maximumFractionDigits: 1 })
 
 function share(value: number, total: number): number {
   return total ? (value / total) * 100 : 0
-}
-
-function SummaryMetric({ label, value, detail }: { label: string; value: string; detail: string }) {
-  return (
-    <div className="px-5 py-4">
-      <p className="text-label font-normal text-muted-foreground">{label}</p>
-      <p className="mt-1 text-kpi font-semibold tabular-nums">{value}</p>
-      <p className="mt-1 text-meta text-muted-foreground">{detail}</p>
-    </div>
-  )
 }
 
 function DistributionList({ rows, total }: { rows: Array<{ label: string; value: number }>; total: number }) {
@@ -73,36 +64,16 @@ export default async function AttritionPage() {
   const topReason = reasonCounts[0]
 
   return (
-    <div className="mx-auto flex w-full max-w-[1440px] flex-col gap-6 pb-10">
-      <header className="flex flex-col gap-4 border-b border-border pb-5 sm:flex-row sm:items-end sm:justify-between">
-        <div>
-          <h1 className="text-page font-semibold">Attrition risk</h1>
-          <p className="mt-1 max-w-2xl text-description text-muted-foreground">
-            Monitor recorded exits, identify retention priorities, and assess model scenarios.
-          </p>
-        </div>
-        <Button nativeButton={false} size="lg" render={<Link href="/risk-review" />}>
+    <WorkspacePage>
+      <WorkspaceHeader title="Attrition risk" description="Monitor recorded exits, identify retention priorities, and assess model scenarios." actions={<Button nativeButton={false} render={<Link href="/risk-review" />}>
           Review employee risk
-        </Button>
-      </header>
+        </Button>}/>
 
-      <section aria-label="Attrition summary" className="grid divide-y divide-border overflow-hidden rounded-lg border border-border bg-card sm:grid-cols-3 sm:divide-x sm:divide-y-0">
-        <SummaryMetric
-          label="Attrition rate"
-          value={`${percentage.format(workforce.attrition.rate)}%`}
-          detail="Recorded workforce outcomes"
-        />
-        <SummaryMetric
-          label="Recorded exits"
-          value={workforce.attrition.totalExits.toLocaleString()}
-          detail={`${percentage.format(voluntaryShare)}% voluntary · ${workforce.attrition.involuntary} involuntary`}
-        />
-        <SummaryMetric
-          label="Risk review queue"
-          value={dashboard.highRiskCount.toLocaleString()}
-          detail={`${percentage.format(reviewShare)}% above the ${(dashboard.threshold * 100).toFixed(0)}% review threshold`}
-        />
-      </section>
+      <MetricStrip metrics={[
+        { label: "Attrition rate", value: `${percentage.format(workforce.attrition.rate)}%`, detail: "Recorded workforce outcomes" },
+        { label: "Recorded exits", value: workforce.attrition.totalExits.toLocaleString(), detail: `${percentage.format(voluntaryShare)}% voluntary · ${workforce.attrition.involuntary} involuntary` },
+        { label: "Risk review queue", value: dashboard.highRiskCount.toLocaleString(), detail: `${percentage.format(reviewShare)}% above the ${(dashboard.threshold * 100).toFixed(0)}% review threshold` },
+      ]}/>
 
       <section className="grid gap-4 xl:grid-cols-[minmax(0,1.55fr)_minmax(320px,0.75fr)]" aria-label="Attrition review workspace">
         <Card className="gap-0 py-0 shadow-none">
@@ -174,6 +145,6 @@ export default async function AttritionPage() {
           </p>
         </div>
       </details>
-    </div>
+    </WorkspacePage>
   )
 }

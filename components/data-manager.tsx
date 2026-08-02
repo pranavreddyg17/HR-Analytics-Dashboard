@@ -8,6 +8,7 @@ import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { cn } from "@/lib/utils"
 import { formatWorkspaceDateTime } from "@/lib/date-format"
+import { WorkspaceHeader, WorkspacePage } from "@/components/workspace-ui"
 
 function parseCsv(text: string): Array<Record<string, string>> {
   const matrix: string[][] = []
@@ -132,27 +133,15 @@ export function DataManager() {
   }
 
   const totalRows = status.reduce((sum, item) => sum + item.count, 0)
-  return <div className="mx-auto flex w-full max-w-[1520px] flex-col gap-5 pb-10">
-    <header className="flex flex-col gap-4 border-b border-border pb-5 sm:flex-row sm:items-end sm:justify-between">
-      <div>
-        <h1 className="text-2xl font-semibold">Import / Export Data</h1>
-        <p className="mt-1 max-w-2xl text-sm text-muted-foreground">Import HR records, download templates, and connect reporting feeds.</p>
-      </div>
-      <Button type="button" variant="outline" onClick={() => void refreshStatus()} disabled={statusBusy}>
+  return <WorkspacePage>
+    <WorkspaceHeader title="Import / export data" description="Import HR records, download templates, and connect reporting feeds." meta={<>{totalRows.toLocaleString()} records across {hrDomains.length} domains</>} actions={<Button type="button" variant="outline" onClick={() => void refreshStatus()} disabled={statusBusy}>
         <RefreshCw className={cn("size-4", statusBusy && "animate-spin")} />
         Refresh status
-      </Button>
-    </header>
+      </Button>}/>
 
-    <Card id="data-coverage" className="scroll-mt-24 gap-0 overflow-hidden py-0 shadow-none">
-      <div className="flex flex-col gap-3 border-b border-border px-5 py-4 sm:flex-row sm:items-center sm:justify-between">
-        <div><CardTitle>Data coverage</CardTitle><CardDescription className="mt-1">Current records available to dashboards and reports</CardDescription></div>
-        <div className="flex gap-5 text-sm">
-          <div><span className="block text-meta text-muted-foreground">Total records</span><b className="font-semibold tabular-nums">{totalRows.toLocaleString()}</b></div>
-          <div><span className="block text-meta text-muted-foreground">Data domains</span><b className="font-semibold tabular-nums">{hrDomains.length}</b></div>
-        </div>
-      </div>
-      <div className="overflow-x-auto">
+    <details id="data-coverage" className="scroll-mt-24 overflow-hidden rounded-lg border border-border bg-card">
+      <summary className="flex min-h-12 items-center justify-between gap-3 px-4 font-semibold"><span>Data coverage</span><span className="text-meta font-normal text-muted-foreground">View record counts and last import dates</span></summary>
+      <div className="overflow-x-auto border-t border-border">
         <table className="w-full min-w-[680px] text-left text-sm">
           <thead className="bg-muted/45 text-xs text-muted-foreground"><tr><th className="px-5 py-3 font-medium">Domain</th><th className="px-5 py-3 font-medium">Records</th><th className="px-5 py-3 font-medium">Last import</th></tr></thead>
           <tbody>{status.map((item) => <tr key={item.domain} className="border-t border-border/70">
@@ -162,7 +151,7 @@ export function DataManager() {
           </tr>)}</tbody>
         </table>
       </div>
-    </Card>
+    </details>
 
     <div className="grid gap-5 xl:grid-cols-[1.15fr_0.85fr]">
       <Card id="import-records" className="scroll-mt-24 shadow-none">
@@ -217,5 +206,5 @@ export function DataManager() {
         </CardContent>
       </Card>
     </div>
-  </div>
+  </WorkspacePage>
 }

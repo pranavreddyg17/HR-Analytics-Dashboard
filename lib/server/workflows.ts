@@ -200,12 +200,15 @@ export async function actOnWorkflow(value: unknown, actor: RequestActor) {
   if (input.type === "hiring") {
     if (!(["admin", "hr"] as string[]).includes(actor.role)) throw new PeopleError("Only HR can approve hiring requisitions.", 403)
     if (!["approve", "reject"].includes(input.action)) throw new PeopleError("Choose approve or reject.", 422)
+    if (String(workflow.status ?? "").toLowerCase() !== "requested") throw new PeopleError("This requisition decision has already been recorded.", 409)
     const recruitmentStatus = input.action === "approve" ? "Open" : "Closed"
     if (input.action === "approve") {
       await db.batch([
         db.prepare("UPDATE hiring_records SET recruitment_status='Open', updated_at=CURRENT_TIMESTAMP WHERE id=?").bind(input.id),
         db.prepare("UPDATE workflow_requests SET status='Open', owner_email=?, due_at=date('now', '+14 days'), next_action='Record recruiting progress or confirm the requisition remains active.', assigned_at=CURRENT_TIMESTAMP, resolved_by_email=?, resolved_at=CURRENT_TIMESTAMP, completed_at=NULL, completion_notes=NULL, updated_at=CURRENT_TIMESTAMP WHERE id=?")
           .bind(actor.email, actor.email, input.id),
+        db.prepare("INSERT INTO hiring_activity(id, entity_type, entity_id, requisition_id, action, from_status, to_status, detail, actor_email) VALUES (?, 'requisition', ?, ?, 'requisition_approved', 'Requested', 'Open', ?, ?)")
+          .bind(crypto.randomUUID(), input.id, input.id, `${actor.displayName} approved and opened the hiring requisition.`, actor.email),
       ])
       return { id: input.id, status: "Open", message: "Hiring requisition approved and opened." }
     }
@@ -213,6 +216,8 @@ export async function actOnWorkflow(value: unknown, actor: RequestActor) {
       db.prepare("UPDATE hiring_records SET recruitment_status=?, updated_at=CURRENT_TIMESTAMP WHERE id=?").bind(recruitmentStatus, input.id),
       db.prepare("UPDATE workflow_requests SET status='Rejected', next_action='No further action.', assigned_at=CURRENT_TIMESTAMP, resolved_by_email=?, resolved_at=CURRENT_TIMESTAMP, completed_at=CURRENT_TIMESTAMP, completion_notes=?, updated_at=CURRENT_TIMESTAMP WHERE id=?")
         .bind(actor.email, `${actor.displayName} rejected the hiring requisition.`, input.id),
+      db.prepare("INSERT INTO hiring_activity(id, entity_type, entity_id, requisition_id, action, from_status, to_status, detail, actor_email) VALUES (?, 'requisition', ?, ?, 'requisition_rejected', 'Requested', 'Closed', ?, ?)")
+        .bind(crypto.randomUUID(), input.id, input.id, `${actor.displayName} rejected the hiring requisition.`, actor.email),
     ])
     return { id: input.id, status: "Rejected", message: "Hiring requisition rejected." }
   }

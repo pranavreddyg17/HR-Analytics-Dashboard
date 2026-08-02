@@ -30,13 +30,14 @@ import { PersonAvatar, StatusPill, formatDate, plural } from "@/components/peopl
 import type { EmployeeActivity, EmployeeDirectoryResponse, EmployeeProfileResponse, ManagedEmployee } from "@/lib/people-types"
 import { cn } from "@/lib/utils"
 import { formatWorkspaceDateTime } from "@/lib/date-format"
+import { WorkspacePage } from "@/components/workspace-ui"
 
 type ProfileTab = "overview" | "job" | "time-off" | "growth" | "activity"
 
 const tabs: Array<{ id: ProfileTab; label: string }> = [
   { id: "overview", label: "Overview" },
   { id: "job", label: "Job" },
-  { id: "time-off", label: "Time off" },
+  { id: "time-off", label: "Leave" },
   { id: "growth", label: "Growth" },
   { id: "activity", label: "Activity" },
 ]
@@ -90,24 +91,24 @@ export function PeopleProfile({ employeeId }: { employeeId: string }) {
 
   const employee = data.employee
   return (
-    <div className="mx-auto flex w-full max-w-[1500px] flex-col gap-5">
+    <WorkspacePage>
       <div className="flex items-center justify-between gap-3">
         <Button nativeButton={false} variant="ghost" size="sm" className="-ml-2 text-muted-foreground" render={<Link href="/people" />}><ArrowLeft className="size-4" />All people</Button>
         {loading && <span className="flex items-center gap-2 text-xs text-muted-foreground"><RefreshCcw className="size-3.5 animate-spin" />Refreshing</span>}
       </div>
 
       <section className="overflow-hidden rounded-lg border border-border bg-card shadow-none">
-        <div className="flex flex-col gap-5 px-5 pb-6 pt-6 sm:px-6 lg:flex-row lg:items-end">
+        <div className="flex flex-col gap-4 px-4 py-4 sm:px-5 lg:flex-row lg:items-end">
           <PersonAvatar employeeId={employee.employee_id} initials={employee.initials} size="xl" />
           <div className="min-w-0 flex-1">
             {employee.archived_at && <div className="mb-2 text-meta font-medium text-muted-foreground">Archived {formatDate(employee.archived_at)}</div>}
-            <h2 className="truncate text-2xl font-semibold sm:text-3xl">{employee.display_name}</h2>
-            <p className="mt-2 text-sm text-muted-foreground">{employee.job_title} · {employee.department} · {employee.location}</p>
+            <h1 className="truncate text-page font-semibold">{employee.display_name}</h1>
+            <p className="mt-1 text-sm text-muted-foreground">{employee.job_title} · {employee.department} · {employee.location}</p>
           </div>
           <div className="flex flex-wrap items-center gap-2">
             <StatusPill status={employee.employment_status} />
-            <Button variant="outline" size="lg" className="h-10 rounded-md" onClick={() => setEditOpen(true)} disabled={Boolean(employee.archived_at)}><Pencil className="size-4" />Edit profile</Button>
-            <Button variant={employee.archived_at ? "outline" : "ghost"} size="lg" className={cn("h-10 rounded-md", !employee.archived_at && "text-muted-foreground hover:text-destructive")} onClick={() => setArchiveOpen(true)}>{employee.archived_at ? <RefreshCcw className="size-4" /> : <Archive className="size-4" />}{employee.archived_at ? "Restore" : "Archive"}</Button>
+            <Button variant="outline" onClick={() => setEditOpen(true)} disabled={Boolean(employee.archived_at)}><Pencil className="size-3.5" />Edit profile</Button>
+            <Button variant={employee.archived_at ? "outline" : "ghost"} className={cn(!employee.archived_at && "text-muted-foreground hover:text-destructive")} onClick={() => setArchiveOpen(true)}>{employee.archived_at ? <RefreshCcw className="size-3.5" /> : <Archive className="size-3.5" />}{employee.archived_at ? "Restore" : "Archive"}</Button>
           </div>
         </div>
 
@@ -115,7 +116,7 @@ export function PeopleProfile({ employeeId }: { employeeId: string }) {
           <nav aria-label="Employee profile sections" className="flex min-w-max gap-1">
             {tabs.map((item) => {
               const active = tab === item.id
-              return <button key={item.id} type="button" onClick={() => setTab(item.id)} className={cn("-mb-px border-b-2 px-3 py-3.5 text-sm font-medium transition-colors", active ? "border-primary text-foreground" : "border-transparent text-muted-foreground hover:text-foreground")}>{item.label}</button>
+              return <button key={item.id} type="button" onClick={() => setTab(item.id)} className={cn("-mb-px border-b-2 px-3 py-2.5 text-sm font-medium", active ? "border-primary text-foreground" : "border-transparent text-muted-foreground hover:text-foreground")}>{item.label}</button>
             })}
           </nav>
         </div>
@@ -139,7 +140,7 @@ export function PeopleProfile({ employeeId }: { employeeId: string }) {
         onSaved={refreshProfile}
       />
       <ArchiveDialog open={archiveOpen} employee={employee} onClose={() => setArchiveOpen(false)} onChanged={() => { setArchiveOpen(false); refreshProfile() }} />
-    </div>
+    </WorkspacePage>
   )
 }
 
@@ -231,7 +232,7 @@ function ActivityTab({ data }: { data: EmployeeProfileResponse }) {
         <InfoLine label="Risk band" value={`${data.attritionModel.risk_level} · ${Number(data.attritionModel.risk_score).toFixed(1)}%`} />
         <InfoLine label="Observed outcome" value={data.attritionModel.observed_attrition === "Yes" ? "Recorded exit" : "No recorded exit"} />
         <InfoLine label="Model version" value={data.attritionModel.model_version} />
-        <p className="border-t border-border/60 pt-3 text-xs text-muted-foreground">{data.attritionModel.top_driver} This context belongs to the synthetic IBM demo record and is not an employment decision.</p>
+        <p className="border-t border-border/60 pt-3 text-xs text-muted-foreground">{data.attritionModel.top_driver}</p>
       </InfoCard>}
       {data.attrition.length > 0 && <Card className="gap-0 overflow-hidden rounded-lg border-border/70 shadow-none"><SectionHeader title="Exit records" detail="Recorded employee departures" icon={Archive} /><div className="divide-y divide-border/60">{data.attrition.map((item) => <div key={item.id} className="p-4"><div className="flex items-center justify-between gap-3"><p className="text-sm font-semibold">{item.exit_reason}</p><RecordStatus status={item.exit_type} /></div><p className="mt-1 text-xs text-muted-foreground">{formatDate(item.exit_date)} · {item.tenure_years} years tenure</p></div>)}</div></Card>}
     </div>

@@ -44,15 +44,15 @@ type SearchDestination = {
 }
 
 const pageDetails: Record<string, string> = {
-  "/": "Executive workforce overview",
+  "/": "Priorities and upcoming people work",
   "/people": "Employee directory and records",
-  "/inbox": "HR requests and approvals",
-  "/hiring": "Requisitions and recruiting performance",
+  "/inbox": "Requests, decisions, and follow-ups",
+  "/hiring": "Headcount requests and candidate pipeline",
   "/time-off": "Leave requests, schedules, and coverage",
-  "/learning": "Training assignments and compliance",
-  "/insights": "Workforce metrics and department review",
+  "/learning": "Course assignments and due dates",
+  "/insights": "Workforce movement and operational exceptions",
   "/attrition": "Retention signals and model analysis",
-  "/ai-agents": "Grounded workforce analytics",
+  "/ai-agents": "Workforce questions and assisted actions",
   "/data": "Imports, record coverage, and reporting feeds",
   "/access": "Accounts, roles, and access history",
 }

@@ -4,6 +4,7 @@ import { useCallback, useEffect, useState } from "react"
 import { Loader2, Plus, Trash2, X } from "lucide-react"
 
 import { formatWorkspaceDateTime } from "@/lib/date-format"
+import { WorkspaceHeader, WorkspacePage } from "@/components/workspace-ui"
 
 type User = { email: string; display_name: string; role: string; status: string; created_at: string; last_login_at: string | null }
 type Audit = { id: string; actor_email: string; action: string; target_email: string; created_at: string }
@@ -62,32 +63,29 @@ export function AccessManager({ ownerEmail }: { ownerEmail: string }) {
   }
 
   return (
-    <div className="page-stack">
-      <header className="border-b border-border pb-5">
-        <h1 className="text-2xl font-semibold">Access management</h1>
-        <p className="mt-1 text-sm text-muted-foreground">Manage approved Google accounts, roles, and account status.</p>
-      </header>
+    <WorkspacePage>
+      <WorkspaceHeader title="Access" description="Manage approved Google accounts, roles, and account status." meta={<>{users.length} approved {users.length === 1 ? "account" : "accounts"}</>} />
 
       <section className="surface-card">
         <div className="border-b border-border px-5 py-4">
           <h2 className="text-sm font-semibold">Add account</h2>
           <p className="mt-1 text-xs text-muted-foreground">Grant access to an approved Google account.</p>
         </div>
-        <form onSubmit={invite} className="grid gap-3 p-5 sm:grid-cols-[minmax(0,1fr)_160px_auto] sm:items-end">
+        <form onSubmit={invite} className="grid gap-3 p-4 sm:grid-cols-[minmax(0,1fr)_160px_auto] sm:items-end">
           <label className="text-xs font-medium text-foreground">
             Email address
-            <input required type="email" value={email} onChange={(event) => setEmail(event.target.value)} placeholder="name@company.com" className="mt-1.5 h-10 w-full rounded-md border border-border bg-background px-3 text-sm outline-none focus:ring-2 focus:ring-primary/25" />
+            <input required type="email" value={email} onChange={(event) => setEmail(event.target.value)} placeholder="name@company.com" className="mt-1 h-9 w-full rounded-md border border-border bg-background px-3 text-sm outline-none focus:ring-2 focus:ring-primary/25" />
           </label>
           <label className="text-xs font-medium text-foreground">
             Role
-            <select value={role} onChange={(event) => setRole(event.target.value)} className="mt-1.5 h-10 w-full rounded-md border border-border bg-background px-3 text-sm">
+            <select value={role} onChange={(event) => setRole(event.target.value)} className="mt-1 h-9 w-full rounded-md border border-border bg-background px-3 text-sm">
               <option value="hr">HR</option>
               <option value="manager">Manager</option>
               <option value="viewer">Viewer</option>
               <option value="admin">Admin</option>
             </select>
           </label>
-          <button disabled={saving} className="inline-flex h-10 items-center justify-center gap-2 rounded-md bg-primary px-4 text-sm font-semibold text-primary-foreground disabled:opacity-50">
+          <button disabled={saving} className="inline-flex h-9 items-center justify-center gap-2 rounded-md bg-primary px-4 text-sm font-semibold text-primary-foreground disabled:opacity-50">
             {saving ? <Loader2 className="size-4 animate-spin" /> : <Plus className="size-4" />}
             Add account
           </button>
@@ -105,7 +103,7 @@ export function AccessManager({ ownerEmail }: { ownerEmail: string }) {
         ) : (
           <div className="divide-y divide-border">
             {users.map((user) => (
-              <div key={user.email} className="grid gap-3 px-5 py-4 md:grid-cols-[minmax(0,1fr)_140px_120px_40px] md:items-center">
+              <div key={user.email} className="grid gap-3 px-4 py-3 md:grid-cols-[minmax(0,1fr)_140px_120px_40px] md:items-center">
                 <div className="min-w-0">
                   <p className="truncate text-sm font-semibold">
                     {user.display_name || user.email.split("@")[0]}
@@ -131,11 +129,9 @@ export function AccessManager({ ownerEmail }: { ownerEmail: string }) {
         )}
       </section>
 
-      <section className="surface-card">
-        <div className="border-b border-border px-5 py-4">
-          <h2 className="text-sm font-semibold">Access history</h2>
-        </div>
-        <div className="divide-y divide-border">
+      <details className="surface-card overflow-hidden">
+        <summary className="flex min-h-12 items-center justify-between px-4 font-semibold">Access history <span className="text-meta font-normal text-muted-foreground">{audit.length} recorded changes</span></summary>
+        <div className="divide-y divide-border border-t border-border">
           {audit.length ? audit.slice(0, 12).map((item) => (
             <div key={item.id} className="grid gap-1 px-5 py-3 text-xs sm:grid-cols-[minmax(0,1fr)_auto] sm:items-center">
               <span className="min-w-0 truncate"><b>{item.actor_email}</b> {item.action.replaceAll("_", " ")} for <b>{item.target_email}</b></span>
@@ -143,7 +139,7 @@ export function AccessManager({ ownerEmail }: { ownerEmail: string }) {
             </div>
           )) : <p className="px-5 py-8 text-center text-sm text-muted-foreground">No access changes recorded.</p>}
         </div>
-      </section>
+      </details>
 
       {removeTarget && (
         <div className="fixed inset-0 z-[80] flex items-center justify-center bg-foreground/25 p-4" role="dialog" aria-modal="true" aria-labelledby="remove-access-title">
@@ -165,6 +161,6 @@ export function AccessManager({ ownerEmail }: { ownerEmail: string }) {
           </div>
         </div>
       )}
-    </div>
+    </WorkspacePage>
   )
 }

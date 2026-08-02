@@ -53,12 +53,12 @@ export function WorkflowCreator({ actor, people, initialType, onCreated }: { act
 
   return (
     <>
-      <section className="grid gap-3 md:grid-cols-3" aria-label="Create HR workflow">
+      <section className="flex flex-wrap items-center gap-2" aria-label="Create HR workflow">
+        <span className="mr-1 text-label font-semibold text-muted-foreground">Create</span>
         {cards.map((card) => {
           return (
-            <button key={card.type} type="button" disabled={!card.enabled} onClick={() => { setError(""); setType(card.type) }} className="rounded-lg border border-border bg-card p-4 text-left transition-colors hover:bg-muted/25 disabled:cursor-not-allowed disabled:opacity-45">
-              <span className="block text-sm font-semibold">{card.title}</span>
-              <span className="mt-0.5 block text-meta text-muted-foreground">{card.detail}</span>
+            <button key={card.type} type="button" disabled={!card.enabled} onClick={() => { setError(""); setType(card.type) }} title={card.detail} className="inline-flex h-9 items-center rounded-md border border-border bg-card px-3 font-semibold hover:bg-muted disabled:cursor-not-allowed disabled:opacity-45">
+              <span>{card.title}</span>
             </button>
           )
         })}

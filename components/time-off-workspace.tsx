@@ -4,17 +4,6 @@ import { useEffect, useMemo, useState } from "react"
 import Link from "next/link"
 import { useSearchParams } from "next/navigation"
 import {
-  Area,
-  AreaChart,
-  Bar,
-  BarChart,
-  CartesianGrid,
-  ResponsiveContainer,
-  Tooltip,
-  XAxis,
-  YAxis,
-} from "recharts"
-import {
   Check,
   FilterX,
   LoaderCircle,
@@ -23,11 +12,12 @@ import {
   X,
 } from "lucide-react"
 
-import type { BreakdownPoint, EmployeeRecord, LeaveRecord, TimePoint, WorkforceAnalytics } from "@/lib/hr-types"
+import type { EmployeeRecord, LeaveRecord, WorkforceAnalytics } from "@/lib/hr-types"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { cn } from "@/lib/utils"
 import { formatWorkspaceDateTime } from "@/lib/date-format"
+import { MetricStrip, WorkspaceHeader, WorkspacePage } from "@/components/workspace-ui"
 
 type Filters = { from: string; to: string; department: string; location: string; leaveType: string; period: "month" | "quarter" | "year" }
 type Reviewer = { role: string; email: string; employeeId: string | null }
@@ -51,34 +41,6 @@ function statusTone(status: string): string {
   if (normalized === "pending") return "text-amber-700 dark:text-amber-300"
   if (normalized === "rejected") return "text-rose-700 dark:text-rose-300"
   return "text-muted-foreground"
-}
-
-function Metric({ label, value, detail }: { label: string; value: string; detail: string }) {
-  return <Card className="gap-2 p-4 shadow-none"><p className="text-xs font-medium text-muted-foreground">{label}</p><div><p className="text-2xl font-semibold tabular-nums">{value}</p><p className="mt-1 text-meta text-muted-foreground">{detail}</p></div></Card>
-}
-
-function LeaveTooltip({ active, payload, label }: { active?: boolean; payload?: Array<{ name?: string; value?: number }>; label?: string }) {
-  if (!active || !payload?.length) return null
-  return <div className="rounded-md border border-border bg-popover px-3 py-2 text-xs shadow-none"><p className="font-semibold">{label}</p>{payload.map((item) => <p key={item.name} className="mt-1 text-muted-foreground"><span className="text-primary">{item.value}</span> {item.name?.toLowerCase()}</p>)}</div>
-}
-
-function TrendChart({ data }: { data: TimePoint[] }) {
-  if (!data.length) return <EmptyChart />
-  return <div className="h-64 w-full"><ResponsiveContainer width="100%" height="100%"><AreaChart data={data} margin={{ left: -20, right: 8, top: 8, bottom: 2 }}><defs><linearGradient id="leaveDaysFill" x1="0" y1="0" x2="0" y2="1"><stop offset="5%" stopColor="var(--chart-1)" stopOpacity={0.3}/><stop offset="95%" stopColor="var(--chart-1)" stopOpacity={0}/></linearGradient></defs><CartesianGrid strokeDasharray="3 3" vertical={false} stroke="var(--border)"/><XAxis dataKey="period" axisLine={false} tickLine={false} tick={{ fill: "var(--muted-foreground)" }}/><YAxis axisLine={false} tickLine={false} tick={{ fill: "var(--muted-foreground)" }}/><Tooltip content={<LeaveTooltip/>}/><Area type="monotone" dataKey="value" name="Days" stroke="var(--chart-1)" strokeWidth={2.5} fill="url(#leaveDaysFill)"/></AreaChart></ResponsiveContainer></div>
-}
-
-function BreakdownChart({ data, name, onSelect }: { data: BreakdownPoint[]; name: string; onSelect?: (label: string) => void }) {
-  if (!data.length) return <EmptyChart />
-  return <div className="h-64 w-full"><ResponsiveContainer width="100%" height="100%"><BarChart data={data.slice(0, 8)} layout="vertical" margin={{ left: 30, right: 14, top: 4, bottom: 2 }}><CartesianGrid strokeDasharray="3 3" horizontal={false} stroke="var(--border)"/><XAxis type="number" axisLine={false} tickLine={false} tick={{ fill: "var(--muted-foreground)" }}/><YAxis type="category" dataKey="label" width={112} axisLine={false} tickLine={false} tick={{ fill: "var(--muted-foreground)" }}/><Tooltip content={<LeaveTooltip/>}/><Bar dataKey="value" name={name} fill="var(--chart-1)" radius={[0,6,6,0]} cursor={onSelect ? "pointer" : "default"} onClick={(entry) => { const row = entry as unknown as { label?: string; payload?: { label?: string } }; const label = row.label ?? row.payload?.label; if (label && onSelect) onSelect(label) }}/></BarChart></ResponsiveContainer></div>
-}
-
-function EmptyChart() {
-  return <div className="flex h-64 items-center justify-center rounded-md border border-dashed border-border text-sm text-muted-foreground">No database records match these filters.</div>
-}
-
-function RequestStatus({ data }: { data: BreakdownPoint[] }) {
-  const total = data.reduce((sum, item) => sum + item.value, 0)
-  return <div className="grid gap-3 sm:grid-cols-3">{data.map((item) => <div key={item.label} className="rounded-md border border-border bg-card p-3"><div className="flex items-center justify-between gap-2"><span className={cn("text-xs font-medium", statusTone(item.label))}>{item.label}</span><span className="text-xl font-semibold tabular-nums">{item.value}</span></div><div className="mt-3 h-1.5 overflow-hidden rounded-full bg-muted"><div className="h-full rounded-full bg-primary" style={{ width: `${total ? Math.max(5, (item.value / total) * 100) : 0}%` }}/></div></div>)}</div>
 }
 
 function LeaveSchedule({ title, description, emptyMessage, rows, people }: { title: string; description: string; emptyMessage: string; rows: LeaveRecord[]; people: Map<string, string> }) {
@@ -124,7 +86,7 @@ function LeaveTable({ rows, people, reviewer, employees, busyId, selectedId, onD
     document.getElementById(`leave-request-${selectedId}`)?.scrollIntoView({ block: "center" })
   }, [selectedId, visible])
   return (
-    <Card className="gap-0 overflow-hidden py-0 shadow-none">
+    <Card id="leave-register" className="gap-0 scroll-mt-24 overflow-hidden py-0 shadow-none">
       <CardHeader className="gap-4 border-b border-border px-5 py-5 lg:flex-row lg:items-center lg:justify-between">
         <div><CardTitle>Leave request register</CardTitle><CardDescription>Requests for the selected filters</CardDescription></div>
         <div className="flex flex-col gap-2 sm:flex-row">
@@ -198,30 +160,27 @@ export function TimeOffWorkspace({ canRequestLeave, reviewer }: { canRequestLeav
     }
   }
 
-  return <div className="mx-auto flex w-full max-w-[1520px] flex-col gap-5 pb-10">
-    <header className="border-b border-border pb-5"><div className="flex flex-col gap-5 lg:flex-row lg:items-end lg:justify-between"><div><h1 className="text-2xl font-semibold">Leaves</h1><p className="mt-1 max-w-2xl text-sm text-muted-foreground">Manage leave requests, approvals, schedules, and coverage.</p></div><div className="flex flex-wrap gap-2">{canReviewLeave && <Button nativeButton={false} variant="outline" render={<a href="#pending-decisions"/>}>Review pending ({pendingForReview.length})</Button>}{canRequestLeave && <Button nativeButton={false} render={<Link href="/inbox?new=leave"/>}><Plus className="size-4"/>Request leave</Button>}</div></div><div className="mt-3 flex flex-wrap gap-x-5 gap-y-1 text-xs text-muted-foreground"><span>{data.leave.totalRequests} records</span><span>Updated {formatWorkspaceDateTime(data.generatedAt)}</span></div></header>
+  return <WorkspacePage>
+    <WorkspaceHeader title="Leaves" description="Review requests and coordinate team availability." meta={<><span>{data.leave.totalRequests} requests</span><span>Updated {formatWorkspaceDateTime(data.generatedAt)}</span></>} actions={<>{canReviewLeave && pendingForReview.length > 0 && <Button nativeButton={false} variant="outline" render={<a href="#pending-decisions"/>}>Review pending ({pendingForReview.length})</Button>}{canRequestLeave && <Button nativeButton={false} render={<Link href="/inbox?new=leave"/>}><Plus className="size-3.5"/>Request leave</Button>}</>}/>
 
-    {selectedRequestId && (selectedRequest ? <Card className="gap-0 overflow-hidden py-0 shadow-none"><CardHeader className="border-b border-border px-5 py-4 sm:flex-row sm:items-start sm:justify-between"><div><CardTitle>Selected leave request</CardTitle><CardDescription>{selectedPerson} · {selectedRequest.employee_id}</CardDescription></div><div className="flex flex-wrap gap-2"><Button nativeButton={false} variant="outline" render={<Link href="/time-off"/>}>Clear selection</Button><Button nativeButton={false} variant="outline" render={<Link href={`/people/${encodeURIComponent(selectedRequest.employee_id)}`}/>}>View employee</Button>{canDecide(selectedRequest, reviewer, employees) && <><Button variant="outline" disabled={busyId !== null} onClick={() => void decide(selectedRequest, "Rejected")}>Decline</Button><Button disabled={busyId !== null} onClick={() => void decide(selectedRequest, "Approved")}>{busyId === selectedRequest.id && <LoaderCircle className="size-3.5 animate-spin"/>}Approve</Button></>}{selectedRequest.approval_status.toLowerCase() === "approved" && <Button onClick={() => { setFilters({ ...filters, department: selectedRequest.department }); window.setTimeout(() => document.getElementById("department-coverage")?.scrollIntoView({ behavior: "smooth", block: "start" }), 0) }}>Review department coverage</Button>}</div></CardHeader><CardContent className="grid gap-4 p-5 sm:grid-cols-2 xl:grid-cols-4"><div><p className="text-meta font-semibold text-muted-foreground">Leave</p><p className="mt-1 text-sm">{selectedRequest.leave_type} · {selectedRequest.leave_days} day{selectedRequest.leave_days === 1 ? "" : "s"}</p></div><div><p className="text-meta font-semibold text-muted-foreground">Dates</p><p className="mt-1 text-sm">{dateLabel(selectedRequest.start_date)} — {dateLabel(selectedRequest.end_date)}</p></div><div><p className="text-meta font-semibold text-muted-foreground">Department</p><p className="mt-1 text-sm">{selectedRequest.department}</p></div><div><p className="text-meta font-semibold text-muted-foreground">Status</p><p className={cn("mt-1 text-sm font-semibold", statusTone(selectedRequest.approval_status))}>{selectedRequest.approval_status}</p></div></CardContent></Card> : <div className="rounded-md border border-amber-200 bg-amber-50 px-4 py-3 text-xs text-amber-900 dark:border-amber-900/40 dark:bg-amber-950/20 dark:text-amber-100">This leave request is not available in the current data view. <Link href="/time-off" className="font-semibold underline">Clear selection</Link></div>)}
+    {selectedRequestId && (selectedRequest ? <Card className="gap-0 overflow-hidden py-0 shadow-none"><CardHeader className="border-b border-border px-5 py-4 sm:flex-row sm:items-start sm:justify-between"><div><CardTitle>Selected leave request</CardTitle><CardDescription>{selectedPerson} · {selectedRequest.employee_id}</CardDescription></div><div className="flex flex-wrap gap-2"><Button nativeButton={false} variant="outline" render={<Link href="/time-off"/>}>Clear selection</Button><Button nativeButton={false} variant="outline" render={<Link href={`/people/${encodeURIComponent(selectedRequest.employee_id)}`}/>}>View employee</Button>{canDecide(selectedRequest, reviewer, employees) && <><Button variant="outline" disabled={busyId !== null} onClick={() => void decide(selectedRequest, "Rejected")}>Decline</Button><Button disabled={busyId !== null} onClick={() => void decide(selectedRequest, "Approved")}>{busyId === selectedRequest.id && <LoaderCircle className="size-3.5 animate-spin"/>}Approve</Button></>}{selectedRequest.approval_status.toLowerCase() === "approved" && <Button onClick={() => { setFilters({ ...filters, department: selectedRequest.department }); window.setTimeout(() => document.getElementById("leave-register")?.scrollIntoView({ behavior: "smooth", block: "start" }), 0) }}>Show department requests</Button>}</div></CardHeader><CardContent className="grid gap-4 p-5 sm:grid-cols-2 xl:grid-cols-4"><div><p className="text-meta font-semibold text-muted-foreground">Leave</p><p className="mt-1 text-sm">{selectedRequest.leave_type} · {selectedRequest.leave_days} day{selectedRequest.leave_days === 1 ? "" : "s"}</p></div><div><p className="text-meta font-semibold text-muted-foreground">Dates</p><p className="mt-1 text-sm">{dateLabel(selectedRequest.start_date)} — {dateLabel(selectedRequest.end_date)}</p></div><div><p className="text-meta font-semibold text-muted-foreground">Department</p><p className="mt-1 text-sm">{selectedRequest.department}</p></div><div><p className="text-meta font-semibold text-muted-foreground">Status</p><p className={cn("mt-1 text-sm font-semibold", statusTone(selectedRequest.approval_status))}>{selectedRequest.approval_status}</p></div></CardContent></Card> : <div className="rounded-md border border-amber-200 bg-amber-50 px-4 py-3 text-xs text-amber-900 dark:border-amber-900/40 dark:bg-amber-950/20 dark:text-amber-100">This leave request is not available in the current data view. <Link href="/time-off" className="font-semibold underline">Clear selection</Link></div>)}
 
-    <Card className="gap-4 p-4 shadow-none sm:p-5"><div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between"><p className="text-sm font-semibold">Filters</p><Button size="sm" variant="ghost" onClick={() => setFilters(emptyFilters)}><FilterX className="size-4"/>Reset</Button></div><div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-6"><Filter label="From"><input type="date" value={filters.from} onChange={(event) => setFilters({ ...filters, from: event.target.value })}/></Filter><Filter label="To"><input type="date" value={filters.to} onChange={(event) => setFilters({ ...filters, to: event.target.value })}/></Filter><Filter label="Department"><select value={filters.department} onChange={(event) => setFilters({ ...filters, department: event.target.value })}><option value="">All departments</option>{data.dimensions.departments.map((item) => <option key={item}>{item}</option>)}</select></Filter><Filter label="Location"><select value={filters.location} onChange={(event) => setFilters({ ...filters, location: event.target.value })}><option value="">All locations</option>{data.dimensions.locations.map((item) => <option key={item}>{item}</option>)}</select></Filter><Filter label="Leave type"><select value={filters.leaveType} onChange={(event) => setFilters({ ...filters, leaveType: event.target.value })}><option value="">All leave types</option>{data.dimensions.leaveTypes.map((item) => <option key={item}>{item}</option>)}</select></Filter><Filter label="Reporting interval"><select value={filters.period} onChange={(event) => setFilters({ ...filters, period: event.target.value as Filters["period"] })}><option value="month">Monthly</option><option value="quarter">Quarterly</option><option value="year">Yearly</option></select></Filter></div>{loading && <div className="h-1 overflow-hidden rounded-full bg-muted"><div className="h-full w-2/3 animate-pulse rounded-full bg-primary"/></div>}</Card>
+    <details className="rounded-lg border border-border bg-card">
+      <summary className="flex min-h-11 items-center justify-between px-4 font-semibold">Filter requests <span className="text-meta font-normal text-muted-foreground">Department, location, leave type, or date</span></summary>
+      <div className="border-t border-border p-4"><div className="mb-3 flex justify-end"><Button size="sm" variant="ghost" onClick={() => setFilters(emptyFilters)}><FilterX className="size-3.5"/>Reset</Button></div><div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-5"><Filter label="From"><input type="date" value={filters.from} onChange={(event) => setFilters({ ...filters, from: event.target.value })}/></Filter><Filter label="To"><input type="date" value={filters.to} onChange={(event) => setFilters({ ...filters, to: event.target.value })}/></Filter><Filter label="Department"><select value={filters.department} onChange={(event) => setFilters({ ...filters, department: event.target.value })}><option value="">All departments</option>{data.dimensions.departments.map((item) => <option key={item}>{item}</option>)}</select></Filter><Filter label="Location"><select value={filters.location} onChange={(event) => setFilters({ ...filters, location: event.target.value })}><option value="">All locations</option>{data.dimensions.locations.map((item) => <option key={item}>{item}</option>)}</select></Filter><Filter label="Leave type"><select value={filters.leaveType} onChange={(event) => setFilters({ ...filters, leaveType: event.target.value })}><option value="">All leave types</option>{data.dimensions.leaveTypes.map((item) => <option key={item}>{item}</option>)}</select></Filter></div>{loading && <div className="mt-3 h-1 overflow-hidden rounded-full bg-muted"><div className="h-full w-2/3 animate-pulse rounded-full bg-primary"/></div>}</div>
+    </details>
 
     {(notice || error) && <div aria-live="polite" className={cn("rounded-md border px-4 py-3 text-xs font-medium", error ? "border-rose-200 bg-rose-50 text-rose-800 dark:border-rose-900/40 dark:bg-rose-950/20 dark:text-rose-200" : "border-emerald-200 bg-emerald-50 text-emerald-800 dark:border-emerald-900/40 dark:bg-emerald-950/20 dark:text-emerald-200")}>{error || notice}</div>}
 
-    <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4"><Metric label="Away today" value={new Set(data.leave.currentlyAway.map((row) => row.employee_id)).size.toLocaleString()} detail="Employees with approved leave today"/><Metric label="Pending decisions" value={data.leave.pending.toLocaleString()} detail={canReviewLeave ? ["admin", "hr"].includes(reviewer.role) ? `${pendingForReview.length} requests available for review` : `${pendingForReview.length} direct-report requests` : `${data.leave.totalRequests} requests in this view`}/><Metric label="Approved leave" value={`${data.leave.totalDays.toLocaleString()}d`} detail={`${data.leave.approved} approved requests`}/><Metric label="Average approved leave" value={`${data.leave.averageDaysPerEmployee.toLocaleString()}d`} detail="Per employee taking approved leave"/></div>
+    <MetricStrip metrics={[{ label: "Away today", value: new Set(data.leave.currentlyAway.map((row) => row.employee_id)).size.toLocaleString(), detail: "Employees on approved leave" }, { label: "Pending decisions", value: data.leave.pending.toLocaleString(), detail: `${pendingForReview.length} available for review` }, { label: "Approved leave", value: `${data.leave.totalDays.toLocaleString()}d`, detail: `${data.leave.approved} approved requests` }, { label: "Average leave", value: `${data.leave.averageDaysPerEmployee.toLocaleString()}d`, detail: "Per employee with approved leave" }]}/>
 
     {canReviewLeave && <ReviewQueue rows={pendingForReview} people={people} reviewer={reviewer} employees={employees} busyId={busyId} onDecision={(row, decision) => void decide(row, decision)}/>}
 
     <div className="grid gap-4 xl:grid-cols-2"><LeaveSchedule title="Away today" description="Approved leave overlapping today" emptyMessage="No employees are on approved leave today." rows={data.leave.currentlyAway} people={people}/><LeaveSchedule title="Coming up" description="Approved and pending leave starting today or later" emptyMessage="No upcoming leave has been recorded yet." rows={data.leave.upcoming} people={people}/></div>
 
-    <Card><CardHeader><CardTitle>Request decisions</CardTitle><CardDescription>Current distribution across the filtered leave register</CardDescription></CardHeader><CardContent><RequestStatus data={data.leave.statuses}/></CardContent></Card>
-
-    <div className="grid gap-4 xl:grid-cols-2"><Card><CardHeader><CardTitle>Approved leave trend</CardTitle><CardDescription>Approved days grouped by {data.filters.period}</CardDescription></CardHeader><CardContent><TrendChart data={data.leave.trend}/></CardContent></Card><Card><CardHeader><CardTitle>Approved leave by type</CardTitle><CardDescription>Approved days by leave category</CardDescription></CardHeader><CardContent><BreakdownChart data={data.leave.byType} name="Days"/></CardContent></Card></div>
-
-    <Card id="department-coverage"><CardHeader><CardTitle>Coverage by department</CardTitle><CardDescription>Approved leave days by department</CardDescription></CardHeader><CardContent><BreakdownChart data={data.leave.byDepartment} name="Days" onSelect={(department) => setFilters({ ...filters, department })}/></CardContent></Card>
-
     <LeaveTable rows={data.leave.rows} people={people} reviewer={reviewer} employees={employees} busyId={busyId} selectedId={selectedRequestId} onDecision={(row, decision) => void decide(row, decision)}/>
 
-  </div>
+  </WorkspacePage>
 }
 
 function Filter({ label, children }: { label: string; children: React.ReactNode }) {

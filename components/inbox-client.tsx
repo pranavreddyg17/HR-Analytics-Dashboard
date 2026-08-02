@@ -8,6 +8,7 @@ import { CheckCircle2, CircleAlert, LoaderCircle, RefreshCw } from "lucide-react
 import { WorkflowCreator } from "@/components/workflow-creator"
 import type { InboxItem, ManagedEmployee, WorkflowActorContext } from "@/lib/people-types"
 import { cn } from "@/lib/utils"
+import { MetricStrip, WorkspaceHeader, WorkspacePage } from "@/components/workspace-ui"
 
 type QueueView = "my_work" | "decisions" | "managers" | "employees" | "overdue" | "completed"
 type DomainFilter = "all" | InboxItem["type"]
@@ -86,8 +87,8 @@ function ItemRow({ item, onAction, disabled, selected }: { item: InboxItem; onAc
   const meta = domainMeta[item.type]
 
   return (
-    <article id={`work-${item.id}`} aria-current={selected ? "true" : undefined} className={cn("scroll-mt-24 border-t border-border/70 px-5 py-5 first:border-t-0", selected && "bg-accent/45 ring-1 ring-inset ring-primary/30")}>
-      <div className="flex flex-col gap-4 xl:flex-row xl:items-start xl:justify-between">
+    <article id={`work-${item.id}`} aria-current={selected ? "true" : undefined} className={cn("scroll-mt-24 border-t border-border/70 px-4 py-3.5 first:border-t-0", selected && "bg-accent/45 ring-1 ring-inset ring-primary/30")}>
+      <div className="flex flex-col gap-3 xl:flex-row xl:items-start xl:justify-between">
         <div className="min-w-0 flex-1">
           <div className="flex flex-wrap items-center gap-x-3 gap-y-1.5">
             <span className="text-meta font-semibold text-muted-foreground">{meta.label}</span>
@@ -100,23 +101,20 @@ function ItemRow({ item, onAction, disabled, selected }: { item: InboxItem; onAc
             {item.detail}
           </p>
 
-          {item.requestContext.length > 0 && <div className="mt-4 grid gap-3 rounded-md border border-border/70 bg-muted/20 p-3 sm:grid-cols-2 xl:grid-cols-3">
-            {item.requestContext.map((context) => <div key={context.label} className={context.label.toLowerCase().includes("justification") || context.label.toLowerCase().includes("note") ? "sm:col-span-2 xl:col-span-3" : undefined}><p className="text-meta font-semibold text-muted-foreground">{context.label}</p><p className="mt-1 text-xs text-foreground">{context.value}</p></div>)}
-          </div>}
+          <div className="mt-2 flex flex-wrap gap-x-5 gap-y-1 text-meta text-muted-foreground"><span><b className="text-foreground">Action:</b> {item.nextAction}</span><span><b className="text-foreground">Owner:</b> {item.owner}</span><span><b className="text-foreground">Due:</b> {formatDate(item.dueDate)}</span></div>
 
-          <dl className="mt-4 grid gap-x-6 gap-y-3 text-xs sm:grid-cols-2 xl:grid-cols-3">
-            <div><dt className="font-medium text-muted-foreground">Required action</dt><dd className="mt-1 text-foreground">{item.nextAction}</dd></div>
-            <div><dt className="font-medium text-muted-foreground">Why it needs attention</dt><dd className="mt-1 text-foreground">{item.attentionReason}</dd></div>
-            <div><dt className="font-medium text-muted-foreground">Owner and due date</dt><dd className="mt-1 text-foreground">{item.owner} · {formatDate(item.dueDate)}</dd></div>
-            <div><dt className="font-medium text-muted-foreground">Current state</dt><dd className="mt-1 text-foreground">{item.status} · {item.timeInStatusDays} day{item.timeInStatusDays === 1 ? "" : "s"} in state</dd></div>
-            <div className="sm:col-span-2"><dt className="font-medium text-muted-foreground">After completion</dt><dd className="mt-1 text-foreground">{item.completionEffect}</dd></div>
-          </dl>
+          {(item.requestContext.length > 0 || item.attentionReason || item.completionEffect) && <details className="mt-2 text-meta"><summary className="w-fit font-semibold text-primary">View request details</summary><div className="mt-2 grid gap-3 rounded-md border border-border/70 bg-muted/20 p-3 sm:grid-cols-2 xl:grid-cols-3">
+            {item.requestContext.map((context) => <div key={context.label} className={context.label.toLowerCase().includes("justification") || context.label.toLowerCase().includes("note") ? "sm:col-span-2 xl:col-span-3" : undefined}><p className="font-semibold text-muted-foreground">{context.label}</p><p className="mt-0.5 text-foreground">{context.value}</p></div>)}
+            <div><p className="font-semibold text-muted-foreground">Why it needs attention</p><p className="mt-0.5 text-foreground">{item.attentionReason}</p></div>
+            <div><p className="font-semibold text-muted-foreground">Current state</p><p className="mt-0.5 text-foreground">{item.status} · {item.timeInStatusDays} day{item.timeInStatusDays === 1 ? "" : "s"}</p></div>
+            <div><p className="font-semibold text-muted-foreground">After completion</p><p className="mt-0.5 text-foreground">{item.completionEffect}</p></div>
+          </div></details>}
 
           {item.blockedReason && <p className="mt-3 rounded-md border border-border bg-muted/30 px-3 py-2 text-xs"><span className="font-semibold">Blocked:</span> {item.blockedReason}</p>}
           {item.isCompleted && item.completionNotes && <p className="mt-3 text-xs text-muted-foreground">Completion record: {item.completionNotes}</p>}
         </div>
 
-        <div className="flex shrink-0 items-center gap-2 xl:pt-5">
+        <div className="flex shrink-0 items-center gap-2 xl:pt-4">
           <Link href={item.recordHref} className="inline-flex h-9 items-center rounded-md border border-border bg-background px-3 text-sm font-semibold text-muted-foreground hover:bg-muted hover:text-foreground">View record</Link>
           {item.actions?.includes("approve") ? (
             <>
@@ -213,18 +211,18 @@ export function InboxClient({ initialItems, actor, people }: { initialItems: Inb
   }
 
   return (
-    <div className="mx-auto flex w-full max-w-7xl flex-col gap-5 pb-10">
-      <header className="border-b border-border pb-5">
-        <div className="flex flex-col gap-5 lg:flex-row lg:items-end lg:justify-between">
-          <div><h1 className="text-2xl font-semibold">Inbox</h1><p className="mt-1 max-w-2xl text-sm text-muted-foreground">Decisions and follow-ups across leave, hiring, and training.</p></div>
-          <div className="flex items-center gap-2">
-            {[{ label: "Open", value: openCount }, { label: "Awaiting decision", value: decisionCount }, { label: "Overdue", value: overdueCount }].map((metric) => (
-              <div key={metric.label} className="min-w-24 rounded-md border border-border bg-background px-3 py-2 text-right"><p className="text-meta text-muted-foreground">{metric.label}</p><p className="text-lg font-semibold tabular-nums">{metric.value}</p></div>
-            ))}
-            <button type="button" onClick={() => void refreshInbox()} disabled={refreshing} className="flex size-10 items-center justify-center rounded-md border border-border bg-background text-muted-foreground hover:bg-muted hover:text-foreground disabled:opacity-50" aria-label="Refresh inbox"><RefreshCw className={cn("size-4", refreshing && "animate-spin")} /></button>
-          </div>
-        </div>
-      </header>
+    <WorkspacePage>
+      <WorkspaceHeader
+        title="Inbox"
+        description="Requests, decisions, and follow-ups across HR operations."
+        actions={<button type="button" onClick={() => void refreshInbox()} disabled={refreshing} className="inline-flex h-9 items-center gap-2 rounded-md border border-border bg-background px-3 font-semibold text-muted-foreground hover:bg-muted hover:text-foreground disabled:opacity-50"><RefreshCw className={cn("size-3.5", refreshing && "animate-spin")} />Refresh</button>}
+      />
+
+      <MetricStrip metrics={[
+        { label: "Open", value: openCount },
+        { label: "Awaiting decision", value: decisionCount },
+        { label: "Overdue", value: overdueCount },
+      ]} />
 
       <WorkflowCreator actor={actor} people={people} initialType={searchParams.get("new") === "leave" ? "leave" : searchParams.get("new") === "hiring" ? "hiring" : searchParams.get("new") === "training" ? "training" : undefined} onCreated={(message) => void refreshInbox(message)} />
 
@@ -250,6 +248,6 @@ export function InboxClient({ initialItems, actor, people }: { initialItems: Inb
       ) : (
         <div className="flex min-h-[220px] flex-col items-center justify-center rounded-lg border border-border bg-card px-6 text-center"><h3 className="text-base font-semibold">No matching work</h3><p className="mt-2 max-w-sm text-sm text-muted-foreground">There are no items in this queue for the selected domain.</p>{domain !== "all" && <button type="button" onClick={() => chooseDomain("all")} className="mt-4 text-xs font-semibold text-primary hover:underline">Clear domain filter</button>}</div>
       )}
-    </div>
+    </WorkspacePage>
   )
 }

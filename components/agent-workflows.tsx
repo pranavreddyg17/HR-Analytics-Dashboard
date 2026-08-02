@@ -151,7 +151,7 @@ export function AgentWorkflows({ canPrepare }: { canPrepare: boolean }) {
   }
 
   return (
-    <section className="overflow-hidden rounded-lg border border-border bg-card">
+    <section>
       <div className="grid gap-0 lg:grid-cols-[minmax(0,0.9fr)_minmax(0,1.1fr)]">
         <div className="border-b border-border p-5 lg:border-b-0 lg:border-r">
           <div className="flex items-center gap-2">

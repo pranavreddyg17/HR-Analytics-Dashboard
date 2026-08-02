@@ -15,10 +15,10 @@ const pageTitles: Record<string, string> = {
   "/hiring": "Hiring",
   "/time-off": "Leaves",
   "/attrition": "Attrition risk",
-  "/ai-agents": "AI Assistant",
-  "/data": "Import / Export Data",
+  "/ai-agents": "AI assistant",
+  "/data": "Import / export data",
   "/access": "Access",
-  "/learning": "Assign Courses",
+  "/learning": "Assign courses",
   "/employees": "People",
   "/risk-review": "Model review",
 }
@@ -38,7 +38,7 @@ export function Topbar({ user, onOpenPalette }: { user: ShellUser; onOpenPalette
       : view === "leave"
         ? "Leaves"
         : view === "training"
-          ? "Assign Courses"
+          ? "Assign courses"
           : "Insights"
   } else if (pathname.startsWith("/people/")) {
     title = "Employee profile"

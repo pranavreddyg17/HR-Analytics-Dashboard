@@ -21,7 +21,7 @@ export type NavigationItem = {
 
 export const navigationGroups: Array<{ label: string; items: NavigationItem[] }> = [
   {
-    label: "Core",
+    label: "Workspace",
     items: [
       { href: "/", label: "Home" },
       { href: "/people", label: "People" },
@@ -29,25 +29,25 @@ export const navigationGroups: Array<{ label: string; items: NavigationItem[] }>
     ],
   },
   {
-    label: "Workflows",
+    label: "Operations",
     items: [
       { href: "/hiring", label: "Hiring" },
       { href: "/time-off", label: "Leaves" },
-      { href: "/learning", label: "Assign Courses" },
+      { href: "/learning", label: "Assign courses" },
     ],
   },
   {
-    label: "Reporting",
+    label: "Analysis",
     items: [
       { href: "/insights", label: "Insights" },
       { href: "/attrition", label: "Attrition risk" },
-      { href: "/ai-agents", label: "AI Assistant" },
+      { href: "/ai-agents", label: "AI assistant" },
     ],
   },
   {
-    label: "Administration",
+    label: "Settings",
     items: [
-      { href: "/data", label: "Import / Export Data" },
+      { href: "/data", label: "Import / export data" },
       { href: "/access", label: "Access" },
     ],
   },
@@ -85,17 +85,17 @@ export function AppSidebar({
   return (
     <>
       <aside
-        className="sticky top-0 z-30 hidden h-dvh w-[252px] shrink-0 flex-col border-r border-sidebar-border bg-sidebar md:flex"
+        className="sticky top-0 z-30 hidden h-dvh w-[232px] shrink-0 flex-col border-r border-sidebar-border bg-sidebar md:flex"
       >
-        <div className="flex h-[72px] items-center border-b border-sidebar-border px-5">
+        <div className="flex h-16 items-center border-b border-sidebar-border px-4">
           <Link href="/" className="min-w-0" aria-label="LaidbackHR.AI home">
             <BrandLogo />
           </Link>
         </div>
 
-        <nav className="min-h-0 flex-1 overflow-y-auto px-4 py-3" aria-label="Primary navigation">
+        <nav className="min-h-0 flex-1 overflow-y-auto px-3 py-2.5" aria-label="Primary navigation">
           {navigationGroups.map((group) => (
-            <div key={group.label} className="mb-4">
+            <div key={group.label} className="mb-3">
               <p className="sidebar-group-label">{group.label}</p>
               <div className="space-y-1">
                 {group.items.filter((item) => item.href !== "/access" || user.role === "admin").map((item) => {
@@ -116,7 +116,7 @@ export function AppSidebar({
           ))}
         </nav>
 
-        <div className="border-t border-sidebar-border p-4">
+        <div className="border-t border-sidebar-border p-3">
           <div className="flex items-center gap-3 rounded-md bg-sidebar-accent/65 p-2.5">
             <span className="avatar-soft" title={user.displayName}>{initials(user.displayName)}</span>
             <span className="min-w-0 flex-1">

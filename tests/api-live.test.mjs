@@ -119,17 +119,28 @@ test("hiring work moves from decision to owned follow-up and records completion"
   assert.match(openedItem.nextAction, /Record recruiting progress/)
   assert.match(openedItem.reviewHref, new RegExp(`^/inbox\\?view=my_work&type=hiring&item=${created.body.id}$`))
 
-  const closed = await json("/api/v1/hr/workflows/action", {
-    method: "POST",
+  const followUp = await json(`/api/v1/hr/hiring/requisitions/${created.body.id}`, {
+    method: "PATCH",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ id: created.body.id, type: "hiring", action: "reject" }),
+    body: JSON.stringify({ action: "follow_up", nextAction: "Confirm interview panel availability", dueDate: "2026-08-10", note: "Validation follow-up" }),
+  })
+  assert.equal(followUp.response.status, 200)
+
+  const updatedOperations = await json("/api/v1/hr/hiring")
+  assert.equal(updatedOperations.body.requisitions.find((item) => item.id === created.body.id)?.nextAction, "Confirm interview panel availability")
+  assert.ok(updatedOperations.body.recentActivity.some((item) => item.requisitionId === created.body.id && item.action === "follow_up_updated"))
+
+  const closed = await json(`/api/v1/hr/hiring/requisitions/${created.body.id}`, {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ action: "close", note: "Validation workflow completed" }),
   })
   assert.equal(closed.response.status, 200)
   const completed = await json("/api/v1/hr/inbox")
   const completedItem = completed.body.items.find((item) => item.id === created.body.id)
   assert.equal(completedItem.isCompleted, true)
   assert.ok(completedItem.completedAt)
-  assert.match(completedItem.completionNotes, /rejected the hiring requisition/i)
+  assert.match(completedItem.completionNotes, /closed .*Workflow Validation Engineer/i)
 })
 
 test("hiring operations persist a candidate pipeline against approved requisitions", async () => {
@@ -170,6 +181,13 @@ test("hiring operations persist a candidate pipeline against approved requisitio
   assert.equal(candidate.response.status, 201)
   assert.match(candidate.body.id, /^CAN-/)
 
+  const skippedStage = await json(`/api/v1/hr/hiring/candidates/${candidate.body.id}`, {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ stage: "Interview", nextStep: "Invalid skipped stage" }),
+  })
+  assert.equal(skippedStage.response.status, 409)
+
   const screening = await json(`/api/v1/hr/hiring/candidates/${candidate.body.id}`, {
     method: "PATCH",
     headers: { "Content-Type": "application/json" },
@@ -199,11 +217,13 @@ test("hiring operations persist a candidate pipeline against approved requisitio
   assert.equal(persistedCandidate.email, candidateEmail)
   assert.equal(persistedCandidate.stage, "Rejected")
   assert.equal(persistedCandidate.rejectedReason, "Validation completed")
+  assert.ok(persisted.body.recentActivity.some((item) => item.entityId === candidate.body.id && item.action === "candidate_added"))
+  assert.ok(persisted.body.recentActivity.some((item) => item.entityId === candidate.body.id && item.action === "stage_changed"))
 
-  const closed = await json("/api/v1/hr/workflows/action", {
-    method: "POST",
+  const closed = await json(`/api/v1/hr/hiring/requisitions/${created.body.id}`, {
+    method: "PATCH",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ id: created.body.id, type: "hiring", action: "reject" }),
+    body: JSON.stringify({ action: "close", note: "Candidate pipeline validation completed" }),
   })
   assert.equal(closed.response.status, 200)
 })

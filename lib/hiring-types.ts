@@ -22,6 +22,7 @@ export type HiringCandidate = {
   isOverdue: boolean
   createdAt: string
   updatedAt: string
+  canUpdate: boolean
 }
 
 export type HiringRequisition = {
@@ -46,7 +47,21 @@ export type HiringRequisition = {
   offerCount: number
   canDecide: boolean
   canAddCandidate: boolean
+  canManage: boolean
   reviewHref: string
+}
+
+export type HiringActivity = {
+  id: string
+  entityType: "candidate" | "requisition"
+  entityId: string
+  requisitionId: string
+  action: string
+  fromStatus: string | null
+  toStatus: string | null
+  detail: string
+  actorEmail: string
+  createdAt: string
 }
 
 export type HiringOperations = {
@@ -63,6 +78,7 @@ export type HiringOperations = {
   stageCounts: Array<{ stage: HiringCandidateStage; count: number }>
   requisitions: HiringRequisition[]
   candidates: HiringCandidate[]
+  recentActivity: HiringActivity[]
   recentHires: Array<{
     id: string
     position: string
@@ -89,4 +105,11 @@ export type HiringCandidateUpdate = {
   nextStepDueAt?: string | null
   notes?: string
   rejectedReason?: string
+}
+
+export type HiringRequisitionUpdate = {
+  action: "follow_up" | "close"
+  nextAction?: string
+  dueDate?: string
+  note?: string
 }

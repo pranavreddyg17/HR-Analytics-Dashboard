@@ -3,7 +3,7 @@
 import Link from "next/link"
 import { useRouter, useSearchParams } from "next/navigation"
 import { useCallback, useEffect, useMemo, useState } from "react"
-import { motion, useReducedMotion } from "motion/react"
+import { motion } from "motion/react"
 import { Archive, FilterX, Plus, Search, SlidersHorizontal } from "lucide-react"
 
 import { Button } from "@/components/ui/button"
@@ -13,6 +13,7 @@ import { EmployeeDrawer } from "@/components/people/employee-drawer"
 import { PersonAvatar, StatusPill, plural } from "@/components/people/people-ui"
 import type { EmployeeDirectoryResponse, ManagedEmployee } from "@/lib/people-types"
 import { cn } from "@/lib/utils"
+import { WorkspaceHeader, WorkspacePage } from "@/components/workspace-ui"
 
 type Filters = {
   department: string
@@ -39,7 +40,6 @@ function validTenure(value: string | null): string {
 export function PeopleDirectory() {
   const router = useRouter()
   const searchParams = useSearchParams()
-  const reduceMotion = useReducedMotion()
   const [query, setQuery] = useState("")
   const [debouncedQuery, setDebouncedQuery] = useState("")
   const [filters, setFilters] = useState<Filters>(() => ({ ...initialFilters, tenure: validTenure(searchParams.get("tenure")) }))
@@ -118,36 +118,26 @@ export function PeopleDirectory() {
   const openCreatedEmployee = useCallback((employee: ManagedEmployee) => router.push(`/people/${encodeURIComponent(employee.employee_id)}`), [router])
 
   return (
-    <div className="mx-auto flex w-full max-w-[1500px] flex-col gap-5">
-      <header className="border-b border-border pb-5">
-        <div className="flex flex-col gap-5 lg:flex-row lg:items-end lg:justify-between">
-          <div className="max-w-2xl">
-            <h1 className="text-2xl font-semibold">People</h1>
-            <p className="mt-1 max-w-xl text-sm text-muted-foreground">Manage employee profiles, reporting lines, and employment records.</p>
-          </div>
-          <div className="flex flex-wrap items-center gap-2">
-            <div className="mr-2 hidden items-center gap-5 border-r border-border pr-5 xl:flex">
-              <MiniStat value={data?.total ?? 0} label="People" />
-              <MiniStat value={dimensions?.departments.length ?? 0} label="Teams" />
-              <MiniStat value={dimensions?.locations.length ?? 0} label="Locations" />
-            </div>
-            <Button size="lg" className="h-10 rounded-md px-4" onClick={() => setDrawerOpen(true)}><Plus className="size-4" />Add employee</Button>
-          </div>
-        </div>
-      </header>
+    <WorkspacePage>
+      <WorkspaceHeader
+        title="People"
+        description="Employee profiles, reporting lines, and employment records."
+        meta={data ? <>{data.total.toLocaleString()} employees</> : undefined}
+        actions={<Button onClick={() => setDrawerOpen(true)}><Plus className="size-3.5" />Add employee</Button>}
+      />
 
       <Card className="gap-0 overflow-hidden py-0 shadow-none">
-        <div className="border-b border-border/70 p-4 sm:p-5">
+        <div className="border-b border-border/70 p-3 sm:p-4">
           <div className="flex flex-col gap-3 lg:flex-row lg:items-center">
             <div className="relative min-w-0 flex-1">
               <Search className="absolute left-3.5 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
-              <Input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search name, role, email, or employee ID" className="h-10 bg-background pl-10 pr-10" />
+              <Input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search name, role, email, or employee ID" className="h-9 bg-background pl-10 pr-10" />
               {query && <button type="button" onClick={() => setQuery("")} aria-label="Clear search" className="absolute right-3 top-1/2 -translate-y-1/2 text-xs font-medium text-muted-foreground hover:text-foreground">Clear</button>}
             </div>
-            <Button variant={showFilters || activeFilterCount ? "secondary" : "outline"} size="lg" className="h-10 px-4" onClick={() => setShowFilters((current) => !current)}><SlidersHorizontal className="size-4" />{activeFilterCount > 0 ? `Filters (${activeFilterCount})` : "Filters"}</Button>
+            <Button variant={showFilters || activeFilterCount ? "secondary" : "outline"} onClick={() => setShowFilters((current) => !current)}><SlidersHorizontal className="size-3.5" />{activeFilterCount > 0 ? `Filters (${activeFilterCount})` : "Filters"}</Button>
           </div>
 
-          <motion.div initial={false} animate={{ height: showFilters ? "auto" : 0, opacity: showFilters ? 1 : 0 }} transition={{ duration: reduceMotion ? 0 : 0.2 }} className="overflow-hidden">
+          {showFilters && (
             <div className="grid gap-3 pt-4 sm:grid-cols-2 xl:grid-cols-[1fr_1fr_1fr_1fr_1.35fr_auto]">
               <FilterSelect label="Department" value={filters.department} options={dimensions?.departments ?? []} allLabel="All departments" onChange={(department) => setFilters((current) => ({ ...current, department }))} />
               <FilterSelect label="Location" value={filters.location} options={dimensions?.locations ?? []} allLabel="All locations" onChange={(location) => setFilters((current) => ({ ...current, location }))} />
@@ -155,11 +145,11 @@ export function PeopleDirectory() {
               <FilterSelect label="Employment" value={filters.employmentType} options={dimensions?.employmentTypes ?? []} allLabel="All types" onChange={(employmentType) => setFilters((current) => ({ ...current, employmentType }))} />
               <FilterSelect label="Tenure" value={filters.tenure} options={tenureOptions} allLabel="All tenure ranges" onChange={updateTenure} />
               <div className="flex items-end gap-2">
-                <button type="button" onClick={() => setFilters((current) => ({ ...current, includeArchived: !current.includeArchived }))} className={cn("flex h-10 items-center gap-2 rounded-md border px-3 text-xs font-medium transition", filters.includeArchived ? "border-primary/30 bg-primary/10 text-primary" : "border-border bg-background text-muted-foreground hover:text-foreground")}><Archive className="size-3.5" />Archived</button>
-                {activeFilterCount > 0 && <Button type="button" variant="ghost" size="icon-lg" aria-label="Clear filters" onClick={clearFilters}><FilterX className="size-4" /></Button>}
+                <button type="button" onClick={() => setFilters((current) => ({ ...current, includeArchived: !current.includeArchived }))} className={cn("flex h-9 items-center gap-2 rounded-md border px-3 text-xs font-medium", filters.includeArchived ? "border-primary/30 bg-primary/10 text-primary" : "border-border bg-background text-muted-foreground hover:text-foreground")}><Archive className="size-3.5" />Archived</button>
+                {activeFilterCount > 0 && <Button type="button" variant="ghost" size="icon" aria-label="Clear filters" onClick={clearFilters}><FilterX className="size-4" /></Button>}
               </div>
             </div>
-          </motion.div>
+          )}
         </div>
 
         <div className="flex items-center justify-between gap-3 border-b border-border/60 bg-muted/20 px-4 py-3 sm:px-5">
@@ -195,21 +185,17 @@ export function PeopleDirectory() {
         onClose={closeDrawer}
         onSaved={openCreatedEmployee}
       />
-    </div>
+    </WorkspacePage>
   )
 }
 
-function MiniStat({ value, label }: { value: number; label: string }) {
-  return <div><p className="text-xl font-semibold tabular-nums">{value.toLocaleString()}</p><p className="text-xs text-muted-foreground">{label}</p></div>
-}
-
 function FilterSelect({ label, value, options, allLabel, onChange }: { label: string; value: string; options: Array<string | { value: string; label: string }>; allLabel: string; onChange: (value: string) => void }) {
-  return <label className="block"><span className="mb-1.5 block text-meta font-semibold text-muted-foreground">{label}</span><select value={value} onChange={(event) => onChange(event.target.value)} className="h-10 w-full rounded-md border border-border bg-background px-3 text-sm text-foreground outline-none transition focus:border-ring focus:ring-2 focus:ring-ring/20"><option value="">{allLabel}</option>{options.map((option) => { const item = typeof option === "string" ? { value: option, label: option } : option; return <option key={item.value} value={item.value}>{item.label}</option> })}</select></label>
+  return <label className="block"><span className="mb-1 block text-meta font-semibold text-muted-foreground">{label}</span><select value={value} onChange={(event) => onChange(event.target.value)} className="h-9 w-full rounded-md border border-border bg-background px-3 text-sm text-foreground outline-none focus:border-ring focus:ring-2 focus:ring-ring/20"><option value="">{allLabel}</option>{options.map((option) => { const item = typeof option === "string" ? { value: option, label: option } : option; return <option key={item.value} value={item.value}>{item.label}</option> })}</select></label>
 }
 
 function PersonRow({ employee }: { employee: ManagedEmployee }) {
   return (
-      <Link href={`/people/${encodeURIComponent(employee.employee_id)}`} className={cn("group grid gap-3 border-b border-border/55 px-4 py-4 transition-colors last:border-b-0 hover:bg-muted/25 sm:px-5 md:grid-cols-[minmax(250px,1.4fr)_minmax(170px,1fr)_minmax(130px,.7fr)_90px_120px] md:items-center md:gap-4", employee.archived_at && "opacity-65")}>
+      <Link href={`/people/${encodeURIComponent(employee.employee_id)}`} className={cn("group grid gap-3 border-b border-border/55 px-4 py-3 last:border-b-0 hover:bg-muted/25 sm:px-5 md:grid-cols-[minmax(250px,1.4fr)_minmax(170px,1fr)_minmax(130px,.7fr)_90px_120px] md:items-center md:gap-4", employee.archived_at && "opacity-65")}>
         <div className="flex min-w-0 items-center gap-3.5">
           <PersonAvatar employeeId={employee.employee_id} initials={employee.initials} size="lg" />
           <div className="min-w-0 flex-1">

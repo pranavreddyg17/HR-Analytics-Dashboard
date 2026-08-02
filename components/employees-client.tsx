@@ -53,17 +53,13 @@ export function EmployeesClient({ employees, total }: { employees: Employee[]; t
   const lastVisible = Math.min(currentPage * pageSize, filteredRows.length)
 
   return (
-    <div className="flex flex-col gap-5">
-      <div className="border border-border bg-muted/35 px-4 py-3 text-sm text-muted-foreground">
-        Historical IBM dataset: {total.toLocaleString()} records. Each row is linked to a clearly labelled synthetic demo employee with the same ID; imported operational employees are not scored by this model.
-      </div>
-
+    <div className="flex flex-col gap-4">
       <Card className="gap-0 overflow-hidden py-0">
         <CardHeader className="flex-col gap-4 border-b sm:flex-row sm:items-center">
           <div>
             <CardTitle>Model-scored records</CardTitle>
             <CardDescription>
-              {filteredRows.length.toLocaleString()} matching · all {total.toLocaleString()} scored records available
+              {filteredRows.length.toLocaleString()} matching of {total.toLocaleString()} scored records
             </CardDescription>
           </div>
           <div className="flex flex-1 flex-col gap-2 sm:flex-row sm:items-center sm:justify-end">
@@ -108,7 +104,7 @@ export function EmployeesClient({ employees, total }: { employees: Employee[]; t
             const open = openId === employee.id
             return (
               <div key={employee.id} className="border-b border-border last:border-b-0">
-                <div className="grid grid-cols-1 items-center gap-3 px-5 py-4 md:grid-cols-[1.4fr_1fr_1.4fr_0.9fr_auto] md:gap-4">
+                <div className="grid grid-cols-1 items-center gap-3 px-4 py-3 md:grid-cols-[1.4fr_1fr_1.4fr_0.9fr_auto] md:gap-4">
                   <div className="min-w-0">
                     <p className="truncate text-sm font-medium">{employee.id}</p>
                     <p className="truncate text-xs text-muted-foreground">{employee.role}</p>
@@ -138,15 +134,12 @@ export function EmployeesClient({ employees, total }: { employees: Employee[]; t
                 </div>
 
                 {open && (
-                  <div className="border-t border-border bg-muted/25 px-5 py-4">
+                  <div className="border-t border-border bg-muted/25 px-4 py-3">
                       <div>
                         <p className="text-xs font-medium">Review guidance</p>
                         <p className="mt-1 text-sm text-pretty">{employee.suggestion}</p>
                         <p className="mt-2 text-xs text-muted-foreground">
                           Tenure: {employee.tenure} · Job satisfaction: {employee.jobSatisfaction}/4 · Work-life balance: {employee.workLifeBalance}/4 · Historical outcome: {employee.observedAttrition}
-                        </p>
-                        <p className="mt-2 text-xs text-muted-foreground">
-                          The historical outcome is shown for audit purposes. The score must not be used as the sole basis for an employment action.
                         </p>
                       </div>
                   </div>

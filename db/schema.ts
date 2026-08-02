@@ -94,6 +94,22 @@ export const hiringCandidates = sqliteTable("hiring_candidates", {
   uniqueIndex("hiring_candidates_requisition_email_idx").on(table.requisitionId, table.email),
 ])
 
+export const hiringActivity = sqliteTable("hiring_activity", {
+  id: text("id").primaryKey(),
+  entityType: text("entity_type").notNull(),
+  entityId: text("entity_id").notNull(),
+  requisitionId: text("requisition_id").notNull(),
+  action: text("action").notNull(),
+  fromStatus: text("from_status"),
+  toStatus: text("to_status"),
+  detail: text("detail").notNull(),
+  actorEmail: text("actor_email").notNull(),
+  createdAt: text("created_at").notNull().default(sql`CURRENT_TIMESTAMP`),
+}, (table) => [
+  index("hiring_activity_requisition_created_idx").on(table.requisitionId, table.createdAt),
+  index("hiring_activity_entity_created_idx").on(table.entityType, table.entityId, table.createdAt),
+])
+
 export const attritionEvents = sqliteTable("attrition_events", {
   id: text("id").primaryKey(),
   employeeId: text("employee_id").notNull(),

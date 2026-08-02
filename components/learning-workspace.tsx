@@ -10,6 +10,7 @@ import { formatWorkspaceDateTime } from "@/lib/date-format"
 import type { TrainingRecord, WorkforceAnalytics } from "@/lib/hr-types"
 import type { ManagedEmployee, WorkflowActorContext } from "@/lib/people-types"
 import { cn } from "@/lib/utils"
+import { MetricStrip, WorkspaceHeader, WorkspacePage } from "@/components/workspace-ui"
 
 const inputClass = "h-9 w-full rounded-md border border-border bg-background px-3 text-control outline-none focus:border-ring focus:ring-2 focus:ring-ring/20"
 const textareaClass = "min-h-24 w-full resize-y rounded-md border border-border bg-background px-3 py-2.5 text-control outline-none focus:border-ring focus:ring-2 focus:ring-ring/20"
@@ -221,27 +222,13 @@ export function LearningWorkspace({ actor, people }: { actor: WorkflowActorConte
   }
 
   return (
-    <div className="mx-auto flex w-full max-w-[1520px] flex-col gap-5 pb-10">
-      <header className="border-b border-border pb-5">
-        <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
-          <div>
-            <h1 className="text-page font-semibold">Assign courses</h1>
-            <p className="mt-1 max-w-2xl text-description text-muted-foreground">
-              Assign training and resolve overdue or mandatory requirements.
-            </p>
-          </div>
-          {actor.canAssignTraining && assignablePeople.length > 0 && (
+    <WorkspacePage>
+      <WorkspaceHeader title="Assign courses" description="Assign training and resolve overdue or mandatory requirements." meta={<><span>{data.training.rows.length} assignments</span><span>Updated {formatWorkspaceDateTime(data.generatedAt)}</span></>} actions={actor.canAssignTraining && assignablePeople.length > 0 ? (
             <Button onClick={() => { setError(""); setAssignOpen(true) }}>
-              <Plus className="size-4" />
+              <Plus className="size-3.5" />
               Assign training
             </Button>
-          )}
-        </div>
-        <div className="mt-3 flex flex-wrap gap-x-5 gap-y-1 text-meta text-muted-foreground">
-          <span>{data.training.rows.length} assignments in this view</span>
-          <span>Updated {formatWorkspaceDateTime(data.generatedAt)}</span>
-        </div>
-      </header>
+          ) : undefined}/>
 
       <div className="flex flex-col gap-3 rounded-lg border border-border bg-card px-4 py-3 sm:flex-row sm:items-end">
         <div className="w-full sm:max-w-xs">
@@ -270,19 +257,11 @@ export function LearningWorkspace({ actor, people }: { actor: WorkflowActorConte
         </div>
       )}
 
-      <section className="grid overflow-hidden rounded-lg border border-border bg-card sm:grid-cols-3 sm:divide-x sm:divide-border">
-        {[
+      <MetricStrip metrics={[
           { label: "Completion rate", value: `${data.training.completionRate.toLocaleString()}%`, detail: `${completed.length} of ${data.training.rows.length} assignments` },
           { label: "Overdue", value: overdue.toLocaleString(), detail: "Incomplete assignments past due" },
           { label: "Mandatory gaps", value: mandatoryGaps.toLocaleString(), detail: "Incomplete security or safety training" },
-        ].map((metric, index) => (
-          <div key={metric.label} className={cn("px-4 py-4", index > 0 && "border-t border-border sm:border-t-0")}>
-            <p className="text-label text-muted-foreground">{metric.label}</p>
-            <p className="mt-1 text-kpi font-semibold tabular-nums">{metric.value}</p>
-            <p className="mt-1 text-meta text-muted-foreground">{metric.detail}</p>
-          </div>
-        ))}
-      </section>
+        ]}/>
 
       <div className="grid gap-4 xl:grid-cols-[minmax(0,1.45fr)_minmax(340px,0.55fr)]">
         <Card className="gap-0 overflow-hidden py-0 shadow-none">
@@ -464,6 +443,6 @@ export function LearningWorkspace({ actor, people }: { actor: WorkflowActorConte
           </form>
         </div>
       )}
-    </div>
+    </WorkspacePage>
   )
 }
