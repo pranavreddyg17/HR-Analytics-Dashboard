@@ -1,17 +1,15 @@
 "use client"
 
 import { useEffect, useMemo, useRef, useState } from "react"
-import Link from "next/link"
-import { usePathname, useRouter, useSearchParams } from "next/navigation"
-import { Loader2, Search, UserRound, X } from "lucide-react"
+import { usePathname, useRouter } from "next/navigation"
+import { Loader2, Search, UserRound } from "lucide-react"
 
 import {
-  AppSidebar,
+  AppNavigation,
   commandNavigation,
-  navigationGroups,
+  MobileNavigation,
   type ShellUser,
-} from "@/components/app-sidebar"
-import { BrandLogo } from "@/components/brand-logo"
+} from "@/components/app-navigation"
 import { Topbar } from "@/components/topbar"
 import { cn } from "@/lib/utils"
 
@@ -102,40 +100,6 @@ function destinationScore(item: SearchDestination, query: string): number {
   if (label.startsWith(normalized)) return 80
   if (label.includes(normalized)) return 65
   return 30 + words.filter((word) => label.includes(word)).length * 5
-}
-
-function MobileMore({ open, onClose, user }: { open: boolean; onClose: () => void; user: ShellUser }) {
-  const pathname = usePathname()
-  const currentView = useSearchParams().get("view")
-  if (!open) return null
-  const secondary = navigationGroups.flatMap((group) => group.items).filter((item) => !["/", "/people", "/inbox"].includes(item.href) && (item.href !== "/access" || user.role === "admin"))
-  return (
-    <div className="mobile-sheet-layer md:hidden" role="dialog" aria-modal="true" aria-label="More navigation">
-      <button type="button" className="mobile-sheet-backdrop" aria-label="Close navigation" onClick={onClose} />
-      <section className="mobile-sheet">
-        <div className="mobile-sheet__handle" aria-hidden="true" />
-        <div className="flex items-center justify-between px-5 pb-4 pt-1">
-          <BrandLogo />
-          <button type="button" onClick={onClose} className="topbar-icon-button" aria-label="Close navigation"><X className="size-5" /></button>
-        </div>
-        <nav className="grid grid-cols-2 gap-2 px-4 pb-[calc(1rem+env(safe-area-inset-bottom))]">
-          {secondary.map((item) => {
-            const path = item.href.split("?")[0]
-            const active = pathname === path && (path !== "/insights" || (item.view ? currentView === item.view : !currentView || currentView === "executive"))
-            return (
-              <Link key={item.href} href={item.href} onClick={onClose} className={cn("mobile-more-link", active && "mobile-more-link--active")}>
-                <item.icon className="size-4 shrink-0" aria-hidden="true" />
-                <span className="min-w-0">
-                  <span className="block font-semibold text-foreground">{item.label}</span>
-                  <span className="block text-meta text-muted-foreground">{item.description}</span>
-                </span>
-              </Link>
-            )
-          })}
-        </nav>
-      </section>
-    </div>
-  )
 }
 
 function CommandPalette({ onClose, user }: { onClose: () => void; user: ShellUser }) {
@@ -263,7 +227,7 @@ function CommandPalette({ onClose, user }: { onClose: () => void; user: ShellUse
 export function AppShell({ user, children }: { user: ShellUser; children: React.ReactNode }) {
   const pathname = usePathname()
   const [paletteOpen, setPaletteOpen] = useState(false)
-  const [mobileMoreOpen, setMobileMoreOpen] = useState(false)
+  const [mobileNavigationOpen, setMobileNavigationOpen] = useState(false)
 
   useEffect(() => {
     const handler = (event: KeyboardEvent) => {
@@ -272,7 +236,7 @@ export function AppShell({ user, children }: { user: ShellUser; children: React.
         setPaletteOpen((current) => !current)
       } else if (event.key === "Escape") {
         setPaletteOpen(false)
-        setMobileMoreOpen(false)
+        setMobileNavigationOpen(false)
       }
     }
     window.addEventListener("keydown", handler)
@@ -281,16 +245,15 @@ export function AppShell({ user, children }: { user: ShellUser; children: React.
 
   return (
     <div className="app-frame">
-      <AppSidebar
-        user={user}
-        onOpenMobileMore={() => setMobileMoreOpen(true)}
-      />
       <div className="app-stage">
-        <Topbar user={user} onOpenPalette={() => setPaletteOpen(true)} />
+        <div className="app-header">
+          <Topbar user={user} onOpenPalette={() => setPaletteOpen(true)} onOpenNavigation={() => setMobileNavigationOpen(true)} />
+          <AppNavigation user={user} />
+        </div>
         <main key={pathname} className="app-content">{children}</main>
       </div>
       {paletteOpen && <CommandPalette user={user} onClose={() => setPaletteOpen(false)} />}
-      <MobileMore user={user} open={mobileMoreOpen} onClose={() => setMobileMoreOpen(false)} />
+      <MobileNavigation user={user} open={mobileNavigationOpen} onClose={() => setMobileNavigationOpen(false)} />
     </div>
   )
 }
