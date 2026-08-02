@@ -15,6 +15,7 @@ export type { AgentHistoryMessage } from "@/lib/server/hr-agent-intent"
 type ToolTrace = {
   tool: string
   input: Record<string, unknown>
+  iteration: number
   resultContext?: {
     employeeIds?: string[]
     recordScope?: string
@@ -88,6 +89,26 @@ function evidenceContext(data: Record<string, unknown>): ToolTrace["resultContex
   return { ...(employeeIds.length ? { employeeIds } : {}), ...(recordScope ? { recordScope } : {}) }
 }
 
+function followUpEvidencePlans(evidence: EvidenceResult[], iteration: number): ToolPlan[] {
+  if (iteration !== 1) return []
+  const retention = evidence.find((item) => item.plan.purpose === "attrition_record_retention_plan")
+  if (!retention) return []
+  const employeeIds = Array.isArray(retention.data.joinedEmployeeRecords)
+    ? retention.data.joinedEmployeeRecords.flatMap((item) => {
+      if (!item || typeof item !== "object") return []
+      const employeeId = (item as Record<string, unknown>).employeeId
+      return typeof employeeId === "string" ? [employeeId] : []
+    }).slice(0, retention.plan.limit)
+    : []
+  if (!employeeIds.length) return []
+  return [{
+    name: "review_people_operations",
+    input: { domain: "promotions", employeeIds },
+    purpose: "retention_mobility_context",
+    limit: employeeIds.length,
+  }]
+}
+
 async function loadInProcessMcpTools() {
   const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair()
   const mcpServer = createHrMcpServer()
@@ -139,6 +160,15 @@ async function synthesizeWithModel({
 export async function runHrAgent({ message, history = [] }: { message: unknown; history?: AgentHistoryMessage[] }): Promise<AgentAnswer> {
   if (typeof message !== "string" || !message.trim() || message.length > 2000) throw new Error("message must contain between 1 and 2,000 characters.")
   const query = message.trim()
+  if (/^(?:hi|hello|hey|good (?:morning|afternoon|evening))[!.?\s]*$/i.test(query)) {
+    return {
+      answer: "Hi. What would you like to review—workforce, attrition risk, hiring, leave, learning or employee records?",
+      provider: "conversation",
+      tools: [],
+      context: [],
+      groundedAt: new Date().toISOString(),
+    }
+  }
   const safeHistory = history
     .filter((item): item is AgentHistoryMessage => Boolean(item) && (item.role === "user" || item.role === "assistant") && typeof item.content === "string")
     .slice(-12)
@@ -155,19 +185,26 @@ export async function runHrAgent({ message, history = [] }: { message: unknown; 
   const traces: ToolTrace[] = []
   try {
     const evidence: EvidenceResult[] = []
-    for (const plan of intent.plans) {
-      const tool = mcp.tools.find((candidate) => candidate.name === plan.name)
-      if (!tool) continue
-      const started = Date.now()
-      try {
-        const output = await tool.invoke(plan.input)
-        const data = contentToJson(output)
-        evidence.push({ plan, data })
-        traces.push({ tool: plan.name, input: plan.input, resultContext: evidenceContext(data), durationMs: Date.now() - started, status: "completed" })
-      } catch (error) {
-        traces.push({ tool: plan.name, input: plan.input, durationMs: Date.now() - started, status: "failed" })
-        throw error
+    let pendingPlans = intent.plans
+    for (let iteration = 1; iteration <= 2 && pendingPlans.length; iteration += 1) {
+      const iterationEvidence: EvidenceResult[] = []
+      for (const plan of pendingPlans) {
+        const tool = mcp.tools.find((candidate) => candidate.name === plan.name)
+        if (!tool) continue
+        const started = Date.now()
+        try {
+          const output = await tool.invoke(plan.input)
+          const data = contentToJson(output)
+          const item = { plan, data }
+          evidence.push(item)
+          iterationEvidence.push(item)
+          traces.push({ tool: plan.name, input: plan.input, iteration, resultContext: evidenceContext(data), durationMs: Date.now() - started, status: "completed" })
+        } catch (error) {
+          traces.push({ tool: plan.name, input: plan.input, iteration, durationMs: Date.now() - started, status: "failed" })
+          throw error
+        }
       }
+      pendingPlans = followUpEvidencePlans(iterationEvidence, iteration)
     }
 
     const draft = evidence.map(({ plan, data }) => renderHrEvidence(plan, data)).join("\n\n")

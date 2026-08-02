@@ -103,6 +103,28 @@ async function workflowSnapshot() {
   }
 }
 
+async function employeePromotionContext(employeeIds: string[]) {
+  if (!employeeIds.length) return []
+  const database = await ensureHrDatabase()
+  if (!database) return employeeIds.map((employeeId) => ({ employeeId, promotionCount: 0, lastPromotionDate: null }))
+  const placeholders = employeeIds.map(() => "?").join(", ")
+  const rows = await database.prepare(`
+    SELECT employee_id, COUNT(*) AS promotion_count, MAX(promotion_date) AS last_promotion_date
+    FROM promotion_records
+    WHERE employee_id IN (${placeholders})
+    GROUP BY employee_id
+  `).bind(...employeeIds).all<{ employee_id: string; promotion_count: number; last_promotion_date: string | null }>()
+  const byEmployee = new Map((rows.results ?? []).map((row) => [row.employee_id, row]))
+  return employeeIds.map((employeeId) => {
+    const row = byEmployee.get(employeeId)
+    return {
+      employeeId,
+      promotionCount: Number(row?.promotion_count ?? 0),
+      lastPromotionDate: row?.last_promotion_date ?? null,
+    }
+  })
+}
+
 export const mcpToolCatalog = [
   {
     name: "workforce_overview",
@@ -274,10 +296,11 @@ export function createHrMcpServer(): McpServer {
     description: mcpToolCatalog[3].description,
     inputSchema: {
       domain: z.enum(["hiring", "leave", "training", "promotions"]),
+      employeeIds: z.array(z.string().trim().min(1).max(80)).max(20).optional().describe("Optional exact employee cohort for a targeted operational review"),
       ...filtersShape,
     },
     annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false },
-  }, async ({ domain, ...filters }: FilterArgs & { domain: "hiring" | "leave" | "training" | "promotions" }) => {
+  }, async ({ domain, employeeIds = [], ...filters }: FilterArgs & { domain: "hiring" | "leave" | "training" | "promotions"; employeeIds?: string[] }) => {
     const [analytics, workflows] = await Promise.all([getWorkforceAnalytics(filters), workflowSnapshot()])
     const common = { ...evidence(analytics), domain, workflowQueue: workflows }
 
@@ -343,6 +366,7 @@ export function createHrMcpServer(): McpServer {
     }
 
     const mobilityReview = analytics.promotions.mobilityReview.slice(0, 25)
+    const selectedEmployeePromotionContext = await employeePromotionContext(employeeIds)
     return result({
       ...common,
       summary: {
@@ -352,6 +376,7 @@ export function createHrMcpServer(): McpServer {
         mobilityReviewCount: analytics.promotions.withoutPromotionOver36Months,
       },
       mobilityReview,
+      selectedEmployeePromotionContext,
       byDepartment: analytics.promotions.byDepartment,
       trend: analytics.promotions.trend,
       guardrail: "This is a mobility-review cohort, not a determination that anyone should be promoted. Check performance evidence, role levels, lateral moves, career ladders, employee preference, and data completeness.",

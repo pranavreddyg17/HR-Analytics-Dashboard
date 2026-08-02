@@ -32,7 +32,7 @@ const toolLabels: Record<string, string> = {
 
 const suggestedPrompts = [
   "Summarize the current workforce and open HR work",
-  "Explain the top 5 attrition-risk records and recommended reviews",
+  "Build a retention review plan for the top 5 attrition-risk records",
   "Where are exits concentrated by manager?",
   "Which departments have a replacement coverage gap?",
 ]
@@ -53,6 +53,7 @@ export function AgentCopilot({ dataMode }: { dataMode: string }) {
   const [thinking, setThinking] = useState(false)
   const [loadingHistory, setLoadingHistory] = useState(true)
   const scrollRef = useRef<HTMLDivElement>(null)
+  const conversationIdRef = useRef("")
 
   async function refreshConversations(preferredId?: string) {
     const response = await fetch("/api/v1/chat/conversations", { cache: "no-store" })
@@ -70,9 +71,11 @@ export function AgentCopilot({ dataMode }: { dataMode: string }) {
       const response = await fetch(`/api/v1/chat/conversations/${encodeURIComponent(id)}`, { cache: "no-store" })
       if (!response.ok) throw new Error("This conversation could not be loaded.")
       const body = await response.json() as { messages?: ChatMessage[] }
+      conversationIdRef.current = id
       setConversationId(id)
       setMessages(body.messages?.length ? body.messages : [welcomeMessage(dataMode)])
     } catch (error) {
+      conversationIdRef.current = ""
       setConversationId("")
       setMessages([{ role: "assistant", content: error instanceof Error ? error.message : "Conversation history is unavailable." }])
     } finally {
@@ -93,6 +96,7 @@ export function AgentCopilot({ dataMode }: { dataMode: string }) {
 
   function newConversation() {
     if (thinking) return
+    conversationIdRef.current = ""
     setConversationId("")
     setMessages([welcomeMessage(dataMode)])
     setInput("")
@@ -104,11 +108,12 @@ export function AgentCopilot({ dataMode }: { dataMode: string }) {
     setMessages((current) => [...current, { role: "user", content: trimmed }])
     setInput("")
     setThinking(true)
+    const activeConversationId = conversationIdRef.current
     try {
       const response = await fetch("/api/v1/chat", {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ message: trimmed, conversationId: conversationId || undefined }),
+        body: JSON.stringify({ message: trimmed, conversationId: activeConversationId || undefined }),
       })
       const body = await response.json() as {
         answer?: string
@@ -119,7 +124,8 @@ export function AgentCopilot({ dataMode }: { dataMode: string }) {
         conversationId?: string
       }
       if (!response.ok) throw new Error(body.detail ?? "The assistant is unavailable.")
-      const nextConversationId = body.conversationId ?? conversationId
+      const nextConversationId = body.conversationId ?? activeConversationId
+      conversationIdRef.current = nextConversationId
       setConversationId(nextConversationId)
       setMessages((current) => [...current, {
         role: "assistant",

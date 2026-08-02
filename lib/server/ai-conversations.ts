@@ -5,7 +5,7 @@ export type ConversationMessage = {
   id: string
   role: "user" | "assistant"
   content: string
-  tools?: Array<{ tool: string; status: string; input?: Record<string, unknown>; resultContext?: { employeeIds?: string[]; recordScope?: string } }>
+  tools?: Array<{ tool: string; status: string; input?: Record<string, unknown>; resultContext?: { employeeIds?: string[]; recordScope?: string }; iteration?: number }>
   context?: Array<{ source: string; section: string }>
   dataMode?: string
   provider?: string
@@ -109,7 +109,7 @@ export async function getConversation(actor: RequestActor, conversationId: strin
       id: row.id,
       role: row.role,
       content: row.content,
-      tools: parseArray<{ tool: string; status: string; input?: Record<string, unknown>; resultContext?: { employeeIds?: string[]; recordScope?: string } }>(row.tools_json),
+      tools: parseArray<{ tool: string; status: string; input?: Record<string, unknown>; resultContext?: { employeeIds?: string[]; recordScope?: string }; iteration?: number }>(row.tools_json),
       context: parseArray<{ source: string; section: string }>(row.context_json),
       dataMode: row.data_mode ?? undefined,
       provider: row.provider ?? undefined,

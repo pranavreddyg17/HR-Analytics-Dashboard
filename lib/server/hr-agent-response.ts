@@ -20,6 +20,18 @@ function sourceLine(data: Record<string, unknown>): string {
   return `Current source: ${mode(data)}.`
 }
 
+function reviewForSignal(label: string): string {
+  if (/income|compensation/i.test(label)) return "Run a role- and location-adjusted compensation review."
+  if (/environment|manager|department/i.test(label)) return "Review team environment, manager support, workload and workplace concerns."
+  if (/job satisfaction|role fit/i.test(label)) return "Use a stay interview to review role fit, recognition and growth expectations."
+  if (/work-life|workload/i.test(label)) return "Review workload, schedule flexibility, PTO access and sustainable staffing."
+  if (/commute|distance/i.test(label)) return "Discuss hybrid or flexible-work options where the role permits."
+  if (/tenure|promotion|career/i.test(label)) return "Review career path, internal mobility and development options."
+  if (/education/i.test(label)) return "Review role alignment and relevant internal development opportunities."
+  if (/prior compan/i.test(label)) return "Use a stay interview to understand career expectations and likely next-step goals."
+  return "Validate the signal with current employee and manager evidence before selecting an intervention."
+}
+
 function renderWorkforce(plan: ToolPlan, data: Record<string, unknown>): string {
   const signals = object(data.operatingSignals)
   if (plan.purpose === "manager_concentration") {
@@ -64,6 +76,60 @@ function renderAttrition(plan: ToolPlan, data: Record<string, unknown>): string 
   const observed = object(data.observedAttrition)
   const model = object(data.historicalModelReview)
   const distribution = object(model.riskDistribution)
+
+  if (plan.purpose === "attrition_record_retention_plan") {
+    const rows = records(data.joinedEmployeeRecords).slice(0, plan.limit)
+    if (!rows.length) return `${sourceLine(data)} The selected cohort is no longer available. Run the risk-record query again before preparing a retention plan.`
+    const actionGroups = new Map<string, Array<{ name: string; employeeId: string; signal: string }>>()
+    for (const row of rows) {
+      const explanation = object(row.modelExplanation)
+      const drivers = records(explanation.topDrivers)
+      const action = String(explanation.recommendedReview ?? "Conduct a human-reviewed stay interview before taking action.")
+      const items = actionGroups.get(action) ?? []
+      items.push({
+        name: String(row.name),
+        employeeId: String(row.employeeId),
+        signal: String(drivers[0]?.explanation ?? row.topDriver ?? "Model signal unavailable"),
+      })
+      actionGroups.set(action, items)
+    }
+    return [
+      sourceLine(data),
+      `Retention review plan · ${rows.length} synthetic model-scored profiles`,
+      "Immediate priorities",
+      ...[...actionGroups.entries()].flatMap(([action, items], index) => [
+        `${index + 1}. ${action}`,
+        `   Records: ${items.map((item) => `${item.name} (${item.employeeId})`).join(", ")}`,
+        `   Leading signals: ${items.map((item) => `${item.employeeId} — ${item.signal}`).join("; ")}`,
+      ]),
+      "Review cycle",
+      "1. Validate that the model inputs are current and assign an HR owner for each review.",
+      "2. Hold a confidential stay interview focused on the underlying topic; do not present the score as a prediction.",
+      "3. Record the employee's stated concern and choose an intervention only when current evidence supports it.",
+      "4. Review the agreed action after 30 days and record whether the concern changed; rescore only with updated, governed inputs.",
+      "This plan supports human review. It does not guarantee retention and must not trigger compensation, promotion or employment decisions automatically.",
+    ].join("\n")
+  }
+
+  if (plan.purpose === "attrition_retention_strategy") {
+    const exitReasons = records(observed.byExitReason).slice(0, 3)
+    const drivers = records(model.topRiskDrivers).slice(0, 3)
+    const departments = records(model.riskByDepartment).slice(0, 2)
+    return [
+      sourceLine(data),
+      "Workforce retention plan",
+      "Evidence to prioritize",
+      ...(exitReasons.length ? exitReasons.map((row) => `- Recorded exits: ${String(row.label)} — ${Number(row.value)}.`) : ["- Recorded exit reasons are incomplete; improve exit-data capture before targeting a programme."]),
+      ...(drivers.length ? drivers.map((row) => `- Model review signal: ${String(row.label)} — ${Number(row.value)} active high-risk synthetic profiles. ${reviewForSignal(String(row.label))}`) : []),
+      ...(departments.length ? departments.map((row) => `- Department review: ${String(row.department)} — ${Number(row.highRiskCount)} high-risk profiles and ${Number(row.averageRisk).toFixed(1)}% average model risk.`) : []),
+      "30-day operating plan",
+      "1. Validate the priority cohorts and assign an accountable HR partner and manager for each review.",
+      "2. Run structured stay interviews using the leading topic, while keeping model scores out of the conversation.",
+      "3. Route confirmed issues to the appropriate process: manager support, workload, compensation benchmarking, mobility or flexible work.",
+      "4. Record the action, owner and review date; compare updated signals and voluntary exits in the next monthly review.",
+      "Start with one department and a small review cohort. Do not claim an intervention caused retention without a controlled evaluation.",
+    ].join("\n")
+  }
 
   if (plan.purpose === "attrition_record_explanations") {
     const rows = records(data.joinedEmployeeRecords).slice(0, plan.limit)
@@ -157,6 +223,17 @@ function renderDepartmentComparison(data: Record<string, unknown>): string {
 function renderPeopleOperations(plan: ToolPlan, data: Record<string, unknown>): string {
   const domain = String(data.domain ?? "")
   const summary = object(data.summary)
+  if (plan.purpose === "retention_mobility_context") {
+    const rows = records(data.selectedEmployeePromotionContext).slice(0, plan.limit)
+    if (!rows.length) return "Promotion context is unavailable for the selected cohort."
+    return [
+      "Promotion context for the selected cohort",
+      ...rows.map((row) => Number(row.promotionCount) > 0
+        ? `- ${String(row.employeeId)}: ${Number(row.promotionCount)} recorded promotion${Number(row.promotionCount) === 1 ? "" : "s"}; latest ${String(row.lastPromotionDate)}.`
+        : `- ${String(row.employeeId)}: no recorded promotion.`),
+      "Use this only to prepare a career conversation. Promotion history does not establish readiness or entitlement to promotion.",
+    ].join("\n")
+  }
   if (domain === "hiring") {
     const sources = records(data.sourcePerformance).slice(0, plan.limit)
     return [sourceLine(data), `Hiring: ${number(summary, "completedHires")} completed hires, ${number(summary, "activeRequisitions")} active requisitions, ${number(summary, "offers")} offers and ${number(summary, "averageTimeToHireDays")} average days to hire.`, ...sources.map((row) => `- ${String(row.label)}: ${Number(row.hires)} hires, ${Number(row.averageDays)} average days.`), "Recruiting volume and speed do not measure quality of hire."].join("\n")

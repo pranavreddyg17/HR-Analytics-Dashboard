@@ -18,6 +18,8 @@ Observed attrition is calculated from recorded exit events. Voluntary and involu
 
 The deployed regularized logistic-regression model can produce local positive contributors for a scored synthetic profile from the ten stored model inputs. A contributor explains how an input moved that model's score; it is not a causal finding or evidence of the employee's intent. The assistant may pair the leading contributor with a proportionate human-review step, such as a stay interview, role-and-location-adjusted compensation review, workload review, mobility conversation, or flexible-work discussion. It must not estimate intervention impact, replacement cost, or resignation timing without separate validated data and methods.
 
+A retention review converts a selected model cohort into a human-owned plan. It groups employees by the leading review action, checks recorded promotion history in a second read-only evidence pass, and defines a 30-day validate–discuss–act–review cycle. The promotion check is contextual evidence only; it does not determine promotion readiness. The loop is bounded to two tool iterations and cannot execute an employment action.
+
 ## Leave
 
 Leave totals and trends are calculated from persisted leave requests. Pending requests are operational work. Approved leave is a capacity and coverage signal, not a performance or commitment signal. Never use leave history as an adverse employment signal.

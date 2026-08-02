@@ -124,6 +124,19 @@ test("LangChain agent invokes MCP tools and returns its trace", async () => {
   assert.ok(body.context.some((item) => item.section === "Attrition and model risk"))
 })
 
+test("analytics assistant handles a greeting without an irrelevant scope warning", async () => {
+  const { response, body } = await json("/api/v1/chat", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ message: "hi" }),
+  })
+  assert.equal(response.status, 200)
+  assert.equal(body.provider, "conversation")
+  assert.deepEqual(body.tools, [])
+  assert.deepEqual(body.context, [])
+  assert.match(body.answer, /^Hi\./)
+})
+
 test("analytics assistant persists conversation history and uses it for follow-up filters", async () => {
   const first = await json("/api/v1/chat", {
     method: "POST",
@@ -190,6 +203,32 @@ test("analytics assistant resolves focused follow-ups without topic contaminatio
   assert.match(explanation.body.answer, /HR review:/)
   assert.match(explanation.body.answer, /not proven reasons/)
   assert.equal((explanation.body.answer.match(/Demo Employee/g) ?? []).length, 5)
+
+  const workforcePlan = await json("/api/v1/chat", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ message: "What should I do to prevent attrition?", conversationId: first.body.conversationId }),
+  })
+  assert.equal(workforcePlan.response.status, 200)
+  assert.equal(workforcePlan.body.tools.length, 1)
+  assert.equal(workforcePlan.body.tools[0].input.recordScope, "summary")
+  assert.match(workforcePlan.body.answer, /Workforce retention plan/)
+  assert.match(workforcePlan.body.answer, /30-day operating plan/)
+
+  const cohortPlan = await json("/api/v1/chat", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ message: "What should I do to prevent attrition for these employees?", conversationId: first.body.conversationId }),
+  })
+  assert.equal(cohortPlan.response.status, 200)
+  assert.deepEqual(cohortPlan.body.tools.map((trace) => trace.tool), ["analyze_attrition_signals", "review_people_operations"])
+  assert.deepEqual(cohortPlan.body.tools.map((trace) => trace.iteration), [1, 2])
+  assert.deepEqual(cohortPlan.body.tools[0].input.employeeIds, first.body.tools[0].resultContext.employeeIds)
+  assert.deepEqual(cohortPlan.body.tools[1].input.employeeIds, first.body.tools[0].resultContext.employeeIds)
+  assert.match(cohortPlan.body.answer, /Retention review plan · 5 synthetic model-scored profiles/)
+  assert.match(cohortPlan.body.answer, /Review cycle/)
+  assert.match(cohortPlan.body.answer, /Promotion context for the selected cohort/)
+  assert.doesNotMatch(cohortPlan.body.answer, /Attrition summary/)
 
   const managers = await json("/api/v1/chat", {
     method: "POST",
