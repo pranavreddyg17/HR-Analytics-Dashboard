@@ -1,38 +1,18 @@
 "use client"
 
 import { useEffect, useMemo, useState } from "react"
-import {
-  Check,
-  FilterX,
-  LoaderCircle,
-  Plus,
-  Search,
-  X,
-} from "lucide-react"
-import {
-  Area as RechartsArea,
-  AreaChart as RechartsAreaChart,
-  Bar as RechartsBar,
-  BarChart as RechartsBarChart,
-  CartesianGrid as RechartsCartesianGrid,
-  ResponsiveContainer as RechartsResponsiveContainer,
-  Tooltip as RechartsTooltip,
-  XAxis as RechartsXAxis,
-  YAxis as RechartsYAxis,
-} from "recharts"
+import { LoaderCircle, Plus, Search, X } from "lucide-react"
 
-import type { BreakdownPoint, TimePoint, TrainingRecord, WorkforceAnalytics } from "@/lib/hr-types"
-import type { ManagedEmployee, WorkflowActorContext } from "@/lib/people-types"
 import { SelectEmployee } from "@/components/workflow-creator"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
-import { cn } from "@/lib/utils"
 import { formatWorkspaceDateTime } from "@/lib/date-format"
+import type { TrainingRecord, WorkforceAnalytics } from "@/lib/hr-types"
+import type { ManagedEmployee, WorkflowActorContext } from "@/lib/people-types"
+import { cn } from "@/lib/utils"
 
-type Filters = { department: string; period: "month" | "quarter" | "year" }
-const emptyFilters: Filters = { department: "", period: "month" }
-const inputClass = "h-10 w-full rounded-md border border-border bg-background px-3 text-sm outline-none focus:border-ring focus:ring-2 focus:ring-ring/20"
-const textareaClass = "min-h-24 w-full resize-y rounded-md border border-border bg-background px-3 py-2.5 text-sm outline-none focus:border-ring focus:ring-2 focus:ring-ring/20"
+const inputClass = "h-9 w-full rounded-md border border-border bg-background px-3 text-control outline-none focus:border-ring focus:ring-2 focus:ring-ring/20"
+const textareaClass = "min-h-24 w-full resize-y rounded-md border border-border bg-background px-3 py-2.5 text-control outline-none focus:border-ring focus:ring-2 focus:ring-ring/20"
 
 function defaultDueDate(): string {
   const date = new Date()
@@ -43,39 +23,30 @@ function defaultDueDate(): string {
 function dateLabel(value?: string | null): string {
   if (!value) return "No due date"
   const date = new Date(`${value}T00:00:00`)
-  return Number.isFinite(date.getTime()) ? new Intl.DateTimeFormat("en", { month: "short", day: "numeric", year: "numeric" }).format(date) : value
+  return Number.isFinite(date.getTime())
+    ? new Intl.DateTimeFormat("en", { month: "short", day: "numeric", year: "numeric" }).format(date)
+    : value
 }
 
-function Metric({ label, value, detail }: { label: string; value: string; detail: string }) {
-  return <Card className="gap-2 p-4 shadow-none"><p className="text-xs font-medium text-muted-foreground">{label}</p><div><p className="text-2xl font-semibold tabular-nums">{value}</p><p className="mt-1 text-meta text-muted-foreground">{detail}</p></div></Card>
-}
-
-function ChartTooltip({ active, payload, label }: { active?: boolean; payload?: Array<{ name?: string; value?: number }>; label?: string }) {
-  if (!active || !payload?.length) return null
-  return <div className="rounded-md border border-border bg-popover px-3 py-2 text-xs shadow-none"><p className="font-semibold">{label}</p><p className="mt-1 text-muted-foreground"><span className="font-semibold text-primary">{payload[0].value}</span> {payload[0].name?.toLowerCase()}</p></div>
-}
-
-function EmptyChart() {
-  return <div className="flex h-60 items-center justify-center rounded-md border border-dashed border-border px-5 text-center text-sm text-muted-foreground">No live training records match this view.</div>
-}
-
-function TrendChart({ data }: { data: TimePoint[] }) {
-  if (!data.length) return <EmptyChart />
-  return <div className="h-60 w-full"><RechartsResponsiveContainer width="100%" height="100%"><RechartsAreaChart data={data} margin={{ left: -20, right: 8, top: 8, bottom: 2 }}><defs><linearGradient id="learningHoursFill" x1="0" y1="0" x2="0" y2="1"><stop offset="5%" stopColor="var(--chart-1)" stopOpacity={0.3}/><stop offset="95%" stopColor="var(--chart-1)" stopOpacity={0}/></linearGradient></defs><RechartsCartesianGrid strokeDasharray="3 3" vertical={false} stroke="var(--border)"/><RechartsXAxis dataKey="period" axisLine={false} tickLine={false} tick={{ fill: "var(--muted-foreground)" }}/><RechartsYAxis axisLine={false} tickLine={false} tick={{ fill: "var(--muted-foreground)" }}/><RechartsTooltip content={<ChartTooltip/>}/><RechartsArea type="monotone" dataKey="value" name="Hours" stroke="var(--chart-1)" strokeWidth={2.5} fill="url(#learningHoursFill)"/></RechartsAreaChart></RechartsResponsiveContainer></div>
-}
-
-function BreakdownChart({ data, onSelect }: { data: BreakdownPoint[]; onSelect?: (label: string) => void }) {
-  if (!data.length) return <EmptyChart />
-  return <div className="h-60 w-full"><RechartsResponsiveContainer width="100%" height="100%"><RechartsBarChart data={data.slice(0, 8)} layout="vertical" margin={{ left: 32, right: 14, top: 4, bottom: 2 }}><RechartsCartesianGrid strokeDasharray="3 3" horizontal={false} stroke="var(--border)"/><RechartsXAxis type="number" axisLine={false} tickLine={false} tick={{ fill: "var(--muted-foreground)" }}/><RechartsYAxis type="category" dataKey="label" width={122} axisLine={false} tickLine={false} tick={{ fill: "var(--muted-foreground)" }}/><RechartsTooltip content={<ChartTooltip/>}/><RechartsBar dataKey="value" name="Hours" fill="var(--chart-1)" radius={[0,6,6,0]} cursor={onSelect ? "pointer" : "default"} onClick={(entry) => { const row = entry as unknown as { label?: string; payload?: { label?: string } }; const label = row.label ?? row.payload?.label; if (label && onSelect) onSelect(label) }}/></RechartsBarChart></RechartsResponsiveContainer></div>
+function isMandatory(row: TrainingRecord): boolean {
+  return /security|safety/i.test(row.training_program)
 }
 
 function Field({ label, children }: { label: string; children: React.ReactNode }) {
-  return <label className="block"><span className="mb-1.5 block text-xs font-semibold">{label}</span>{children}</label>
+  return (
+    <label className="block">
+      <span className="mb-1.5 block text-label font-semibold">{label}</span>
+      {children}
+    </label>
+  )
 }
 
 export function LearningWorkspace({ actor, people }: { actor: WorkflowActorContext; people: ManagedEmployee[] }) {
-  const assignablePeople = useMemo(() => actor.role === "manager" ? people.filter((person) => person.manager_id === actor.employeeId) : people, [actor, people])
-  const [filters, setFilters] = useState<Filters>(emptyFilters)
+  const assignablePeople = useMemo(
+    () => actor.role === "manager" ? people.filter((person) => person.manager_id === actor.employeeId) : people,
+    [actor, people],
+  )
+  const [department, setDepartment] = useState("")
   const [data, setData] = useState<WorkforceAnalytics | null>(null)
   const [loadedQuery, setLoadedQuery] = useState<string | null>(null)
   const [refreshKey, setRefreshKey] = useState(0)
@@ -85,28 +56,104 @@ export function LearningWorkspace({ actor, people }: { actor: WorkflowActorConte
   const [busyId, setBusyId] = useState<string | null>(null)
   const [notice, setNotice] = useState("")
   const [error, setError] = useState("")
-  const [assignment, setAssignment] = useState({ employeeId: assignablePeople[0]?.employee_id ?? "", program: "", dueDate: defaultDueDate(), hours: "2", note: "" })
-  const requestQuery = useMemo(() => { const params = new URLSearchParams({ dataMode: "live", period: filters.period }); if (filters.department) params.set("department", filters.department); return params.toString() }, [filters])
+  const [assignment, setAssignment] = useState({
+    employeeId: assignablePeople[0]?.employee_id ?? "",
+    program: "",
+    dueDate: defaultDueDate(),
+    hours: "2",
+    note: "",
+  })
+  const requestQuery = useMemo(() => {
+    const params = new URLSearchParams({ dataMode: "live" })
+    if (department) params.set("department", department)
+    return params.toString()
+  }, [department])
   const loading = loadedQuery !== requestQuery
 
   useEffect(() => {
     const controller = new AbortController()
     fetch(`/api/v1/workforce?${requestQuery}`, { cache: "no-store", signal: controller.signal })
-      .then(async (response) => { if (!response.ok) throw new Error("Learning data could not be loaded."); return response.json() as Promise<WorkforceAnalytics> })
-      .then((result) => { setData(result); setLoadedQuery(requestQuery); setError("") })
-      .catch((reason: unknown) => { if ((reason as { name?: string })?.name !== "AbortError") { setError(reason instanceof Error ? reason.message : "Learning data could not be loaded."); setLoadedQuery(requestQuery) } })
+      .then(async (response) => {
+        if (!response.ok) throw new Error("Learning data could not be loaded.")
+        return response.json() as Promise<WorkforceAnalytics>
+      })
+      .then((result) => {
+        setData(result)
+        setLoadedQuery(requestQuery)
+        setError("")
+      })
+      .catch((reason: unknown) => {
+        if ((reason as { name?: string })?.name !== "AbortError") {
+          setError(reason instanceof Error ? reason.message : "Learning data could not be loaded.")
+          setLoadedQuery(requestQuery)
+        }
+      })
     return () => controller.abort()
   }, [refreshKey, requestQuery])
 
   const names = useMemo(() => new Map(people.map((person) => [person.employee_id, person.display_name])), [people])
   const today = new Date().toISOString().slice(0, 10)
-  const incomplete = useMemo(() => (data?.training.rows ?? []).filter((row) => row.completion_status.toLowerCase() !== "completed").sort((left, right) => (left.due_date ?? "9999").localeCompare(right.due_date ?? "9999")), [data])
-  const completed = useMemo(() => (data?.training.rows ?? []).filter((row) => row.completion_status.toLowerCase() === "completed").sort((left, right) => (right.completion_date ?? "").localeCompare(left.completion_date ?? "")), [data])
-  const overdue = incomplete.filter((row) => row.due_date && row.due_date < today).length
-  const visibleAssignments = incomplete.filter((row) => { const normalized = query.trim().toLowerCase(); return !normalized || [row.training_program, row.employee_id, names.get(row.employee_id) ?? "", row.department].some((value) => value.toLowerCase().includes(normalized)) })
+  const dueSoonDate = useMemo(() => {
+    const date = new Date()
+    date.setDate(date.getDate() + 14)
+    return date.toISOString().slice(0, 10)
+  }, [])
+  const incomplete = useMemo(
+    () => (data?.training.rows ?? [])
+      .filter((row) => row.completion_status.toLowerCase() !== "completed")
+      .sort((left, right) => (left.due_date ?? "9999").localeCompare(right.due_date ?? "9999")),
+    [data],
+  )
+  const completed = useMemo(
+    () => (data?.training.rows ?? [])
+      .filter((row) => row.completion_status.toLowerCase() === "completed")
+      .sort((left, right) => (right.completion_date ?? "").localeCompare(left.completion_date ?? "")),
+    [data],
+  )
+  const overdue = useMemo(
+    () => incomplete.filter((row) => row.due_date && row.due_date < today).length,
+    [incomplete, today],
+  )
+  const mandatoryGaps = useMemo(() => incomplete.filter(isMandatory).length, [incomplete])
+  const attentionAssignments = useMemo(
+    () => incomplete.filter((row) => (
+      Boolean(row.due_date && row.due_date < today)
+      || isMandatory(row)
+      || Boolean(row.due_date && row.due_date <= dueSoonDate)
+    )),
+    [dueSoonDate, incomplete, today],
+  )
+  const visibleAssignments = useMemo(() => {
+    const normalized = query.trim().toLowerCase()
+    const candidates = normalized ? incomplete : attentionAssignments
+    return candidates.filter((row) => !normalized || [
+      row.training_program,
+      row.employee_id,
+      names.get(row.employee_id) ?? "",
+      row.department,
+    ].some((value) => value.toLowerCase().includes(normalized)))
+  }, [attentionAssignments, incomplete, names, query])
+  const departmentCoverage = useMemo(() => {
+    const grouped = new Map<string, { assigned: number; completed: number; overdue: number }>()
+    for (const row of data?.training.rows ?? []) {
+      const current = grouped.get(row.department) ?? { assigned: 0, completed: 0, overdue: 0 }
+      current.assigned += 1
+      if (row.completion_status.toLowerCase() === "completed") current.completed += 1
+      if (row.completion_status.toLowerCase() !== "completed" && row.due_date && row.due_date < today) current.overdue += 1
+      grouped.set(row.department, current)
+    }
+    return [...grouped.entries()]
+      .map(([name, values]) => ({
+        name,
+        ...values,
+        rate: values.assigned ? Math.round((values.completed / values.assigned) * 100) : 0,
+      }))
+      .sort((left, right) => left.rate - right.rate || right.assigned - left.assigned)
+  }, [data, today])
 
   function refresh(message: string) {
     setNotice(message)
+    setError("")
     setLoadedQuery(null)
     setRefreshKey((current) => current + 1)
   }
@@ -116,11 +163,21 @@ export function LearningWorkspace({ actor, people }: { actor: WorkflowActorConte
     setSaving(true)
     setError("")
     try {
-      const response = await fetch("/api/v1/hr/workflows", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ type: "training", ...assignment, hours: Number(assignment.hours) }) })
+      const response = await fetch("/api/v1/hr/workflows", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ type: "training", ...assignment, hours: Number(assignment.hours) }),
+      })
       const result = await response.json() as { error?: string; message?: string }
       if (!response.ok) throw new Error(result.error ?? "The training assignment could not be saved.")
       setAssignOpen(false)
-      setAssignment({ employeeId: assignablePeople[0]?.employee_id ?? "", program: "", dueDate: defaultDueDate(), hours: "2", note: "" })
+      setAssignment({
+        employeeId: assignablePeople[0]?.employee_id ?? "",
+        program: "",
+        dueDate: defaultDueDate(),
+        hours: "2",
+        note: "",
+      })
       refresh(result.message ?? "Training assigned.")
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : "The training assignment could not be saved.")
@@ -133,7 +190,11 @@ export function LearningWorkspace({ actor, people }: { actor: WorkflowActorConte
     setBusyId(row.id)
     setError("")
     try {
-      const response = await fetch("/api/v1/hr/workflows/action", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ id: row.id, type: "training", action: "complete" }) })
+      const response = await fetch("/api/v1/hr/workflows/action", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ id: row.id, type: "training", action: "complete" }),
+      })
       const result = await response.json() as { error?: string; message?: string }
       if (!response.ok) throw new Error(result.error ?? "The assignment could not be completed.")
       refresh(result.message ?? "Training marked complete.")
@@ -144,24 +205,265 @@ export function LearningWorkspace({ actor, people }: { actor: WorkflowActorConte
     }
   }
 
-  if (!data && loading) return <div className="space-y-4"><div className="h-40 animate-pulse rounded-lg bg-muted"/><div className="grid gap-3 md:grid-cols-4">{Array.from({ length: 4 }, (_, index) => <div key={index} className="h-32 animate-pulse rounded-lg bg-muted"/>)}</div></div>
-  if (!data) return <Card><CardContent className="p-6 text-sm text-destructive">{error || "Learning data could not be loaded."}</CardContent></Card>
+  if (!data && loading) {
+    return (
+      <div className="space-y-4">
+        <div className="h-32 animate-pulse rounded-lg bg-muted" />
+        <div className="grid gap-4 xl:grid-cols-[minmax(0,1.4fr)_minmax(320px,0.6fr)]">
+          <div className="h-96 animate-pulse rounded-lg bg-muted" />
+          <div className="h-96 animate-pulse rounded-lg bg-muted" />
+        </div>
+      </div>
+    )
+  }
+  if (!data) {
+    return <Card><CardContent className="p-6 text-body text-destructive">{error || "Learning data could not be loaded."}</CardContent></Card>
+  }
 
-  return <div className="mx-auto flex w-full max-w-[1520px] flex-col gap-5 pb-10">
-    <header className="border-b border-border pb-5"><div className="flex flex-col gap-5 lg:flex-row lg:items-end lg:justify-between"><div><h1 className="text-2xl font-semibold">Assign Courses</h1><p className="mt-1 max-w-2xl text-sm text-muted-foreground">Manage training assignments, completion, and compliance.</p></div>{actor.canAssignTraining && assignablePeople.length > 0 && <Button onClick={() => { setError(""); setAssignOpen(true) }}><Plus className="size-4"/>Assign training</Button>}</div><div className="mt-3 flex flex-wrap gap-x-5 gap-y-1 text-xs text-muted-foreground"><span>{data.training.rows.length} assignments</span><span>Updated {formatWorkspaceDateTime(data.generatedAt)}</span></div></header>
+  return (
+    <div className="mx-auto flex w-full max-w-[1520px] flex-col gap-5 pb-10">
+      <header className="border-b border-border pb-5">
+        <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
+          <div>
+            <h1 className="text-page font-semibold">Assign courses</h1>
+            <p className="mt-1 max-w-2xl text-description text-muted-foreground">
+              Assign training and resolve overdue or mandatory requirements.
+            </p>
+          </div>
+          {actor.canAssignTraining && assignablePeople.length > 0 && (
+            <Button onClick={() => { setError(""); setAssignOpen(true) }}>
+              <Plus className="size-4" />
+              Assign training
+            </Button>
+          )}
+        </div>
+        <div className="mt-3 flex flex-wrap gap-x-5 gap-y-1 text-meta text-muted-foreground">
+          <span>{data.training.rows.length} assignments in this view</span>
+          <span>Updated {formatWorkspaceDateTime(data.generatedAt)}</span>
+        </div>
+      </header>
 
-    <Card className="gap-4 p-4 shadow-none sm:p-5"><div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between"><p className="text-sm font-semibold">Filters</p><Button size="sm" variant="ghost" onClick={() => setFilters(emptyFilters)}><FilterX className="size-4"/>Reset</Button></div><div className="grid gap-3 sm:grid-cols-2"><Field label="Department"><select value={filters.department} onChange={(event) => setFilters({ ...filters, department: event.target.value })} className={inputClass}><option value="">All departments</option>{data.dimensions.departments.map((item) => <option key={item}>{item}</option>)}</select></Field><Field label="Reporting interval"><select value={filters.period} onChange={(event) => setFilters({ ...filters, period: event.target.value as Filters["period"] })} className={inputClass}><option value="month">Monthly</option><option value="quarter">Quarterly</option><option value="year">Yearly</option></select></Field></div>{loading && <div className="h-1 overflow-hidden rounded-full bg-muted"><div className="h-full w-2/3 animate-pulse rounded-full bg-primary"/></div>}</Card>
+      <div className="flex flex-col gap-3 rounded-lg border border-border bg-card px-4 py-3 sm:flex-row sm:items-end">
+        <div className="w-full sm:max-w-xs">
+          <Field label="Department">
+            <select value={department} onChange={(event) => setDepartment(event.target.value)} className={inputClass}>
+              <option value="">All departments</option>
+              {data.dimensions.departments.map((item) => <option key={item}>{item}</option>)}
+            </select>
+          </Field>
+        </div>
+        {department && <Button size="sm" variant="ghost" onClick={() => setDepartment("")}>Clear</Button>}
+        {loading && <span className="pb-2 text-meta text-muted-foreground">Updating…</span>}
+      </div>
 
-    {(notice || error) && <div aria-live="polite" className={cn("rounded-md border px-4 py-3 text-xs font-medium", error ? "border-rose-200 bg-rose-50 text-rose-800 dark:border-rose-900/40 dark:bg-rose-950/20 dark:text-rose-200" : "border-emerald-200 bg-emerald-50 text-emerald-800 dark:border-emerald-900/40 dark:bg-emerald-950/20 dark:text-emerald-200")}>{error || notice}</div>}
+      {(notice || error) && (
+        <div
+          aria-live="polite"
+          className={cn(
+            "rounded-md border px-4 py-3 text-meta font-semibold",
+            error
+              ? "border-rose-200 bg-rose-50 text-rose-800 dark:border-rose-900/40 dark:bg-rose-950/20 dark:text-rose-200"
+              : "border-emerald-200 bg-emerald-50 text-emerald-800 dark:border-emerald-900/40 dark:bg-emerald-950/20 dark:text-emerald-200",
+          )}
+        >
+          {error || notice}
+        </div>
+      )}
 
-    <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4"><Metric label="Completion rate" value={`${data.training.completionRate.toLocaleString()}%`} detail={`${completed.length} completed assignments`}/><Metric label="Assigned learning" value={`${data.training.totalHours.toLocaleString()}h`} detail="Across this filtered register"/><Metric label="Overdue" value={overdue.toLocaleString()} detail="Incomplete assignments past due"/><Metric label="Mandatory gaps" value={data.training.requiringMandatoryTraining.toLocaleString()} detail="Incomplete security or safety work"/></div>
+      <section className="grid overflow-hidden rounded-lg border border-border bg-card sm:grid-cols-3 sm:divide-x sm:divide-border">
+        {[
+          { label: "Completion rate", value: `${data.training.completionRate.toLocaleString()}%`, detail: `${completed.length} of ${data.training.rows.length} assignments` },
+          { label: "Overdue", value: overdue.toLocaleString(), detail: "Incomplete assignments past due" },
+          { label: "Mandatory gaps", value: mandatoryGaps.toLocaleString(), detail: "Incomplete security or safety training" },
+        ].map((metric, index) => (
+          <div key={metric.label} className={cn("px-4 py-4", index > 0 && "border-t border-border sm:border-t-0")}>
+            <p className="text-label text-muted-foreground">{metric.label}</p>
+            <p className="mt-1 text-kpi font-semibold tabular-nums">{metric.value}</p>
+            <p className="mt-1 text-meta text-muted-foreground">{metric.detail}</p>
+          </div>
+        ))}
+      </section>
 
-    <Card className="gap-0 overflow-hidden py-0 shadow-none"><CardHeader className="gap-4 border-b border-border px-5 py-5 lg:flex-row lg:items-center lg:justify-between"><div><CardTitle>Assignments needing action</CardTitle><CardDescription>Incomplete training assignments</CardDescription></div><label className="relative"><Search className="pointer-events-none absolute left-3 top-1/2 size-3.5 -translate-y-1/2 text-muted-foreground"/><input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search employee or programme" className="h-9 w-full rounded-md border border-border bg-background pl-9 pr-3 text-xs outline-none focus:ring-2 focus:ring-ring/30 sm:w-72"/></label></CardHeader><CardContent className="px-0 pb-0">{visibleAssignments.length ? <div className="divide-y divide-border/70">{visibleAssignments.map((row) => { const canComplete = Boolean(row.requested_by_email) && (["admin", "hr"].includes(actor.role) || actor.employeeId === row.employee_id); const isOverdue = Boolean(row.due_date && row.due_date < today); return <div key={row.id} className="grid gap-4 px-4 py-4 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-center sm:px-5"><div className="min-w-0"><p className="truncate text-sm font-semibold">{row.training_program}</p><p className="mt-1 text-xs text-muted-foreground">{names.get(row.employee_id) ?? row.employee_id} · {row.department} · {row.training_hours}h</p><p className={cn("mt-1 text-meta font-medium", isOverdue ? "text-rose-600 dark:text-rose-300" : "text-muted-foreground")}>{isOverdue ? "Overdue" : "Due"} {dateLabel(row.due_date)}</p></div>{canComplete ? <Button size="sm" disabled={busyId !== null} onClick={() => void complete(row)}>{busyId === row.id ? <LoaderCircle className="size-3.5 animate-spin"/> : <Check className="size-3.5"/>}Mark complete</Button> : <span className="text-meta text-muted-foreground">Assigned employee or HR completes</span>}</div>})}</div> : <div className="flex min-h-36 items-center justify-center px-6 text-center text-sm text-muted-foreground">No incomplete assignments match this view.</div>}</CardContent></Card>
+      <div className="grid gap-4 xl:grid-cols-[minmax(0,1.45fr)_minmax(340px,0.55fr)]">
+        <Card className="gap-0 overflow-hidden py-0 shadow-none">
+          <CardHeader className="gap-4 border-b border-border px-5 py-4 lg:flex-row lg:items-center lg:justify-between">
+            <div>
+              <CardTitle>Needs attention</CardTitle>
+              <CardDescription>Overdue, mandatory, and assignments due in the next 14 days.</CardDescription>
+            </div>
+            <label className="relative">
+              <span className="sr-only">Search assignments</span>
+              <Search className="pointer-events-none absolute left-3 top-1/2 size-3.5 -translate-y-1/2 text-muted-foreground" />
+              <input
+                value={query}
+                onChange={(event) => setQuery(event.target.value)}
+                placeholder="Search all assignments"
+                className="h-9 w-full rounded-md border border-border bg-background pl-9 pr-3 text-control outline-none focus:ring-2 focus:ring-ring/30 sm:w-64"
+              />
+            </label>
+          </CardHeader>
+          <CardContent className="p-0">
+            {visibleAssignments.length ? (
+              <div>
+                <div className="hidden grid-cols-[minmax(180px,1.3fr)_minmax(160px,1fr)_130px_118px] gap-4 bg-muted/40 px-5 py-2.5 text-label font-semibold text-muted-foreground md:grid">
+                  <span>Course</span>
+                  <span>Employee</span>
+                  <span>Deadline</span>
+                  <span className="text-right">Action</span>
+                </div>
+                <div className="divide-y divide-border/70">
+                  {visibleAssignments.map((row) => {
+                    const canComplete = Boolean(row.requested_by_email)
+                      && (["admin", "hr"].includes(actor.role) || actor.employeeId === row.employee_id)
+                    const isOverdue = Boolean(row.due_date && row.due_date < today)
+                    const status = isOverdue ? "Overdue" : isMandatory(row) ? "Mandatory" : "Due soon"
+                    return (
+                      <div key={row.id} className="grid gap-3 px-4 py-3.5 md:grid-cols-[minmax(180px,1.3fr)_minmax(160px,1fr)_130px_118px] md:items-center md:gap-4 md:px-5">
+                        <div className="min-w-0">
+                          <p className="truncate text-card-title font-semibold">{row.training_program}</p>
+                          <p className="mt-0.5 text-meta text-muted-foreground">{row.training_hours}h assigned</p>
+                        </div>
+                        <div className="min-w-0">
+                          <p className="truncate text-body">{names.get(row.employee_id) ?? row.employee_id}</p>
+                          <p className="mt-0.5 truncate text-meta text-muted-foreground">{row.department}</p>
+                        </div>
+                        <div>
+                          <p className={cn(
+                            "text-status font-semibold",
+                            isOverdue ? "text-destructive" : "text-muted-foreground",
+                          )}>
+                            {status}
+                          </p>
+                          <p className="mt-0.5 text-meta text-muted-foreground">{dateLabel(row.due_date)}</p>
+                        </div>
+                        <div className="md:text-right">
+                          {canComplete ? (
+                            <Button size="xs" disabled={busyId !== null} onClick={() => void complete(row)}>
+                              {busyId === row.id && <LoaderCircle className="size-3 animate-spin" />}
+                              Mark complete
+                            </Button>
+                          ) : (
+                            <span className="text-meta text-muted-foreground">Tracked</span>
+                          )}
+                        </div>
+                      </div>
+                    )
+                  })}
+                </div>
+              </div>
+            ) : (
+              <div className="flex min-h-40 items-center justify-center px-6 text-center text-body text-muted-foreground">
+                {query ? "No assignments match your search." : "No assignments require attention."}
+              </div>
+            )}
+            <div className="border-t border-border bg-muted/20 px-5 py-2.5 text-meta text-muted-foreground">
+              {query
+                ? `Showing ${visibleAssignments.length} of ${incomplete.length} incomplete assignments.`
+                : `Showing ${attentionAssignments.length} priority assignments of ${incomplete.length} incomplete. Search to find another assignment.`}
+            </div>
+          </CardContent>
+        </Card>
 
-    <div className="grid gap-4 xl:grid-cols-2"><Card className="shadow-none"><CardHeader><CardTitle>Completed learning trend</CardTitle><CardDescription>Completed hours by {data.filters.period}</CardDescription></CardHeader><CardContent><TrendChart data={data.training.trend}/></CardContent></Card><Card className="shadow-none"><CardHeader><CardTitle>Participation by department</CardTitle><CardDescription>Select a department to filter the report</CardDescription></CardHeader><CardContent><BreakdownChart data={data.training.byDepartment} onSelect={(department) => setFilters({ ...filters, department })}/></CardContent></Card></div>
+        <div className="flex flex-col gap-4">
+          <Card className="gap-0 overflow-hidden py-0 shadow-none">
+            <CardHeader className="border-b border-border px-5 py-4">
+              <CardTitle>Department coverage</CardTitle>
+              <CardDescription>Completion and overdue work in the current view.</CardDescription>
+            </CardHeader>
+            <CardContent className="p-0">
+              <div className="grid grid-cols-[minmax(0,1fr)_58px_58px_54px] gap-2 bg-muted/40 px-5 py-2.5 text-label font-semibold text-muted-foreground">
+                <span>Department</span>
+                <span className="text-right">Done</span>
+                <span className="text-right">Overdue</span>
+                <span className="text-right">Rate</span>
+              </div>
+              {departmentCoverage.length ? departmentCoverage.map((row) => (
+                <button
+                  key={row.name}
+                  type="button"
+                  onClick={() => setDepartment(row.name)}
+                  className="grid w-full grid-cols-[minmax(0,1fr)_58px_58px_54px] gap-2 border-t border-border/70 px-5 py-3 text-left text-body hover:bg-muted/25"
+                >
+                  <span className="truncate font-semibold">{row.name}</span>
+                  <span className="text-right tabular-nums">{row.completed}/{row.assigned}</span>
+                  <span className={cn("text-right tabular-nums", row.overdue ? "text-destructive" : "text-muted-foreground")}>{row.overdue}</span>
+                  <span className="text-right font-semibold tabular-nums">{row.rate}%</span>
+                </button>
+              )) : (
+                <p className="px-5 py-8 text-center text-body text-muted-foreground">No training records are available.</p>
+              )}
+            </CardContent>
+          </Card>
 
-    <div className="grid gap-4 xl:grid-cols-2"><Card className="shadow-none"><CardHeader><CardTitle>Programme mix</CardTitle><CardDescription>Assigned hours by programme</CardDescription></CardHeader><CardContent><BreakdownChart data={data.training.byProgram}/></CardContent></Card><Card className="shadow-none"><CardHeader><CardTitle>Recent completions</CardTitle><CardDescription>Latest completed assignments</CardDescription></CardHeader><CardContent className="divide-y divide-border">{completed.length ? completed.slice(0, 7).map((row) => <div key={row.id} className="grid grid-cols-[minmax(0,1fr)_auto] gap-3 py-3"><div className="min-w-0"><p className="truncate text-sm font-medium">{row.training_program}</p><p className="truncate text-meta text-muted-foreground">{names.get(row.employee_id) ?? row.employee_id} · {row.department}</p></div><div className="text-right"><p className="text-meta font-semibold">{dateLabel(row.completion_date)}</p>{row.assessment_score !== null && <p className="mt-0.5 text-meta text-muted-foreground">Score {row.assessment_score}%</p>}</div></div>) : <div className="flex min-h-40 items-center justify-center text-sm text-muted-foreground">No completions recorded.</div>}</CardContent></Card></div>
+          <Card className="gap-0 overflow-hidden py-0 shadow-none">
+            <CardHeader className="border-b border-border px-5 py-4">
+              <CardTitle>Recent completions</CardTitle>
+              <CardDescription>Latest completed assignments.</CardDescription>
+            </CardHeader>
+            <CardContent className="divide-y divide-border p-0">
+              {completed.length ? completed.slice(0, 5).map((row) => (
+                <div key={row.id} className="grid grid-cols-[minmax(0,1fr)_auto] gap-3 px-5 py-3">
+                  <div className="min-w-0">
+                    <p className="truncate text-card-title font-semibold">{row.training_program}</p>
+                    <p className="mt-0.5 truncate text-meta text-muted-foreground">
+                      {names.get(row.employee_id) ?? row.employee_id} · {row.department}
+                    </p>
+                  </div>
+                  <div className="text-right">
+                    <p className="text-meta font-semibold">{dateLabel(row.completion_date)}</p>
+                    {row.assessment_score !== null && <p className="mt-0.5 text-status text-muted-foreground">{row.assessment_score}%</p>}
+                  </div>
+                </div>
+              )) : (
+                <div className="flex min-h-32 items-center justify-center px-5 text-body text-muted-foreground">No completions recorded.</div>
+              )}
+            </CardContent>
+          </Card>
+        </div>
+      </div>
 
-    {assignOpen && <div className="fixed inset-0 z-[100] flex items-center justify-center p-4"><button type="button" aria-label="Close assignment form" className="absolute inset-0 bg-slate-950/40" onClick={() => !saving && setAssignOpen(false)}/><form onSubmit={submitAssignment} className="relative max-h-[90dvh] w-full max-w-lg overflow-y-auto rounded-lg border border-border bg-background p-6 shadow-none"><button type="button" aria-label="Close" onClick={() => setAssignOpen(false)} className="absolute right-5 top-5 text-muted-foreground hover:text-foreground"><X className="size-4"/></button><h2 className="text-xl font-semibold">Assign training</h2><p className="mt-1 text-sm text-muted-foreground">Create a training assignment for an employee.</p><div className="mt-6 space-y-4"><SelectEmployee value={assignment.employeeId} people={assignablePeople} onChange={(employeeId) => setAssignment({ ...assignment, employeeId })}/><Field label="Training programme"><input required className={inputClass} value={assignment.program} onChange={(event) => setAssignment({ ...assignment, program: event.target.value })} placeholder="Security and privacy essentials"/></Field><div className="grid gap-4 sm:grid-cols-2"><Field label="Due date"><input required type="date" className={inputClass} value={assignment.dueDate} onChange={(event) => setAssignment({ ...assignment, dueDate: event.target.value })}/></Field><Field label="Estimated hours"><input required min="0.5" max="500" step="0.5" type="number" className={inputClass} value={assignment.hours} onChange={(event) => setAssignment({ ...assignment, hours: event.target.value })}/></Field></div><Field label="Instructions (optional)"><textarea className={textareaClass} value={assignment.note} onChange={(event) => setAssignment({ ...assignment, note: event.target.value })} placeholder="Completion requirements or course link"/></Field></div>{error && <p role="alert" className="mt-4 rounded-md border border-destructive/20 bg-destructive/5 p-3 text-xs text-destructive">{error}</p>}<div className="mt-6 flex justify-end gap-2"><Button type="button" variant="ghost" onClick={() => setAssignOpen(false)} disabled={saving}>Cancel</Button><Button type="submit" disabled={saving || !assignment.employeeId}>{saving && <LoaderCircle className="size-4 animate-spin"/>}Assign training</Button></div></form></div>}
-  </div>
+      {assignOpen && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
+          <button
+            type="button"
+            aria-label="Close assignment form"
+            className="absolute inset-0 bg-slate-950/40"
+            onClick={() => !saving && setAssignOpen(false)}
+          />
+          <form onSubmit={submitAssignment} className="relative max-h-[90dvh] w-full max-w-lg overflow-y-auto rounded-lg border border-border bg-background p-6 shadow-none">
+            <button type="button" aria-label="Close" onClick={() => setAssignOpen(false)} className="absolute right-5 top-5 text-muted-foreground hover:text-foreground">
+              <X className="size-4" />
+            </button>
+            <h2 className="text-section font-semibold">Assign training</h2>
+            <p className="mt-1 text-description text-muted-foreground">Create a training assignment for an employee.</p>
+            <div className="mt-6 space-y-4">
+              <SelectEmployee value={assignment.employeeId} people={assignablePeople} onChange={(employeeId) => setAssignment({ ...assignment, employeeId })} />
+              <Field label="Training programme">
+                <input required className={inputClass} value={assignment.program} onChange={(event) => setAssignment({ ...assignment, program: event.target.value })} placeholder="Security and privacy essentials" />
+              </Field>
+              <div className="grid gap-4 sm:grid-cols-2">
+                <Field label="Due date">
+                  <input required type="date" className={inputClass} value={assignment.dueDate} onChange={(event) => setAssignment({ ...assignment, dueDate: event.target.value })} />
+                </Field>
+                <Field label="Estimated hours">
+                  <input required min="0.5" max="500" step="0.5" type="number" className={inputClass} value={assignment.hours} onChange={(event) => setAssignment({ ...assignment, hours: event.target.value })} />
+                </Field>
+              </div>
+              <Field label="Instructions (optional)">
+                <textarea className={textareaClass} value={assignment.note} onChange={(event) => setAssignment({ ...assignment, note: event.target.value })} placeholder="Completion requirements or course link" />
+              </Field>
+            </div>
+            {error && <p role="alert" className="mt-4 rounded-md border border-destructive/20 bg-destructive/5 p-3 text-meta text-destructive">{error}</p>}
+            <div className="mt-6 flex justify-end gap-2">
+              <Button type="button" variant="ghost" onClick={() => setAssignOpen(false)} disabled={saving}>Cancel</Button>
+              <Button type="submit" disabled={saving || !assignment.employeeId}>
+                {saving && <LoaderCircle className="size-4 animate-spin" />}
+                Assign training
+              </Button>
+            </div>
+          </form>
+        </div>
+      )}
+    </div>
+  )
 }

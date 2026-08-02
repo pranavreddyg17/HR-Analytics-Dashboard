@@ -8,8 +8,8 @@ import { getWorkflowActorContext } from "@/lib/server/workflows"
 export const dynamic = "force-dynamic"
 
 export const metadata: Metadata = {
-  title: "Assign Courses",
-  description: "Assign training, manage compliance work, and review learning progress.",
+  title: "Assign courses",
+  description: "Assign training and resolve overdue or mandatory requirements.",
 }
 
 export default async function LearningPage() {
