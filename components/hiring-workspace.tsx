@@ -399,7 +399,9 @@ export function HiringWorkspace({ canRequestHiring }: { canRequestHiring: boolea
   const [location, setLocation] = useState(searchParams.get("location") ?? "")
   const [candidateQuery, setCandidateQuery] = useState(searchParams.get("candidateQ") ?? "")
   const [candidateStage, setCandidateStage] = useState(initialCandidateFilter)
-  const [openedInternally, setOpenedInternally] = useState(false)
+  const [workspaceView, setWorkspaceView] = useState<"requisitions" | "candidates">(
+    searchParams.has("candidate") || searchParams.has("candidateQ") || selectedCandidateId ? "candidates" : "requisitions",
+  )
 
   const listHref = useMemo(() => {
     const params = new URLSearchParams()
@@ -492,7 +494,6 @@ export function HiringWorkspace({ canRequestHiring }: { canRequestHiring: boolea
     }
     const params = new URLSearchParams(listHref.split("?")[1] ?? "")
     params.set("requisition", id)
-    setOpenedInternally(true)
     router.push(`/hiring?${params.toString()}`, { scroll: false })
   }
 
@@ -500,23 +501,16 @@ export function HiringWorkspace({ canRequestHiring }: { canRequestHiring: boolea
     const params = new URLSearchParams(listHref.split("?")[1] ?? "")
     params.set("newCandidate", "1")
     params.set("candidateRequisition", requisitionId)
-    setOpenedInternally(true)
     router.push(`/hiring?${params.toString()}`, { scroll: false })
   }
 
   function openCandidateRecord(candidateId: string) {
     const params = new URLSearchParams(listHref.split("?")[1] ?? "")
     params.set("candidateRecord", candidateId)
-    setOpenedInternally(true)
     router.push(`/hiring?${params.toString()}`, { scroll: false })
   }
 
   function closeRequisition() {
-    if (openedInternally) {
-      setOpenedInternally(false)
-      router.back()
-      return
-    }
     if (returnTo) {
       router.push(returnTo)
       return
@@ -549,7 +543,7 @@ export function HiringWorkspace({ canRequestHiring }: { canRequestHiring: boolea
 
   return (
     <WorkspacePage>
-      <WorkspaceHeader title="Hiring" description="Manage headcount decisions, requisition follow-ups, and candidate outcomes." meta={<>Updated {formatWorkspaceDateTime(data.generatedAt)}</>} actions={
+      <WorkspaceHeader title="Hiring" description="Requisitions and candidate pipeline." actions={
           <>
             {canRequestHiring && <Button nativeButton={false} variant="outline" render={<Link href="/inbox?new=hiring" />}><Plus className="size-4" />New requisition</Button>}
             <Button onClick={() => openCandidateForm(activeRequisitions[0]?.id ?? "")} disabled={!activeRequisitions.length}><Plus className="size-4" />Add candidate</Button>
@@ -562,17 +556,22 @@ export function HiringWorkspace({ canRequestHiring }: { canRequestHiring: boolea
       )}
 
       <MetricStrip metrics={[
-          { label: "Approval decisions", value: data.summary.approvalsRequired, detail: "Headcount requests awaiting HR" },
-          { label: "Active roles", value: data.summary.activeRequisitions, detail: "Requested, open, or at offer" },
-          { label: "Overdue follow-ups", value: data.summary.overdueFollowUps, detail: "Requisition or candidate actions" },
-          { label: "Average time to fill", value: `${data.summary.averageTimeToFill}d`, detail: "Across recently filled roles" },
+          { label: "Awaiting approval", value: data.summary.approvalsRequired, detail: "Headcount requests" },
+          { label: "Active roles", value: data.summary.activeRequisitions, detail: "Requested, open, or offer" },
+          { label: "Overdue", value: data.summary.overdueFollowUps, detail: "Recruiting follow-ups" },
+          { label: "Time to fill", value: `${data.summary.averageTimeToFill}d`, detail: "Recent hires" },
         ]}/>
 
-      <Card className="gap-0 overflow-hidden py-0 shadow-none">
+      <div className="flex border-b border-border" role="tablist" aria-label="Hiring views">
+        <button type="button" role="tab" aria-selected={workspaceView === "requisitions"} onClick={() => setWorkspaceView("requisitions")} className={cn("-mb-px border-b-2 px-4 py-2.5 font-semibold", workspaceView === "requisitions" ? "border-primary text-foreground" : "border-transparent text-muted-foreground hover:text-foreground")}>Requisitions <span className="ml-1 text-meta tabular-nums">{visibleRequisitions.length}</span></button>
+        <button type="button" role="tab" aria-selected={workspaceView === "candidates"} onClick={() => setWorkspaceView("candidates")} className={cn("-mb-px border-b-2 px-4 py-2.5 font-semibold", workspaceView === "candidates" ? "border-primary text-foreground" : "border-transparent text-muted-foreground hover:text-foreground")}>Candidates <span className="ml-1 text-meta tabular-nums">{visibleCandidates.length}</span></button>
+      </div>
+
+      {workspaceView === "requisitions" && <Card className="gap-0 overflow-hidden py-0 shadow-none">
         <CardHeader className="gap-4 border-b border-border px-5 py-4">
           <div>
             <CardTitle>Requisition queue</CardTitle>
-            <CardDescription>Every row has a persisted decision or follow-up workflow.</CardDescription>
+            <CardDescription>Open and requested roles.</CardDescription>
           </div>
           <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-[minmax(220px,1fr)_170px_200px_180px]">
             <label className="relative">
@@ -605,9 +604,9 @@ export function HiringWorkspace({ canRequestHiring }: { canRequestHiring: boolea
           {!visibleRequisitions.length && <p className="p-10 text-center text-body text-muted-foreground">No requisitions match these filters.</p>}
           <div className="border-t border-border bg-muted/20 px-4 py-2.5 text-meta text-muted-foreground">Showing {visibleRequisitions.length} of {data.requisitions.length} requisitions</div>
         </CardContent>
-      </Card>
+      </Card>}
 
-      <Card className="gap-0 overflow-hidden py-0 shadow-none">
+      {workspaceView === "candidates" && <Card className="gap-0 overflow-hidden py-0 shadow-none">
         <CardHeader className="gap-4 border-b border-border px-5 py-4 lg:flex-row lg:items-end lg:justify-between">
           <div>
             <CardTitle>Candidate pipeline</CardTitle>
@@ -638,21 +637,7 @@ export function HiringWorkspace({ canRequestHiring }: { canRequestHiring: boolea
           {!visibleCandidates.length && <p className="p-10 text-center text-body text-muted-foreground">No candidates match this view.</p>}
           <div className="border-t border-border bg-muted/20 px-4 py-2.5 text-meta text-muted-foreground">Showing {visibleCandidates.length} of {data.candidates.length} candidates</div>
         </CardContent>
-      </Card>
-
-      <details className="overflow-hidden rounded-lg border border-border bg-card">
-        <summary className="flex min-h-12 items-center justify-between px-4 font-semibold">Hiring history <span className="text-meta font-normal text-muted-foreground">Recent activity and filled roles</span></summary>
-        <div className="grid gap-4 border-t border-border p-4 xl:grid-cols-2">
-        <Card className="gap-0 overflow-hidden py-0 shadow-none">
-          <CardHeader className="border-b border-border px-5 py-4"><CardTitle>Recent hiring activity</CardTitle><CardDescription>Persisted requisition and candidate updates.</CardDescription></CardHeader>
-          <CardContent className="px-5 py-4"><ActivityList rows={data.recentActivity.slice(0, 8)} empty="No hiring activity has been recorded." /></CardContent>
-        </Card>
-        <Card className="gap-0 overflow-hidden py-0 shadow-none">
-          <CardHeader className="border-b border-border px-5 py-4"><CardTitle>Recently filled roles</CardTitle><CardDescription>Latest completed requisitions and time to fill.</CardDescription></CardHeader>
-          <CardContent className="divide-y divide-border p-0">{data.recentHires.length ? data.recentHires.slice(0, 6).map((hire) => <div key={hire.id} className="grid gap-2 px-5 py-3 sm:grid-cols-[minmax(0,1fr)_130px_90px] sm:items-center"><div><p className="font-semibold">{hire.position}</p><p className="text-meta text-muted-foreground">{hire.department} · {hire.location}</p></div><p className="text-meta text-muted-foreground">{formatDate(hire.hiringDate)}</p><p className="text-right font-semibold tabular-nums">{hire.timeToHireDays === null ? "—" : `${hire.timeToHireDays} days`}</p></div>) : <p className="p-8 text-center text-body text-muted-foreground">No completed hires are recorded.</p>}</CardContent>
-        </Card>
-        </div>
-      </details>
+      </Card>}
 
       {showCandidateForm && (
         <AddCandidateDialog

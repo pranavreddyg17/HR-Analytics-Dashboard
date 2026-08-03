@@ -7,7 +7,6 @@ import { LoaderCircle, Plus, Search, X } from "lucide-react"
 import { SelectEmployee } from "@/components/workflow-creator"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
-import { formatWorkspaceDateTime } from "@/lib/date-format"
 import { safeReturnTo } from "@/lib/navigation"
 import type { TrainingRecord, WorkforceAnalytics } from "@/lib/hr-types"
 import type { ManagedEmployee, WorkflowActorContext } from "@/lib/people-types"
@@ -59,7 +58,6 @@ export function LearningWorkspace({ actor, people }: { actor: WorkflowActorConte
   const [refreshKey, setRefreshKey] = useState(0)
   const [query, setQuery] = useState(searchParams.get("q") ?? "")
   const assignOpen = searchParams.get("new") === "course"
-  const [assignmentOpenedInternally, setAssignmentOpenedInternally] = useState(false)
   const [saving, setSaving] = useState(false)
   const [busyId, setBusyId] = useState<string | null>(null)
   const [notice, setNotice] = useState("")
@@ -98,16 +96,10 @@ export function LearningWorkspace({ actor, people }: { actor: WorkflowActorConte
   function openAssignment() {
     const params = new URLSearchParams(workspaceBaseHref.split("?")[1] ?? "")
     params.set("new", "course")
-    setAssignmentOpenedInternally(true)
     router.push(`/courses?${params.toString()}`, { scroll: false })
   }
 
   function closeAssignment() {
-    if (assignmentOpenedInternally) {
-      setAssignmentOpenedInternally(false)
-      router.back()
-      return
-    }
     router.replace(workspaceBaseHref, { scroll: false })
   }
 
@@ -263,7 +255,7 @@ export function LearningWorkspace({ actor, people }: { actor: WorkflowActorConte
 
   return (
     <WorkspacePage>
-      <WorkspaceHeader title="Assign courses" description="Assign training and resolve overdue or mandatory requirements." meta={<><span>{data.training.rows.length} assignments</span><span>Updated {formatWorkspaceDateTime(data.generatedAt)}</span></>} actions={actor.canAssignTraining && assignablePeople.length > 0 ? (
+      <WorkspaceHeader title="Assign courses" description="Training assignments and compliance." meta={<>{data.training.rows.length} assignments</>} actions={actor.canAssignTraining && assignablePeople.length > 0 ? (
             <Button onClick={() => { setError(""); openAssignment() }}>
               <Plus className="size-3.5" />
               Assign training
@@ -311,7 +303,7 @@ export function LearningWorkspace({ actor, people }: { actor: WorkflowActorConte
           { label: "Mandatory gaps", value: mandatoryGaps.toLocaleString(), detail: "Incomplete security or safety training" },
         ]}/>
 
-      <div className="grid gap-4 xl:grid-cols-[minmax(0,1.45fr)_minmax(340px,0.55fr)]">
+      <div className="grid gap-4 xl:grid-cols-[minmax(0,1.55fr)_minmax(320px,0.45fr)]">
         <Card className="gap-0 overflow-hidden py-0 shadow-none">
           <CardHeader className="gap-4 border-b border-border px-5 py-4 lg:flex-row lg:items-center lg:justify-between">
             <div>
@@ -391,7 +383,7 @@ export function LearningWorkspace({ actor, people }: { actor: WorkflowActorConte
           </CardContent>
         </Card>
 
-        <div className="flex flex-col gap-4">
+        <div>
           <Card className="gap-0 overflow-hidden py-0 shadow-none">
             <CardHeader className="border-b border-border px-5 py-4">
               <CardTitle>Department coverage</CardTitle>
@@ -422,30 +414,6 @@ export function LearningWorkspace({ actor, people }: { actor: WorkflowActorConte
             </CardContent>
           </Card>
 
-          <Card className="gap-0 overflow-hidden py-0 shadow-none">
-            <CardHeader className="border-b border-border px-5 py-4">
-              <CardTitle>Recent completions</CardTitle>
-              <CardDescription>Latest completed assignments.</CardDescription>
-            </CardHeader>
-            <CardContent className="divide-y divide-border p-0">
-              {completed.length ? completed.slice(0, 5).map((row) => (
-                <div key={row.id} className="grid grid-cols-[minmax(0,1fr)_auto] gap-3 px-5 py-3">
-                  <div className="min-w-0">
-                    <p className="truncate text-card-title font-semibold">{row.training_program}</p>
-                    <p className="mt-0.5 truncate text-meta text-muted-foreground">
-                      {names.get(row.employee_id) ?? row.employee_id} · {row.department}
-                    </p>
-                  </div>
-                  <div className="text-right">
-                    <p className="text-meta font-semibold">{dateLabel(row.completion_date)}</p>
-                    {row.assessment_score !== null && <p className="mt-0.5 text-status text-muted-foreground">{row.assessment_score}%</p>}
-                  </div>
-                </div>
-              )) : (
-                <div className="flex min-h-32 items-center justify-center px-5 text-body text-muted-foreground">No completions recorded.</div>
-              )}
-            </CardContent>
-          </Card>
         </div>
       </div>
 

@@ -1,7 +1,7 @@
 "use client"
 
 import { useCallback, useEffect, useState } from "react"
-import { Loader2, Plus, Trash2, X } from "lucide-react"
+import { Loader2 } from "lucide-react"
 
 import { formatWorkspaceDateTime } from "@/lib/date-format"
 import { WorkspaceHeader, WorkspacePage } from "@/components/workspace-ui"
@@ -64,7 +64,7 @@ export function AccessManager({ ownerEmail }: { ownerEmail: string }) {
 
   return (
     <WorkspacePage>
-      <WorkspaceHeader title="Access" description="Manage approved Google accounts, roles, and account status." meta={<>{users.length} approved {users.length === 1 ? "account" : "accounts"}</>} />
+      <WorkspaceHeader title="Access" description="Accounts and permissions." meta={<>{users.length} approved {users.length === 1 ? "account" : "accounts"}</>} />
 
       <section className="surface-card">
         <div className="border-b border-border px-5 py-4">
@@ -86,7 +86,7 @@ export function AccessManager({ ownerEmail }: { ownerEmail: string }) {
             </select>
           </label>
           <button disabled={saving} className="inline-flex h-9 items-center justify-center gap-2 rounded-md bg-primary px-4 text-sm font-semibold text-primary-foreground disabled:opacity-50">
-            {saving ? <Loader2 className="size-4 animate-spin" /> : <Plus className="size-4" />}
+            {saving && <Loader2 className="size-4 animate-spin" />}
             Add account
           </button>
         </form>
@@ -103,7 +103,7 @@ export function AccessManager({ ownerEmail }: { ownerEmail: string }) {
         ) : (
           <div className="divide-y divide-border">
             {users.map((user) => (
-              <div key={user.email} className="grid gap-3 px-4 py-3 md:grid-cols-[minmax(0,1fr)_140px_120px_40px] md:items-center">
+              <div key={user.email} className="grid gap-3 px-4 py-3 md:grid-cols-[minmax(0,1fr)_140px_120px_76px] md:items-center">
                 <div className="min-w-0">
                   <p className="truncate text-sm font-semibold">
                     {user.display_name || user.email.split("@")[0]}
@@ -120,9 +120,7 @@ export function AccessManager({ ownerEmail }: { ownerEmail: string }) {
                 <button disabled={user.email === ownerEmail} onClick={() => update(user, { status: user.status === "active" ? "disabled" : "active" })} className="h-9 rounded-md border border-border bg-background px-3 text-xs font-semibold capitalize disabled:opacity-50">
                   {user.status}
                 </button>
-                <button type="button" disabled={user.email === ownerEmail} onClick={() => setRemoveTarget(user)} className="inline-flex size-9 items-center justify-center rounded-md border border-border text-muted-foreground hover:bg-muted hover:text-destructive disabled:cursor-not-allowed disabled:opacity-30" aria-label={`Remove ${user.email}`} title={user.email === ownerEmail ? "The workspace owner cannot be removed" : "Remove access"}>
-                  <Trash2 className="size-4" />
-                </button>
+                <button type="button" disabled={user.email === ownerEmail} onClick={() => setRemoveTarget(user)} className="inline-flex h-9 items-center justify-center rounded-md border border-border px-3 text-muted-foreground hover:bg-muted hover:text-destructive disabled:cursor-not-allowed disabled:opacity-30" aria-label={`Remove ${user.email}`} title={user.email === ownerEmail ? "The workspace owner cannot be removed" : "Remove access"}>Remove</button>
               </div>
             ))}
           </div>
@@ -149,12 +147,12 @@ export function AccessManager({ ownerEmail }: { ownerEmail: string }) {
                 <h2 id="remove-access-title" className="text-lg font-semibold">Remove access?</h2>
                 <p className="mt-1 text-sm text-muted-foreground"><b className="text-foreground">{removeTarget.email}</b> will no longer be able to sign in.</p>
               </div>
-              <button type="button" onClick={() => setRemoveTarget(null)} className="inline-flex size-8 shrink-0 items-center justify-center rounded-md text-muted-foreground hover:bg-muted" aria-label="Cancel removal"><X className="size-4" /></button>
+              <button type="button" onClick={() => setRemoveTarget(null)} className="text-button shrink-0" aria-label="Cancel removal">Close</button>
             </div>
             <div className="mt-5 flex justify-end gap-2">
               <button type="button" onClick={() => setRemoveTarget(null)} className="h-10 rounded-md border border-border px-4 text-sm font-semibold">Cancel</button>
               <button type="button" onClick={remove} disabled={removing} className="inline-flex h-10 items-center gap-2 rounded-md bg-red-600 px-4 text-sm font-semibold text-white hover:bg-red-700 disabled:opacity-50">
-                {removing ? <Loader2 className="size-4 animate-spin" /> : <Trash2 className="size-4" />}
+                {removing && <Loader2 className="size-4 animate-spin" />}
                 Remove account
               </button>
             </div>

@@ -1,16 +1,12 @@
 "use client"
 
 import { useEffect, useMemo, useState } from "react"
-import Link from "next/link"
 import { useRouter, useSearchParams } from "next/navigation"
 import { Download } from "lucide-react"
 import { Bar, BarChart, CartesianGrid, Legend, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts"
 
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
-import { formatWorkspaceDateTime } from "@/lib/date-format"
-import { safeReturnTo, withReturnTo } from "@/lib/navigation"
-import type { HiringOperations } from "@/lib/hiring-types"
 import type { BreakdownPoint, TimePoint, WorkforceAnalytics } from "@/lib/hr-types"
 import { cn } from "@/lib/utils"
 import { MetricStrip, WorkspaceHeader, WorkspacePage } from "@/components/workspace-ui"
@@ -59,13 +55,6 @@ function initialFilters(searchParams: URLSearchParams): Filters {
 function queryFor(filters: Filters): string {
   const params = new URLSearchParams({ dataMode: "all" })
   Object.entries(filters).forEach(([key, value]) => { if (value) params.set(key, value) })
-  return params.toString()
-}
-
-function operationsQueryFor(filters: Filters): string {
-  const params = new URLSearchParams({ dataMode: "all" })
-  if (filters.department) params.set("department", filters.department)
-  if (filters.location) params.set("location", filters.location)
   return params.toString()
 }
 
@@ -135,22 +124,17 @@ function Filter({ label, children }: { label: string; children: React.ReactNode 
 export function InsightsWorkspace() {
   const router = useRouter()
   const searchParams = useSearchParams()
-  const returnTo = safeReturnTo(searchParams.get("returnTo"))
   const [filters, setFilters] = useState<Filters>(() => initialFilters(searchParams))
   const [data, setData] = useState<WorkforceAnalytics | null>(null)
-  const [operationsData, setOperationsData] = useState<WorkforceAnalytics | null>(null)
-  const [hiringOperations, setHiringOperations] = useState<HiringOperations | null>(null)
   const [loadedQuery, setLoadedQuery] = useState<string | null>(null)
   const [error, setError] = useState("")
   const requestQuery = useMemo(() => queryFor(filters), [filters])
-  const operationsQuery = useMemo(() => operationsQueryFor(filters), [filters])
   const reportingHref = useMemo(() => {
     const params = new URLSearchParams()
     Object.entries(filters).forEach(([key, value]) => { if (value) params.set(key, value) })
-    if (returnTo) params.set("returnTo", returnTo)
     return `/insights?${params.toString()}`
-  }, [filters, returnTo])
-  const loading = `${requestQuery}|${operationsQuery}` !== loadedQuery
+  }, [filters])
+  const loading = requestQuery !== loadedQuery
 
   useEffect(() => {
     const current = `/insights${searchParams.size ? `?${searchParams.toString()}` : ""}`
@@ -159,39 +143,27 @@ export function InsightsWorkspace() {
 
   useEffect(() => {
     const controller = new AbortController()
-    Promise.all([
-      fetch(`/api/v1/workforce?${requestQuery}`, { cache: "no-store", signal: controller.signal }),
-      fetch(`/api/v1/workforce?${operationsQuery}`, { cache: "no-store", signal: controller.signal }),
-      fetch("/api/v1/hr/hiring", { cache: "no-store", signal: controller.signal }),
-    ])
-      .then(async ([workforceResponse, operationsResponse, hiringResponse]) => {
+    fetch(`/api/v1/workforce?${requestQuery}`, { cache: "no-store", signal: controller.signal })
+      .then(async (workforceResponse) => {
         if (!workforceResponse.ok) throw new Error("Workforce insights could not be loaded.")
-        if (!operationsResponse.ok) throw new Error("Operational workforce data could not be loaded.")
-        if (!hiringResponse.ok) throw new Error("Hiring operations could not be loaded.")
-        return Promise.all([
-          workforceResponse.json() as Promise<WorkforceAnalytics>,
-          operationsResponse.json() as Promise<WorkforceAnalytics>,
-          hiringResponse.json() as Promise<HiringOperations>,
-        ])
+        return workforceResponse.json() as Promise<WorkforceAnalytics>
       })
-      .then(([workforce, operations, hiring]) => {
+      .then((workforce) => {
         setData(workforce)
-        setOperationsData(operations)
-        setHiringOperations(hiring)
-        setLoadedQuery(`${requestQuery}|${operationsQuery}`)
+        setLoadedQuery(requestQuery)
         setError("")
       })
       .catch((reason: unknown) => {
         if ((reason as { name?: string })?.name !== "AbortError") {
           setError(reason instanceof Error ? reason.message : "Workforce insights could not be loaded.")
-          setLoadedQuery(`${requestQuery}|${operationsQuery}`)
+          setLoadedQuery(requestQuery)
         }
       })
     return () => controller.abort()
-  }, [operationsQuery, requestQuery])
+  }, [requestQuery])
 
-  if ((!data || !operationsData || !hiringOperations) && loading) return <div className="space-y-4"><div className="h-28 animate-pulse rounded-md bg-muted" /><div className="h-96 animate-pulse rounded-md bg-muted" /></div>
-  if (!data || !operationsData || !hiringOperations) return <Card><CardContent className="p-6 text-body text-destructive">{error || "Workforce insights could not be loaded."}</CardContent></Card>
+  if (!data && loading) return <div className="space-y-4"><div className="h-28 animate-pulse rounded-md bg-muted" /><div className="h-96 animate-pulse rounded-md bg-muted" /></div>
+  if (!data) return <Card><CardContent className="p-6 text-body text-destructive">{error || "Workforce insights could not be loaded."}</CardContent></Card>
 
   const netMovement = data.hiring.totalHired - data.attrition.totalExits
   const flow = flowRows(data.hiring.trend, data.attrition.trend)
@@ -224,33 +196,6 @@ export function InsightsWorkspace() {
     const rightException = reviewSignal(right).label === "No exception" ? 0 : 1
     return rightException - leftException || right.active - left.active || left.department.localeCompare(right.department)
   })
-  const today = new Date().toISOString().slice(0, 10)
-  const scopedRequisitions = hiringOperations.requisitions.filter((row) => (
-    (!filters.department || row.department === filters.department)
-    && (!filters.location || row.location === filters.location)
-  ))
-  const scopedCandidates = hiringOperations.candidates.filter((row) => (
-    (!filters.department || row.department === filters.department)
-    && (!filters.location || row.location === filters.location)
-  ))
-  const hiringApprovalCount = scopedRequisitions.filter((row) => row.status === "Requested").length
-  const recruitingFollowUpCount = scopedCandidates.filter((row) => row.isOverdue && !["Hired", "Rejected"].includes(row.stage)).length
-    + scopedRequisitions.filter((row) => ["Requested", "Open", "Offer"].includes(row.status) && Boolean(row.dueDate && row.dueDate < today)).length
-  const operationalScope = new URLSearchParams()
-  if (filters.department) operationalScope.set("department", filters.department)
-  if (filters.location) operationalScope.set("location", filters.location)
-  const scopedHref = (path: string, initial?: Record<string, string>) => {
-    const params = new URLSearchParams(initial)
-    operationalScope.forEach((value, key) => params.set(key, value))
-    return `${path}${params.size ? `?${params.toString()}` : ""}`
-  }
-  const workItems = [
-    { priority: hiringApprovalCount > 0 ? "High" : "Clear", item: "Hiring approvals", count: hiringApprovalCount, definition: "Headcount requests awaiting an HR decision", href: `/hiring?status=Requested${filters.department ? `&department=${encodeURIComponent(filters.department)}` : ""}${filters.location ? `&location=${encodeURIComponent(filters.location)}` : ""}`, action: "Review decisions" },
-    { priority: recruitingFollowUpCount > 0 ? "High" : "Clear", item: "Recruiting follow-ups", count: recruitingFollowUpCount, definition: "Past-due requisition and candidate actions", href: `/hiring?candidate=overdue${filters.department ? `&department=${encodeURIComponent(filters.department)}` : ""}${filters.location ? `&location=${encodeURIComponent(filters.location)}` : ""}`, action: "Review follow-ups" },
-    { priority: operationsData.leave.pending > 0 ? "High" : "Clear", item: "Leave approvals", count: operationsData.leave.pending, definition: "Pending leave requests awaiting a decision", href: `${scopedHref("/leaves")}#pending-decisions`, action: "Review requests" },
-    { priority: operationsData.training.requiringMandatoryTraining > 0 ? "High" : "Clear", item: "Mandatory training", count: operationsData.training.requiringMandatoryTraining, definition: "Incomplete security or safety assignments", href: scopedHref("/courses"), action: "Review assignments" },
-    { priority: operationsData.promotions.withoutPromotionOver36Months > 0 ? "Normal" : "Clear", item: "Mobility reviews", count: operationsData.promotions.withoutPromotionOver36Months, definition: "Three years tenure with no recorded promotion", href: scopedHref("/people", { tenure: "mobility" }), action: "Review people" },
-  ]
   const topExitDepartment = data.attrition.byDepartment[0]
   const coverageGaps = departmentRows.filter((row) => row.coverageStatus === "Gap").length
   const analysisSummary = [
@@ -261,7 +206,7 @@ export function InsightsWorkspace() {
 
   return (
     <WorkspacePage>
-      <WorkspaceHeader title="Insights" description="Workforce movement, operational exceptions, and department-level review." meta={<><span>{filters.from} to {filters.to}</span><span>Updated {formatWorkspaceDateTime(data.generatedAt)}</span></>} actions={<>
+      <WorkspaceHeader title="Insights" description="Workforce movement by period and department." meta={<>{filters.from} to {filters.to}</>} actions={<>
           <a href={`/api/v1/reports?format=pdf&${requestQuery}`} className="inline-flex h-9 items-center gap-2 rounded-md border border-border bg-background px-3 text-control hover:bg-muted"><Download className="size-3.5" />PDF summary</a>
           <a href={`/api/v1/reports?format=xlsx&${requestQuery}`} className="inline-flex h-9 items-center gap-2 rounded-md bg-primary px-3 text-control text-primary-foreground hover:bg-primary/80"><Download className="size-3.5" />Export data</a>
         </>}/>
@@ -281,24 +226,11 @@ export function InsightsWorkspace() {
       {error && <div className="rounded-md border border-rose-200 bg-rose-50 px-4 py-3 text-meta text-rose-800 dark:border-rose-900/40 dark:bg-rose-950/20 dark:text-rose-200">{error}</div>}
 
       <MetricStrip metrics={[
-          { label: "Active employees", value: compact(data.kpis.activeEmployees), detail: `${data.employeeAnalytics.onLeave} currently on leave` },
-          { label: "Hires", value: compact(data.hiring.totalHired), detail: "Completed in reporting scope" },
+          { label: "Active employees", value: compact(data.kpis.activeEmployees), detail: `${data.employeeAnalytics.onLeave} on leave` },
+          { label: "Hires", value: compact(data.hiring.totalHired), detail: "Completed" },
           { label: "Exits", value: compact(data.attrition.totalExits), detail: `${data.attrition.voluntary} voluntary` },
           { label: "Net movement", value: `${netMovement > 0 ? "+" : ""}${compact(netMovement)}`, detail: "Hires less exits" },
-          { label: "Attrition rate", value: `${data.attrition.rate.toLocaleString()}%`, detail: "Recorded workforce outcomes" },
         ]}/>
-
-      <Card className="gap-0 overflow-hidden py-0 shadow-none">
-        <CardHeader className="border-b border-border px-5 py-4"><CardTitle>Action register</CardTitle><CardDescription>Current open work for the selected department and location. Reporting dates do not limit this queue.</CardDescription></CardHeader>
-        <CardContent className="p-0">
-          <div className="overflow-x-auto">
-            <table className="w-full min-w-[760px] text-left text-body">
-              <thead className="bg-muted/40 text-label font-semibold text-muted-foreground"><tr>{["Priority", "Work item", "Open", "Definition", ""].map((heading) => <th key={heading} className="px-4 py-2.5">{heading}</th>)}</tr></thead>
-              <tbody>{workItems.map((row) => <tr key={row.item} className="border-t border-border/70"><td className="px-4 py-3"><span className={cn("text-status font-semibold", row.priority === "High" ? "text-destructive" : row.priority === "Normal" ? "text-amber-700 dark:text-amber-300" : "text-muted-foreground")}>{row.priority}</span></td><td className="px-4 py-3 font-semibold">{row.item}</td><td className="px-4 py-3 font-semibold tabular-nums">{row.count}</td><td className="px-4 py-3 text-muted-foreground">{row.definition}</td><td className="px-4 py-3 text-right"><Link href={withReturnTo(row.href, reportingHref)} className="font-semibold text-primary hover:underline">{row.action}</Link></td></tr>)}</tbody>
-            </table>
-          </div>
-        </CardContent>
-      </Card>
 
       <div className="grid gap-4 xl:grid-cols-[minmax(0,1.35fr)_minmax(320px,0.65fr)]">
         <Card className="shadow-none"><CardHeader><CardTitle>Joiners and leavers</CardTitle><CardDescription>Completed hires and recorded exits in the selected date range, grouped by {data.filters.period}. Open requisitions are excluded.</CardDescription></CardHeader><CardContent><FlowChart rows={flow} /></CardContent></Card>
@@ -309,12 +241,12 @@ export function InsightsWorkspace() {
       </div>
 
       <Card className="gap-0 overflow-hidden py-0 shadow-none">
-        <CardHeader className="border-b border-border px-5 py-4"><CardTitle>Department review</CardTitle><CardDescription>Hires, exits, leave, and learning use the reporting dates. Headcount, open roles, and mobility are current snapshots.</CardDescription></CardHeader>
+        <CardHeader className="border-b border-border px-5 py-4"><CardTitle>Department review</CardTitle><CardDescription>Current headcount and selected-period movement.</CardDescription></CardHeader>
         <CardContent className="p-0">
           <div className="overflow-x-auto">
-            <table className="w-full min-w-[1100px] text-left text-body">
-              <thead className="bg-muted/40 text-label font-semibold text-muted-foreground"><tr>{["Department", "Active", "Hires", "Exits", "Net", "Open roles", "Leave days / employee", "Learning hours", "Mobility reviews", "Review"].map((heading) => <th key={heading} className="px-4 py-2.5">{heading}</th>)}</tr></thead>
-              <tbody>{departmentRows.map((row) => { const signal = reviewSignal(row); return <tr key={row.department} className="border-t border-border/70 hover:bg-muted/20"><td className="px-4 py-3"><button type="button" onClick={() => setFilters({ ...filters, department: row.department })} className="font-semibold hover:text-primary hover:underline">{row.department}</button></td><td className="px-4 py-3 tabular-nums">{row.active}</td><td className="px-4 py-3 tabular-nums">{row.hires}</td><td className="px-4 py-3 tabular-nums">{row.exits}</td><td className={cn("px-4 py-3 font-semibold tabular-nums", row.netMovement < 0 && "text-destructive")}>{row.netMovement > 0 ? "+" : ""}{row.netMovement}</td><td className="px-4 py-3 tabular-nums">{row.openRoles}</td><td className="px-4 py-3 tabular-nums">{row.leaveDaysPerEmployee}</td><td className="px-4 py-3 tabular-nums">{row.trainingHours}</td><td className="px-4 py-3 tabular-nums">{row.mobilityReviews}</td><td className="px-4 py-3"><span className={cn("text-status font-semibold", signal.className)}>{signal.label}</span></td></tr>})}</tbody>
+            <table className="w-full min-w-[820px] text-left text-body">
+              <thead className="bg-muted/40 text-label font-semibold text-muted-foreground"><tr>{["Department", "Active", "Net movement", "Open roles", "Leave days / employee", "Learning hours", "Review"].map((heading) => <th key={heading} className="px-4 py-2.5">{heading}</th>)}</tr></thead>
+              <tbody>{departmentRows.map((row) => { const signal = reviewSignal(row); return <tr key={row.department} className="border-t border-border/70 hover:bg-muted/20"><td className="px-4 py-3"><button type="button" onClick={() => setFilters({ ...filters, department: row.department })} className="font-semibold hover:text-primary hover:underline">{row.department}</button></td><td className="px-4 py-3 tabular-nums">{row.active}</td><td className={cn("px-4 py-3 font-semibold tabular-nums", row.netMovement < 0 && "text-destructive")}>{row.netMovement > 0 ? "+" : ""}{row.netMovement}</td><td className="px-4 py-3 tabular-nums">{row.openRoles}</td><td className="px-4 py-3 tabular-nums">{row.leaveDaysPerEmployee}</td><td className="px-4 py-3 tabular-nums">{row.trainingHours}</td><td className="px-4 py-3"><span className={cn("text-status font-semibold", signal.className)}>{signal.label}</span></td></tr>})}</tbody>
             </table>
           </div>
           {!departmentRows.length && <p className="p-10 text-center text-body text-muted-foreground">No departments match the selected reporting scope.</p>}

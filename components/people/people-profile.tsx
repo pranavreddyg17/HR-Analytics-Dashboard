@@ -2,23 +2,12 @@
 
 import Link from "next/link"
 import { useCallback, useEffect, useState } from "react"
-import { AnimatePresence, motion, useReducedMotion } from "motion/react"
 import {
   Archive,
   ArrowLeft,
   ArrowUpRight,
-  BriefcaseBusiness,
-  CalendarDays,
-  Gauge,
-  GraduationCap,
-  History,
-  Mail,
   Pencil,
   RefreshCcw,
-  ShieldAlert,
-  TrendingUp,
-  UserRound,
-  UsersRound,
   X,
 } from "lucide-react"
 
@@ -151,21 +140,21 @@ function OverviewTab({ data }: { data: EmployeeProfileResponse }) {
   const completedTraining = data.training.filter((item) => item.completion_status.toLowerCase() === "completed").length
   return <div className="grid gap-5 xl:grid-cols-[1.25fr_.75fr]">
     <div className="grid gap-5 md:grid-cols-2">
-      <InfoCard title="Contact" icon={Mail}>
+      <InfoCard title="Contact">
         <InfoLine label="Work email" value={employee.work_email ?? "Not added"} href={employee.work_email ? `mailto:${employee.work_email}` : undefined} />
         <InfoLine label="Phone" value={employee.phone ?? "Not added"} href={employee.phone ? `tel:${employee.phone}` : undefined} />
         <InfoLine label="Location" value={employee.location} />
       </InfoCard>
-      <InfoCard title="Employment" icon={BriefcaseBusiness}>
+      <InfoCard title="Employment">
         <InfoLine label="Employee ID" value={employee.employee_id} />
         <InfoLine label="Hire date" value={formatDate(employee.hire_date)} />
         <InfoLine label="Employment" value={employee.employment_type} />
       </InfoCard>
-      <InfoCard title="Reporting line" icon={UsersRound}>
+      <InfoCard title="Reporting line">
         {data.manager ? <PersonLink employee={data.manager} detail="Manager" /> : <p className="text-sm text-muted-foreground">No manager assigned</p>}
         <div className="border-t border-border/60 pt-3"><p className="text-xs text-muted-foreground">Direct reports</p><p className="mt-1 text-lg font-semibold">{employee.direct_reports}</p></div>
       </InfoCard>
-      <InfoCard title="Summary" icon={Gauge}>
+      <InfoCard title="Summary">
         <InfoLine label="Tenure" value={`${employee.tenure_years.toFixed(1)} years`} />
         <InfoLine label="Training" value={`${completedTraining} of ${data.training.length} complete`} />
         <InfoLine label="Latest time off" value={latestLeave ? `${latestLeave.leave_type} · ${formatDate(latestLeave.start_date)}` : "No leave recorded"} />
@@ -173,7 +162,7 @@ function OverviewTab({ data }: { data: EmployeeProfileResponse }) {
     </div>
     <Card className="gap-0 overflow-hidden rounded-lg border-border/70 shadow-none">
       <div className="border-b border-border/60 px-5 py-4"><h3 className="font-semibold">Recent activity</h3><p className="mt-1 text-xs text-muted-foreground">Latest recorded profile and workflow changes</p></div>
-      <div className="p-5">{data.activity.length ? <Timeline activity={data.activity.slice(0, 6)} compact /> : <EmptyState icon={History} title="No activity yet" detail="Profile changes and HR events will appear here." />}</div>
+      <div className="p-5">{data.activity.length ? <Timeline activity={data.activity.slice(0, 6)} compact /> : <EmptyState title="No activity yet" detail="Profile changes and HR events will appear here." />}</div>
     </Card>
   </div>
 }
@@ -182,21 +171,21 @@ function JobTab({ data }: { data: EmployeeProfileResponse }) {
   const { employee } = data
   return <div className="grid gap-5 xl:grid-cols-[.8fr_1.2fr]">
     <div className="space-y-5">
-      <InfoCard title="Current role" icon={BriefcaseBusiness}>
+      <InfoCard title="Current role">
         <InfoLine label="Title" value={employee.job_title} />
         <InfoLine label="Department" value={employee.department} />
         <InfoLine label="Location" value={employee.location} />
         <InfoLine label="Employment type" value={employee.employment_type} />
       </InfoCard>
-      <InfoCard title="Manager" icon={UserRound}>{data.manager ? <PersonLink employee={data.manager} detail={data.manager.job_title} /> : <p className="text-sm text-muted-foreground">No manager assigned</p>}</InfoCard>
+      <InfoCard title="Manager">{data.manager ? <PersonLink employee={data.manager} detail={data.manager.job_title} /> : <p className="text-sm text-muted-foreground">No manager assigned</p>}</InfoCard>
     </div>
     <Card className="gap-0 overflow-hidden rounded-lg border-border/70 shadow-none">
-      <SectionHeader title="Team" detail={plural(data.directReports.length, "direct report")} icon={UsersRound} />
-      <div className="divide-y divide-border/60">{data.directReports.length ? data.directReports.map((report) => <PersonLink key={report.employee_id} employee={report} detail={`${report.job_title} · ${report.location}`} roomy />) : <div className="p-8"><EmptyState icon={UsersRound} title="No direct reports" detail="Reporting relationships will appear here." /></div>}</div>
+      <SectionHeader title="Team" detail={plural(data.directReports.length, "direct report")} />
+      <div className="divide-y divide-border/60">{data.directReports.length ? data.directReports.map((report) => <PersonLink key={report.employee_id} employee={report} detail={`${report.job_title} · ${report.location}`} roomy />) : <div className="p-8"><EmptyState title="No direct reports" detail="Reporting relationships will appear here." /></div>}</div>
     </Card>
     <Card className="gap-0 overflow-hidden rounded-lg border-border/70 shadow-none xl:col-span-2">
-      <SectionHeader title="Promotion history" detail="Recorded job-title changes" icon={TrendingUp} />
-      {data.promotions.length ? <div className="divide-y divide-border/60">{data.promotions.map((promotion) => <div key={promotion.id} className="grid gap-2 px-5 py-4 sm:grid-cols-[130px_1fr_auto] sm:items-center"><p className="text-xs font-semibold text-muted-foreground">{formatDate(promotion.promotion_date)}</p><div className="flex flex-wrap items-center gap-2 text-sm"><span className="text-muted-foreground">{promotion.previous_title}</span><ArrowUpRight className="size-3.5 text-primary" /><span className="font-semibold">{promotion.new_title}</span></div><span className="text-xs text-muted-foreground">After {promotion.months_since_previous_promotion} months</span></div>)}</div> : <div className="p-8"><EmptyState icon={TrendingUp} title="No promotions recorded" detail="Promotion records will appear here." /></div>}
+      <SectionHeader title="Promotion history" detail="Recorded job-title changes" />
+      {data.promotions.length ? <div className="divide-y divide-border/60">{data.promotions.map((promotion) => <div key={promotion.id} className="grid gap-2 px-5 py-4 sm:grid-cols-[130px_1fr_auto] sm:items-center"><p className="text-xs font-semibold text-muted-foreground">{formatDate(promotion.promotion_date)}</p><div className="flex flex-wrap items-center gap-2 text-sm"><span className="text-muted-foreground">{promotion.previous_title}</span><ArrowUpRight className="size-3.5 text-primary" /><span className="font-semibold">{promotion.new_title}</span></div><span className="text-xs text-muted-foreground">After {promotion.months_since_previous_promotion} months</span></div>)}</div> : <div className="p-8"><EmptyState title="No promotions recorded" detail="Promotion records will appear here." /></div>}
     </Card>
   </div>
 }
@@ -206,7 +195,7 @@ function TimeOffTab({ data }: { data: EmployeeProfileResponse }) {
   const pending = data.leave.filter((item) => item.approval_status.toLowerCase() === "pending").length
   return <div className="space-y-5">
     <div className="grid gap-4 sm:grid-cols-3"><MetricCard label="Approved days" value={approvedDays.toLocaleString()} detail="Across recorded requests" /><MetricCard label="Pending requests" value={pending.toLocaleString()} detail="Awaiting HR review" /><MetricCard label="Total requests" value={data.leave.length.toLocaleString()} detail="Complete leave history" /></div>
-    <Card className="gap-0 overflow-hidden rounded-lg border-border/70 shadow-none"><SectionHeader title="Time-off history" detail="Requests, dates, and approval status" icon={CalendarDays} />{data.leave.length ? <div className="divide-y divide-border/60">{data.leave.map((leave) => <div key={leave.id} className="grid gap-3 px-5 py-4 sm:grid-cols-[1fr_1fr_auto] sm:items-center"><div><p className="text-sm font-semibold">{leave.leave_type}</p><p className="mt-1 text-xs text-muted-foreground">{formatDate(leave.start_date)} – {formatDate(leave.end_date)}</p></div><p className="text-sm"><b>{leave.leave_days}</b> {leave.leave_days === 1 ? "day" : "days"}</p><RecordStatus status={leave.approval_status} /></div>)}</div> : <div className="p-10"><EmptyState icon={CalendarDays} title="No time off recorded" detail="Leave requests for this employee will show up here." /></div>}</Card>
+    <Card className="gap-0 overflow-hidden rounded-lg border-border/70 shadow-none"><SectionHeader title="Leave history" detail="Requests, dates, and status" />{data.leave.length ? <div className="divide-y divide-border/60">{data.leave.map((leave) => <div key={leave.id} className="grid gap-3 px-5 py-4 sm:grid-cols-[1fr_1fr_auto] sm:items-center"><div><p className="text-sm font-semibold">{leave.leave_type}</p><p className="mt-1 text-xs text-muted-foreground">{formatDate(leave.start_date)} – {formatDate(leave.end_date)}</p></div><p className="text-sm"><b>{leave.leave_days}</b> {leave.leave_days === 1 ? "day" : "days"}</p><RecordStatus status={leave.approval_status} /></div>)}</div> : <div className="p-10"><EmptyState title="No leave recorded" detail="Leave requests will appear here." /></div>}</Card>
   </div>
 }
 
@@ -218,33 +207,33 @@ function GrowthTab({ data }: { data: EmployeeProfileResponse }) {
   return <div className="space-y-5">
     <div className="grid gap-4 sm:grid-cols-3"><MetricCard label="Completed" value={`${completed.length}/${data.training.length}`} detail="Assigned programmes" /><MetricCard label="Learning hours" value={totalHours.toLocaleString()} detail="Total assigned time" /><MetricCard label="Average score" value={averageScore === null ? "—" : `${averageScore}%`} detail="Completed assessments" /></div>
     <div className="grid gap-5 xl:grid-cols-[1.25fr_.75fr]">
-      <Card className="gap-0 overflow-hidden rounded-lg border-border/70 shadow-none"><SectionHeader title="Learning" detail="Training programmes and progress" icon={GraduationCap} />{data.training.length ? <div className="divide-y divide-border/60">{data.training.map((training) => <div key={training.id} className="grid gap-3 px-5 py-4 sm:grid-cols-[1fr_auto] sm:items-center"><div><p className="text-sm font-semibold">{training.training_program}</p><p className="mt-1 text-xs text-muted-foreground">{training.training_hours} hours{training.completion_date ? ` · Completed ${formatDate(training.completion_date)}` : ""}</p></div><div className="flex items-center gap-3"><RecordStatus status={training.completion_status} />{training.assessment_score !== null && <span className="font-mono text-sm font-semibold">{training.assessment_score}%</span>}</div></div>)}</div> : <div className="p-10"><EmptyState icon={GraduationCap} title="No learning assigned" detail="Training progress will appear here." /></div>}</Card>
-      <Card className="gap-0 overflow-hidden rounded-lg border-border/70 shadow-none"><SectionHeader title="Promotions" detail={plural(data.promotions.length, "promotion")} icon={TrendingUp} /><div className="p-5">{data.promotions.length ? <div className="space-y-4">{data.promotions.map((promotion) => <div key={promotion.id} className="relative border-l-2 border-primary/25 pl-4"><span className="absolute -left-[5px] top-1 size-2 rounded-full bg-primary" /><p className="text-sm font-semibold">{promotion.new_title}</p><p className="mt-1 text-xs text-muted-foreground">Previous title: {promotion.previous_title}</p><p className="mt-2 text-meta font-semibold text-primary">{formatDate(promotion.promotion_date)}</p></div>)}</div> : <EmptyState icon={TrendingUp} title="No promotions recorded" detail="Promotion records will appear here." />}</div></Card>
+      <Card className="gap-0 overflow-hidden rounded-lg border-border/70 shadow-none"><SectionHeader title="Learning" detail="Courses and progress" />{data.training.length ? <div className="divide-y divide-border/60">{data.training.map((training) => <div key={training.id} className="grid gap-3 px-5 py-4 sm:grid-cols-[1fr_auto] sm:items-center"><div><p className="text-sm font-semibold">{training.training_program}</p><p className="mt-1 text-xs text-muted-foreground">{training.training_hours} hours{training.completion_date ? ` · Completed ${formatDate(training.completion_date)}` : ""}</p></div><div className="flex items-center gap-3"><RecordStatus status={training.completion_status} />{training.assessment_score !== null && <span className="font-mono text-sm font-semibold">{training.assessment_score}%</span>}</div></div>)}</div> : <div className="p-10"><EmptyState title="No learning assigned" detail="Training progress will appear here." /></div>}</Card>
+      <Card className="gap-0 overflow-hidden rounded-lg border-border/70 shadow-none"><SectionHeader title="Promotions" detail={plural(data.promotions.length, "promotion")} /><div className="p-5">{data.promotions.length ? <div className="space-y-4">{data.promotions.map((promotion) => <div key={promotion.id} className="relative border-l-2 border-primary/25 pl-4"><span className="absolute -left-[5px] top-1 size-2 rounded-full bg-primary" /><p className="text-sm font-semibold">{promotion.new_title}</p><p className="mt-1 text-xs text-muted-foreground">Previous title: {promotion.previous_title}</p><p className="mt-2 text-meta font-semibold text-primary">{formatDate(promotion.promotion_date)}</p></div>)}</div> : <EmptyState title="No promotions recorded" detail="Promotion records will appear here." />}</div></Card>
     </div>
   </div>
 }
 
 function ActivityTab({ data }: { data: EmployeeProfileResponse }) {
   return <div className="grid gap-5 xl:grid-cols-[1.2fr_.8fr]">
-    <Card className="gap-0 overflow-hidden rounded-lg border-border/70 shadow-none"><SectionHeader title="Change history" detail="Recorded profile and workflow changes" icon={History} /><div className="p-5">{data.activity.length ? <Timeline activity={data.activity} /> : <EmptyState icon={History} title="No activity recorded" detail="Profile and workflow changes will appear here." />}</div></Card>
+    <Card className="gap-0 overflow-hidden rounded-lg border-border/70 shadow-none"><SectionHeader title="Change history" detail="Profile and workflow changes" /><div className="p-5">{data.activity.length ? <Timeline activity={data.activity} /> : <EmptyState title="No activity recorded" detail="Profile and workflow changes will appear here." />}</div></Card>
     <div className="space-y-5">
-      <InfoCard title="Record details" icon={ShieldAlert}><InfoLine label="Version" value={`v${data.employee.version}`} /><InfoLine label="Last updated" value={data.employee.updated_at ? formatWorkspaceDateTime(data.employee.updated_at) : "Not recorded"} /></InfoCard>
-      {data.attritionModel && <InfoCard title="Historical model context" icon={Gauge}>
+      <InfoCard title="Record details"><InfoLine label="Version" value={`v${data.employee.version}`} /><InfoLine label="Last updated" value={data.employee.updated_at ? formatWorkspaceDateTime(data.employee.updated_at) : "Not recorded"} /></InfoCard>
+      {data.attritionModel && <InfoCard title="Historical model context">
         <InfoLine label="Risk band" value={`${data.attritionModel.risk_level} · ${Number(data.attritionModel.risk_score).toFixed(1)}%`} />
         <InfoLine label="Observed outcome" value={data.attritionModel.observed_attrition === "Yes" ? "Recorded exit" : "No recorded exit"} />
         <InfoLine label="Model version" value={data.attritionModel.model_version} />
         <p className="border-t border-border/60 pt-3 text-xs text-muted-foreground">{data.attritionModel.top_driver}</p>
       </InfoCard>}
-      {data.attrition.length > 0 && <Card className="gap-0 overflow-hidden rounded-lg border-border/70 shadow-none"><SectionHeader title="Exit records" detail="Recorded employee departures" icon={Archive} /><div className="divide-y divide-border/60">{data.attrition.map((item) => <div key={item.id} className="p-4"><div className="flex items-center justify-between gap-3"><p className="text-sm font-semibold">{item.exit_reason}</p><RecordStatus status={item.exit_type} /></div><p className="mt-1 text-xs text-muted-foreground">{formatDate(item.exit_date)} · {item.tenure_years} years tenure</p></div>)}</div></Card>}
+      {data.attrition.length > 0 && <Card className="gap-0 overflow-hidden rounded-lg border-border/70 shadow-none"><SectionHeader title="Exit records" detail="Recorded departures" /><div className="divide-y divide-border/60">{data.attrition.map((item) => <div key={item.id} className="p-4"><div className="flex items-center justify-between gap-3"><p className="text-sm font-semibold">{item.exit_reason}</p><RecordStatus status={item.exit_type} /></div><p className="mt-1 text-xs text-muted-foreground">{formatDate(item.exit_date)} · {item.tenure_years} years tenure</p></div>)}</div></Card>}
     </div>
   </div>
 }
 
-function InfoCard({ title, icon, children }: { title: string; icon: typeof UserRound; children: React.ReactNode }) {
-  return <Card className="gap-0 overflow-hidden rounded-lg border-border/70 shadow-none"><SectionHeader title={title} icon={icon} /><div className="space-y-4 p-5">{children}</div></Card>
+function InfoCard({ title, children }: { title: string; children: React.ReactNode }) {
+  return <Card className="gap-0 overflow-hidden rounded-lg border-border/70 shadow-none"><SectionHeader title={title} /><div className="space-y-4 p-5">{children}</div></Card>
 }
 
-function SectionHeader({ title, detail }: { title: string; detail?: string; icon: typeof UserRound }) {
+function SectionHeader({ title, detail }: { title: string; detail?: string }) {
   return <div className="border-b border-border/60 px-5 py-4"><h3 className="font-semibold">{title}</h3>{detail && <p className="mt-0.5 text-xs text-muted-foreground">{detail}</p>}</div>
 }
 
@@ -283,12 +272,11 @@ function friendlyField(value: string): string {
   return value.replace(/_/g, " ").replace(/\b\w/g, (character) => character.toUpperCase())
 }
 
-function EmptyState({ title, detail }: { icon: typeof UserRound; title: string; detail: string }) {
+function EmptyState({ title, detail }: { title: string; detail: string }) {
   return <div className="text-center"><p className="text-sm font-semibold">{title}</p><p className="mt-1 text-xs text-muted-foreground">{detail}</p></div>
 }
 
 function ArchiveDialog({ open, employee, onClose, onChanged }: { open: boolean; employee: ManagedEmployee; onClose: () => void; onChanged: () => void }) {
-  const reduceMotion = useReducedMotion()
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState("")
   const restoring = Boolean(employee.archived_at)
@@ -305,7 +293,8 @@ function ArchiveDialog({ open, employee, onClose, onChanged }: { open: boolean; 
     finally { setBusy(false) }
   }
 
-  return <AnimatePresence>{open && <div className="fixed inset-0 z-[90] flex items-center justify-center p-4"><motion.button type="button" aria-label="Close" className="absolute inset-0 bg-slate-950/30" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} onClick={onClose} /><motion.div role="alertdialog" aria-modal="true" className="relative w-full max-w-md rounded-lg border border-border bg-background p-6" initial={{ opacity: 0, scale: reduceMotion ? 1 : .98 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0 }}><button type="button" onClick={onClose} aria-label="Close" className="absolute right-4 top-4 text-muted-foreground hover:text-foreground"><X className="size-4" /></button><h3 className="text-lg font-semibold">{restoring ? "Restore employee?" : "Archive employee?"}</h3><p className="mt-2 text-sm text-muted-foreground">{restoring ? `${employee.display_name} will return to the active directory with an Active status.` : `${employee.display_name} will be removed from the active directory. The employee history will be retained.`}</p>{error && <p className="mt-4 rounded-md bg-destructive/10 p-3 text-xs text-destructive">{error}</p>}<div className="mt-6 flex justify-end gap-2"><Button variant="ghost" onClick={onClose} disabled={busy}>Cancel</Button><Button variant={restoring ? "default" : "destructive"} onClick={() => void changeStatus()} disabled={busy}>{busy ? "Updating…" : restoring ? "Restore employee" : "Archive employee"}</Button></div></motion.div></div>}</AnimatePresence>
+  if (!open) return null
+  return <div className="fixed inset-0 z-[90] flex items-center justify-center p-4"><button type="button" aria-label="Close" className="absolute inset-0 bg-slate-950/30" onClick={onClose} /><div role="alertdialog" aria-modal="true" className="relative w-full max-w-md rounded-lg border border-border bg-background p-6"><button type="button" onClick={onClose} aria-label="Close" className="absolute right-4 top-4 text-muted-foreground hover:text-foreground"><X className="size-4" /></button><h3 className="text-lg font-semibold">{restoring ? "Restore employee?" : "Archive employee?"}</h3><p className="mt-2 text-sm text-muted-foreground">{restoring ? `${employee.display_name} will return to the active directory with an Active status.` : `${employee.display_name} will be removed from the active directory. The employee history will be retained.`}</p>{error && <p className="mt-4 rounded-md bg-destructive/10 p-3 text-xs text-destructive">{error}</p>}<div className="mt-6 flex justify-end gap-2"><Button variant="ghost" onClick={onClose} disabled={busy}>Cancel</Button><Button variant={restoring ? "default" : "destructive"} onClick={() => void changeStatus()} disabled={busy}>{busy ? "Updating…" : restoring ? "Restore employee" : "Archive employee"}</Button></div></div></div>
 }
 
 function ProfileSkeleton() {

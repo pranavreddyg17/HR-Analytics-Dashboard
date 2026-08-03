@@ -16,5 +16,5 @@ export default async function AssistantPage() {
   const [analytics, actor] = await Promise.all([getWorkforceAnalytics(), getRequestActor()])
   const mode = workspaceMode(analytics.status)
   const canPrepare = Boolean(actor && ["admin", "hr", "manager"].includes(actor.role))
-  return <WorkspacePage><WorkspaceHeader title="AI assistant" description="Ask workforce questions or prepare a reviewed calendar action." /><AiAssistantWorkspace dataMode={mode.toLowerCase()} canPrepare={canPrepare} /></WorkspacePage>
+  return <WorkspacePage><WorkspaceHeader title="AI assistant" description="Workforce analysis and meeting scheduling." /><AiAssistantWorkspace dataMode={mode.toLowerCase()} canPrepare={canPrepare} /></WorkspacePage>
 }

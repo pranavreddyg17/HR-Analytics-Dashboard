@@ -21,7 +21,7 @@ function riskBarColor(level: RiskLevel) {
   return level === "high" ? "var(--chart-3)" : level === "medium" ? "var(--chart-2)" : "var(--chart-1)"
 }
 
-const pageSize = 50
+const pageSize = 25
 
 export function EmployeesClient({ employees, total }: { employees: Employee[]; total: number }) {
   const [query, setQuery] = useState("")

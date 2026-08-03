@@ -158,7 +158,7 @@ export function AgentWorkflows({ canPrepare }: { canPrepare: boolean }) {
             <CalendarDays className="size-4 text-primary" />
             <h3 className="text-sm font-semibold">Scheduling agent</h3>
           </div>
-          <p className="mt-2 text-xs text-muted-foreground">Describe the participants and timing. The agent resolves employees from operational records and prepares a review before any invitation is sent.</p>
+          <p className="mt-2 text-xs text-muted-foreground">Describe the participants and timing. Review the plan before sending.</p>
 
           <div className="mt-4 flex items-center justify-between rounded-md border border-border bg-background px-3 py-2.5">
             <div>
@@ -204,7 +204,7 @@ export function AgentWorkflows({ canPrepare }: { canPrepare: boolean }) {
             <div className="flex h-full min-h-[360px] flex-col items-center justify-center px-6 text-center">
               <CalendarDays className="size-7 text-muted-foreground" />
               <h3 className="mt-3 text-sm font-semibold">No meeting plan yet</h3>
-              <p className="mt-1 max-w-sm text-xs text-muted-foreground">The agent will show matched employees, source evidence, timing, and agenda here for confirmation.</p>
+              <p className="mt-1 max-w-sm text-xs text-muted-foreground">The meeting plan will appear here for confirmation.</p>
             </div>
           )}
           {planning && <div className="flex min-h-[360px] items-center justify-center gap-2 text-sm text-muted-foreground"><LoaderCircle className="size-4 animate-spin" />Reviewing employee and promotion records</div>}
@@ -251,7 +251,7 @@ export function AgentWorkflows({ canPrepare }: { canPrepare: boolean }) {
               {notice && <div className="mb-3 flex items-center gap-2 rounded-md border border-emerald-200 bg-emerald-50 px-3 py-2 text-xs text-emerald-900"><Check className="size-4" />{notice}</div>}
 
               <div className="flex flex-wrap items-center justify-between gap-3 border-t border-border pt-4">
-                <p className="max-w-md text-meta text-muted-foreground">Creating the event sends Google Calendar invitations to the listed employees. Confirm the participants and agenda first.</p>
+                <p className="max-w-md text-meta text-muted-foreground">Confirm the participants and agenda before sending.</p>
                 <div className="flex gap-2">
                   {eventUrl && <Button nativeButton={false} variant="outline" render={<a href={eventUrl} target="_blank" rel="noreferrer" />}><ExternalLink className="size-4" />Open event</Button>}
                   {!notice && calendarConnection === "connected" && <Button type="button" onClick={() => void createEvent()} disabled={sending}>{sending ? <LoaderCircle className="size-4 animate-spin" /> : <CalendarDays className="size-4" />}Create event and send invites</Button>}

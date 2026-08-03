@@ -19,7 +19,7 @@ export type NavigationItem = {
   adminOnly?: boolean
 }
 
-export const navigationGroups: Array<{ label: string; items: NavigationItem[] }> = [
+const navigationGroups: Array<{ label: string; items: NavigationItem[] }> = [
   {
     label: "Workspace",
     items: [

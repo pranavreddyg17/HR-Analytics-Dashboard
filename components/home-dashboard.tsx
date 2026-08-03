@@ -1,11 +1,9 @@
 "use client"
 
 import Link from "next/link"
-import { Inbox, UserPlus } from "lucide-react"
 
 import { Card, CardContent } from "@/components/ui/card"
 import { MetricStrip, WorkspaceHeader, WorkspacePage, WorkspaceSectionHeader } from "@/components/workspace-ui"
-import { formatWorkspaceDateTime } from "@/lib/date-format"
 import type { WorkforceAnalytics } from "@/lib/hr-types"
 import type { InboxItem, ManagedEmployee } from "@/lib/people-types"
 import { cn } from "@/lib/utils"
@@ -43,34 +41,22 @@ export function HomeDashboard({ analytics, inbox, people }: HomeDashboardProps) 
   const thirtyDaysDate = new Date()
   thirtyDaysDate.setUTCDate(thirtyDaysDate.getUTCDate() + 30)
   const thirtyDays = thirtyDaysDate.toISOString().slice(0, 10)
-  const sevenDaysAgoDate = new Date()
-  sevenDaysAgoDate.setUTCDate(sevenDaysAgoDate.getUTCDate() - 7)
-  const sevenDaysAgo = sevenDaysAgoDate.toISOString().slice(0, 10)
-
   const openItems = inbox.filter((item) => !item.isCompleted)
   const decisions = openItems.filter((item) => item.requiresDecision)
   const overdue = openItems.filter((item) => item.slaStatus === "overdue")
-  const attention = [...openItems].sort((left, right) => urgency(left) - urgency(right) || (left.dueDate ?? "9999").localeCompare(right.dueDate ?? "9999")).slice(0, 8)
-  const recentCompleted = inbox
-    .filter((item) => item.completedAt && item.completedAt.slice(0, 10) >= sevenDaysAgo)
-    .sort((left, right) => (right.completedAt ?? "").localeCompare(left.completedAt ?? ""))
-    .slice(0, 5)
+  const attention = [...openItems].sort((left, right) => urgency(left) - urgency(right) || (left.dueDate ?? "9999").localeCompare(right.dueDate ?? "9999")).slice(0, 5)
   const upcoming = [
     ...people.filter((person) => person.hire_date >= today && person.hire_date <= thirtyDays).map((person) => ({ id: `start-${person.employee_id}`, date: person.hire_date, title: `${person.display_name} starts`, detail: `${person.job_title} · ${person.department}`, href: withReturnTo(`/people/${encodeURIComponent(person.employee_id)}`, "/") })),
     ...analytics.leave.upcoming.filter((leave) => leave.start_date >= today && leave.start_date <= thirtyDays && leave.approval_status.toLowerCase() === "approved").map((leave) => ({ id: `leave-${leave.id}`, date: leave.start_date, title: `${leave.leave_type} leave begins`, detail: `${people.find((person) => person.employee_id === leave.employee_id)?.display_name ?? leave.employee_id} · ${leave.department}`, href: withReturnTo(`/leaves?request=${encodeURIComponent(leave.id)}`, "/") })),
     ...openItems.filter((item) => item.type === "training" && item.dueDate && item.dueDate >= today && item.dueDate <= thirtyDays).map((item) => ({ id: `training-${item.id}`, date: item.dueDate as string, title: `${item.title} due`, detail: item.person || item.owner, href: withReturnTo(item.reviewHref, "/") })),
-  ].sort((left, right) => left.date.localeCompare(right.date)).slice(0, 6)
+  ].sort((left, right) => left.date.localeCompare(right.date)).slice(0, 5)
 
   return (
     <WorkspacePage>
       <WorkspaceHeader
         title="Home"
-        description="Your priority people work and upcoming workforce events."
-        meta={<>Updated {formatWorkspaceDateTime(analytics.generatedAt)}</>}
-        actions={<>
-          <Link href="/inbox" className="inline-flex h-9 items-center gap-2 rounded-md border border-border bg-background px-3 font-semibold hover:bg-muted"><Inbox className="size-3.5" />Open inbox</Link>
-          <Link href={withReturnTo("/people?new=employee", "/")} className="inline-flex h-9 items-center gap-2 rounded-md bg-primary px-3 font-semibold text-primary-foreground hover:bg-primary/85"><UserPlus className="size-3.5" />Add employee</Link>
-        </>}
+        description="Work requiring attention."
+        actions={<Link href={withReturnTo("/people?new=employee", "/")} className="inline-flex h-9 items-center rounded-md bg-primary px-3 font-semibold text-primary-foreground hover:bg-primary/85">Add employee</Link>}
       />
 
       <MetricStrip metrics={[
@@ -83,18 +69,17 @@ export function HomeDashboard({ analytics, inbox, people }: HomeDashboardProps) 
       <Card className="gap-0 overflow-hidden py-0 shadow-none">
         <WorkspaceSectionHeader
           title="Needs attention"
-          description="Highest-priority decisions and follow-ups across HR operations."
+          description="Decisions and overdue work."
           action={<Link href="/inbox" className="font-semibold text-primary hover:underline">View all</Link>}
         />
         <CardContent className="p-0">
           {attention.length ? (
             <div className="overflow-x-auto">
-              <table className="w-full min-w-[780px] text-left text-body">
-                <thead className="bg-muted/40 text-label text-muted-foreground"><tr><th className="px-4 py-2.5">Work item</th><th className="px-4 py-2.5">Required action</th><th className="px-4 py-2.5">Owner</th><th className="px-4 py-2.5">Due</th><th className="px-4 py-2.5"><span className="sr-only">Open</span></th></tr></thead>
+              <table className="w-full min-w-[700px] text-left text-body">
+                <thead className="bg-muted/40 text-label text-muted-foreground"><tr><th className="px-4 py-2.5">Work item</th><th className="px-4 py-2.5">Owner</th><th className="px-4 py-2.5">Due</th><th className="px-4 py-2.5"><span className="sr-only">Open</span></th></tr></thead>
                 <tbody>{attention.map((item) => (
                   <tr key={`${item.type}-${item.id}`} className="border-t border-border/70 hover:bg-muted/20">
-                    <td className="px-4 py-3"><p className="font-semibold">{item.title}</p><p className="text-meta text-muted-foreground">{item.person ? `${item.person} · ` : ""}{item.detail}</p></td>
-                    <td className="max-w-sm px-4 py-3 text-muted-foreground">{item.nextAction}</td>
+                    <td className="px-4 py-3"><p className="font-semibold">{item.title}</p><p className="text-meta text-muted-foreground">{item.nextAction}</p></td>
                     <td className="px-4 py-3">{item.owner}</td>
                     <td className={cn("whitespace-nowrap px-4 py-3", (item.slaStatus === "overdue" || item.slaStatus === "due_today") && "font-semibold text-destructive")}>{dueLabel(item)}</td>
                     <td className="px-4 py-3 text-right"><Link href={withReturnTo(item.reviewHref, "/")} className="font-semibold text-primary hover:underline">Review</Link></td>
@@ -106,21 +91,12 @@ export function HomeDashboard({ analytics, inbox, people }: HomeDashboardProps) 
         </CardContent>
       </Card>
 
-      <div className="grid gap-4 xl:grid-cols-2">
-        <Card className="gap-0 overflow-hidden py-0 shadow-none">
-          <WorkspaceSectionHeader title="Upcoming" description="Starts, approved leave, and training due in the next 30 days." />
-          <CardContent className="divide-y divide-border p-0">
-            {upcoming.length ? upcoming.map((event) => <Link key={event.id} href={event.href} className="flex items-center gap-4 px-4 py-3 hover:bg-muted/20"><span className="min-w-0 flex-1"><span className="block truncate font-semibold">{event.title}</span><span className="block truncate text-meta text-muted-foreground">{event.detail}</span></span><time className="shrink-0 text-meta text-muted-foreground">{readableDate(event.date)}</time></Link>) : <p className="px-5 py-8 text-center text-muted-foreground">No upcoming workforce events are recorded.</p>}
-          </CardContent>
-        </Card>
-
-        <Card className="gap-0 overflow-hidden py-0 shadow-none">
-          <WorkspaceSectionHeader title="Recently completed" description="Latest workflow actions completed by the team." />
-          <CardContent className="divide-y divide-border p-0">
-            {recentCompleted.length ? recentCompleted.map((item) => <Link key={`${item.type}-${item.id}`} href={withReturnTo(item.reviewHref, "/")} className="flex items-center gap-4 px-4 py-3 hover:bg-muted/20"><span className="min-w-0 flex-1"><span className="block truncate font-semibold">{item.title}</span><span className="block truncate text-meta text-muted-foreground">{item.completionNotes || item.detail}</span></span><time className="shrink-0 text-meta text-muted-foreground">{readableDate(item.completedAt)}</time></Link>) : <p className="px-5 py-8 text-center text-muted-foreground">No workflow actions were completed in the last seven days.</p>}
-          </CardContent>
-        </Card>
-      </div>
+      <Card className="gap-0 overflow-hidden py-0 shadow-none">
+        <WorkspaceSectionHeader title="Upcoming" description="Next 30 days." />
+        <CardContent className="divide-y divide-border p-0">
+          {upcoming.length ? upcoming.map((event) => <Link key={event.id} href={event.href} className="flex items-center gap-4 px-4 py-3 hover:bg-muted/20"><span className="min-w-0 flex-1"><span className="block truncate font-semibold">{event.title}</span><span className="block truncate text-meta text-muted-foreground">{event.detail}</span></span><time className="shrink-0 text-meta text-muted-foreground">{readableDate(event.date)}</time></Link>) : <p className="px-5 py-8 text-center text-muted-foreground">No upcoming events.</p>}
+        </CardContent>
+      </Card>
     </WorkspacePage>
   )
 }

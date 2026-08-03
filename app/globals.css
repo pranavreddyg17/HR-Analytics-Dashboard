@@ -484,7 +484,6 @@
 }
 
 .topbar-back-link,
-.topbar-utility-link,
 .topbar-menu-button,
 .text-button {
   color: #41546a;
@@ -501,7 +500,6 @@
 }
 
 .topbar-back-link:hover,
-.topbar-utility-link:hover,
 .topbar-menu-button:hover,
 .text-button:hover {
   color: var(--primary);

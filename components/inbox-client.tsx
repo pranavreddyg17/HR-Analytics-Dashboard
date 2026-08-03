@@ -3,12 +3,12 @@
 import { useEffect, useMemo, useState } from "react"
 import Link from "next/link"
 import { useRouter, useSearchParams } from "next/navigation"
-import { CheckCircle2, CircleAlert, LoaderCircle, RefreshCw } from "lucide-react"
+import { CheckCircle2, CircleAlert, LoaderCircle } from "lucide-react"
 
 import { WorkflowCreator, type WorkflowType } from "@/components/workflow-creator"
 import type { InboxItem, ManagedEmployee, WorkflowActorContext } from "@/lib/people-types"
 import { cn } from "@/lib/utils"
-import { MetricStrip, WorkspaceHeader, WorkspacePage } from "@/components/workspace-ui"
+import { WorkspaceHeader, WorkspacePage } from "@/components/workspace-ui"
 import { safeReturnTo, withReturnTo } from "@/lib/navigation"
 
 type QueueView = "my_work" | "decisions" | "managers" | "employees" | "overdue" | "completed"
@@ -35,6 +35,8 @@ const domainMeta: Record<InboxItem["type"], { label: string }> = {
   hiring: { label: "Hiring" },
   training: { label: "Training" },
 }
+
+const PAGE_SIZE = 10
 
 function validQueue(value: string | null): QueueView {
   return queueOptions.some((option) => option.id === value) ? value as QueueView : "my_work"
@@ -103,13 +105,11 @@ function ItemRow({ item, onAction, disabled, selected, returnTo }: { item: Inbox
             {item.detail}
           </p>
 
-          <div className="mt-2 flex flex-wrap gap-x-5 gap-y-1 text-meta text-muted-foreground"><span><b className="text-foreground">Action:</b> {item.nextAction}</span><span><b className="text-foreground">Owner:</b> {item.owner}</span><span><b className="text-foreground">Due:</b> {formatDate(item.dueDate)}</span></div>
+          <p className="mt-2 text-meta text-muted-foreground">{item.nextAction}</p>
+          <div className="mt-1 flex flex-wrap gap-x-5 gap-y-1 text-meta text-muted-foreground"><span>Owner: {item.owner}</span><span>Due: {formatDate(item.dueDate)}</span></div>
 
-          {(item.requestContext.length > 0 || item.attentionReason || item.completionEffect) && <details className="mt-2 text-meta"><summary className="w-fit font-semibold text-primary">View request details</summary><div className="mt-2 grid gap-3 rounded-md border border-border/70 bg-muted/20 p-3 sm:grid-cols-2 xl:grid-cols-3">
+          {item.requestContext.length > 0 && <details className="mt-2 text-meta"><summary className="w-fit font-semibold text-primary">Request details</summary><div className="mt-2 grid gap-3 rounded-md border border-border/70 bg-muted/20 p-3 sm:grid-cols-2 xl:grid-cols-3">
             {item.requestContext.map((context) => <div key={context.label} className={context.label.toLowerCase().includes("justification") || context.label.toLowerCase().includes("note") ? "sm:col-span-2 xl:col-span-3" : undefined}><p className="font-semibold text-muted-foreground">{context.label}</p><p className="mt-0.5 text-foreground">{context.value}</p></div>)}
-            <div><p className="font-semibold text-muted-foreground">Why it needs attention</p><p className="mt-0.5 text-foreground">{item.attentionReason}</p></div>
-            <div><p className="font-semibold text-muted-foreground">Current state</p><p className="mt-0.5 text-foreground">{item.status} · {item.timeInStatusDays} day{item.timeInStatusDays === 1 ? "" : "s"}</p></div>
-            <div><p className="font-semibold text-muted-foreground">After completion</p><p className="mt-0.5 text-foreground">{item.completionEffect}</p></div>
           </div></details>}
 
           {item.blockedReason && <p className="mt-3 rounded-md border border-border bg-muted/30 px-3 py-2 text-xs"><span className="font-semibold">Blocked:</span> {item.blockedReason}</p>}
@@ -117,7 +117,6 @@ function ItemRow({ item, onAction, disabled, selected, returnTo }: { item: Inbox
         </div>
 
         <div className="flex shrink-0 items-center gap-2 xl:pt-4">
-          <Link href={recordHref} className="inline-flex h-9 items-center rounded-md border border-border bg-background px-3 text-sm font-semibold text-muted-foreground hover:bg-muted hover:text-foreground">View record</Link>
           {item.actions?.includes("approve") ? (
             <>
               <button type="button" disabled={disabled} onClick={() => onAction(item, "reject")} className="inline-flex h-9 items-center rounded-md border border-border bg-background px-3 text-xs font-semibold text-muted-foreground hover:bg-muted disabled:opacity-50">Decline</button>
@@ -145,10 +144,12 @@ export function InboxClient({ initialItems, actor, people }: { initialItems: Inb
   const [refreshing, setRefreshing] = useState(false)
   const [error, setError] = useState("")
   const [notice, setNotice] = useState("")
-  const [workflowOpenedInternally, setWorkflowOpenedInternally] = useState(false)
+  const [page, setPage] = useState(0)
 
   const queueCounts = useMemo(() => Object.fromEntries(queueOptions.map((option) => [option.id, items.filter((item) => matchesQueue(item, option.id)).length])) as Record<QueueView, number>, [items])
   const visibleItems = useMemo(() => items.filter((item) => matchesQueue(item, queue) && (domain === "all" || item.type === domain)), [domain, items, queue])
+  const totalPages = Math.max(1, Math.ceil(visibleItems.length / PAGE_SIZE))
+  const pagedItems = visibleItems.slice(page * PAGE_SIZE, (page + 1) * PAGE_SIZE)
   const currentInboxHref = useMemo(() => {
     const params = new URLSearchParams()
     if (queue !== "my_work") params.set("view", queue)
@@ -157,15 +158,11 @@ export function InboxClient({ initialItems, actor, people }: { initialItems: Inb
     if (returnTo) params.set("returnTo", returnTo)
     return `/inbox${params.size ? `?${params.toString()}` : ""}`
   }, [domain, queue, returnTo, selectedId])
-  const openCount = items.filter((item) => !item.isCompleted).length
-  const overdueCount = items.filter((item) => item.slaStatus === "overdue" && !item.isCompleted).length
-  const decisionCount = items.filter((item) => item.requiresDecision && !item.isCompleted).length
-
   useEffect(() => {
-    if (!selectedId || !visibleItems.some((item) => item.id === selectedId)) return
+    if (!selectedId || !pagedItems.some((item) => item.id === selectedId)) return
     const frame = window.requestAnimationFrame(() => document.getElementById(`work-${selectedId}`)?.scrollIntoView({ block: "center" }))
     return () => window.cancelAnimationFrame(frame)
-  }, [selectedId, visibleItems])
+  }, [pagedItems, selectedId])
 
   function updateUrl(nextQueue: QueueView, nextDomain: DomainFilter) {
     const params = new URLSearchParams()
@@ -180,13 +177,7 @@ export function InboxClient({ initialItems, actor, people }: { initialItems: Inb
       const params = new URLSearchParams(currentInboxHref.split("?")[1] ?? "")
       params.delete("item")
       params.set("new", next)
-      setWorkflowOpenedInternally(true)
       router.push(`/inbox?${params.toString()}`, { scroll: false })
-      return
-    }
-    if (workflowOpenedInternally) {
-      setWorkflowOpenedInternally(false)
-      router.back()
       return
     }
     const params = new URLSearchParams(currentInboxHref.split("?")[1] ?? "")
@@ -196,11 +187,13 @@ export function InboxClient({ initialItems, actor, people }: { initialItems: Inb
 
   function chooseQueue(next: QueueView) {
     setQueue(next)
+    setPage(0)
     updateUrl(next, domain)
   }
 
   function chooseDomain(next: DomainFilter) {
     setDomain(next)
+    setPage(0)
     updateUrl(queue, next)
   }
 
@@ -246,15 +239,9 @@ export function InboxClient({ initialItems, actor, people }: { initialItems: Inb
     <WorkspacePage>
       <WorkspaceHeader
         title="Inbox"
-        description="Requests, decisions, and follow-ups across HR operations."
-        actions={<button type="button" onClick={() => void refreshInbox()} disabled={refreshing} className="inline-flex h-9 items-center gap-2 rounded-md border border-border bg-background px-3 font-semibold text-muted-foreground hover:bg-muted hover:text-foreground disabled:opacity-50"><RefreshCw className={cn("size-3.5", refreshing && "animate-spin")} />Refresh</button>}
+        description="Approvals and assigned work."
+        actions={<button type="button" onClick={() => void refreshInbox()} disabled={refreshing} className="inline-flex h-9 items-center rounded-md border border-border bg-background px-3 font-semibold text-muted-foreground hover:bg-muted hover:text-foreground disabled:opacity-50">Refresh</button>}
       />
-
-      <MetricStrip metrics={[
-        { label: "Open", value: openCount },
-        { label: "Awaiting decision", value: decisionCount },
-        { label: "Overdue", value: overdueCount },
-      ]} />
 
       <WorkflowCreator actor={actor} people={people} initialType={searchParams.get("new") === "leave" ? "leave" : searchParams.get("new") === "hiring" ? "hiring" : searchParams.get("new") === "training" ? "training" : undefined} onTypeChange={updateWorkflowType} onCreated={(message) => void refreshInbox(message)} />
 
@@ -273,12 +260,13 @@ export function InboxClient({ initialItems, actor, people }: { initialItems: Inb
       {notice && <div className="flex items-center gap-2 rounded-md border border-emerald-200 bg-emerald-50 px-4 py-3 text-xs font-semibold text-emerald-800 dark:border-emerald-800/30 dark:bg-emerald-950/20 dark:text-emerald-200"><CheckCircle2 className="size-4 shrink-0" />{notice}</div>}
       {refreshing && <div className="flex items-center justify-center gap-2 py-2 text-xs text-muted-foreground"><LoaderCircle className="size-3.5 animate-spin" />Refreshing work queue</div>}
 
-      {visibleItems.length ? (
+      {pagedItems.length ? (
         <section className="overflow-hidden rounded-lg border border-border bg-card" aria-label={`${queueOptions.find((option) => option.id === queue)?.label} items`}>
-          {visibleItems.map((item) => <ItemRow key={`${item.type}-${item.id}`} item={item} onAction={runAction} disabled={busyId !== null} selected={item.id === selectedId} returnTo={currentInboxHref} />)}
+          {pagedItems.map((item) => <ItemRow key={`${item.type}-${item.id}`} item={item} onAction={runAction} disabled={busyId !== null} selected={item.id === selectedId} returnTo={currentInboxHref} />)}
+          {visibleItems.length > PAGE_SIZE && <div className="flex items-center justify-between border-t border-border bg-muted/20 px-4 py-3"><p className="text-meta text-muted-foreground">{page * PAGE_SIZE + 1}–{Math.min((page + 1) * PAGE_SIZE, visibleItems.length)} of {visibleItems.length}</p><div className="flex gap-2"><button type="button" className="h-8 rounded-md border border-border bg-background px-3 font-semibold disabled:opacity-40" disabled={page === 0} onClick={() => setPage((current) => Math.max(0, current - 1))}>Previous</button><button type="button" className="h-8 rounded-md border border-border bg-background px-3 font-semibold disabled:opacity-40" disabled={page + 1 >= totalPages} onClick={() => setPage((current) => Math.min(totalPages - 1, current + 1))}>Next</button></div></div>}
         </section>
       ) : (
-        <div className="flex min-h-[220px] flex-col items-center justify-center rounded-lg border border-border bg-card px-6 text-center"><h3 className="text-base font-semibold">No matching work</h3><p className="mt-2 max-w-sm text-sm text-muted-foreground">There are no items in this queue for the selected domain.</p>{domain !== "all" && <button type="button" onClick={() => chooseDomain("all")} className="mt-4 text-xs font-semibold text-primary hover:underline">Clear domain filter</button>}</div>
+        <div className="flex min-h-[180px] flex-col items-center justify-center rounded-lg border border-border bg-card px-6 text-center"><h3>No matching work</h3>{domain !== "all" && <button type="button" onClick={() => chooseDomain("all")} className="mt-3 text-xs font-semibold text-primary hover:underline">Clear filter</button>}</div>
       )}
     </WorkspacePage>
   )

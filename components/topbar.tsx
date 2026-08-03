@@ -36,8 +36,6 @@ export function Topbar({ user, onOpenPalette, onOpenNavigation }: { user: ShellU
         </button>
 
         <div className="topbar__utilities">
-          <Link href="/inbox" className="topbar-utility-link">Inbox</Link>
-
           <details className="user-menu">
             <summary aria-label="Open account menu">
               <span className="avatar-soft avatar-soft--small">{initials(user.displayName)}</span>

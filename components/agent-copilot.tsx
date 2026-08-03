@@ -40,7 +40,7 @@ const suggestedPrompts = [
 function welcomeMessage(dataMode: string): ChatMessage {
   return {
     role: "assistant",
-    content: "Ask about workforce data or operational HR work. Follow-up questions will use this conversation until you start a new one.",
+    content: "Ask a workforce question. Follow-up questions use this conversation.",
     dataMode,
   }
 }
@@ -250,7 +250,7 @@ export function AgentCopilot({ dataMode }: { dataMode: string }) {
           />
           <Button type="submit" size="icon" disabled={!input.trim() || thinking || loadingHistory} aria-label="Send question"><ArrowUp className="size-4" /></Button>
         </form>
-        <p className="mt-2 text-meta text-muted-foreground">Context is stored for your account. Start a new chat to clear it. Employee actions still require human review.</p>
+        <p className="mt-2 text-meta text-muted-foreground">Conversation context is saved to your account.</p>
       </div>
 
       {deleteOpen && conversationId && (

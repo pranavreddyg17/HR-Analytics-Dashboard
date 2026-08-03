@@ -66,7 +66,7 @@ export default async function AttritionPage() {
 
   return (
     <WorkspacePage>
-      <WorkspaceHeader title="Attrition risk" description="Monitor recorded exits, identify retention priorities, and assess model scenarios." actions={<Button nativeButton={false} render={<Link href={withReturnTo("/risk-review", "/attrition")} />}>
+      <WorkspaceHeader title="Attrition risk" description="Recorded exits, retention priorities, and model scenarios." actions={<Button nativeButton={false} render={<Link href={withReturnTo("/risk-review", "/attrition")} />}>
           Review employee risk
         </Button>}/>
 
@@ -80,7 +80,7 @@ export default async function AttritionPage() {
         <Card className="gap-0 py-0 shadow-none">
           <CardHeader className="border-b border-border px-5 py-4">
             <CardTitle>Current attrition</CardTitle>
-            <CardDescription>Recorded exits in the HR database, separate from predicted risk.</CardDescription>
+            <CardDescription>Recorded exits, separate from predicted risk.</CardDescription>
           </CardHeader>
           <CardContent className="grid gap-6 px-5 py-4 lg:grid-cols-2 lg:divide-x lg:divide-border">
             <div className="lg:pr-6">
@@ -97,7 +97,7 @@ export default async function AttritionPage() {
         <Card className="gap-0 py-0 shadow-none">
           <CardHeader className="border-b border-border px-5 py-4">
             <CardTitle>Review next</CardTitle>
-            <CardDescription>Evidence-led checks for the HR team.</CardDescription>
+            <CardDescription>Recommended HR checks.</CardDescription>
           </CardHeader>
           <CardContent className="divide-y divide-border/70 px-5 py-4">
             <ReviewItem
