@@ -1,7 +1,6 @@
 .git
 .github
 .next
-.openai
 .terraform
 .wrangler
 backend/.pytest_cache
