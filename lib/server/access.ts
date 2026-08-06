@@ -16,7 +16,10 @@ async function database(): Promise<Database> {
 
 async function accessTable<T>(operation: (db: Database) => Promise<T>): Promise<T> {
   const direct = getHrDatabase()
-  if (!direct) throw new Error("DATABASE_UNAVAILABLE")
+  // Cloudflare provides a direct D1 binding, while Azure resolves the database
+  // asynchronously from DATABASE_URL. Authentication must support both paths;
+  // otherwise every Azure sign-in is rejected before the allowlist is queried.
+  if (!direct) return operation(await database())
   try {
     return await operation(direct)
   } catch (error) {
