@@ -38,6 +38,7 @@ const actionSchema = z.object({
   id: z.string().trim().min(2).max(100),
   type: z.enum(["leave", "hiring", "training"]),
   action: z.enum(["approve", "reject", "complete"]),
+  note: z.string().trim().max(600).optional().default(""),
 })
 
 async function database(): Promise<Database> {
@@ -47,12 +48,12 @@ async function database(): Promise<Database> {
 }
 
 async function employeeByEmail(db: Database, email: string): Promise<ManagedEmployee | null> {
-  return db.prepare("SELECT e.*, TRIM(COALESCE(NULLIF(e.preferred_name, ''), e.first_name) || ' ' || e.last_name) AS display_name, '' AS initials, NULL AS manager_name, 0 AS direct_reports FROM employees e WHERE LOWER(e.work_email)=LOWER(?) AND e.archived_at IS NULL")
+  return db.prepare("SELECT e.*, TRIM(COALESCE(NULLIF(e.preferred_name, ''), e.first_name) || ' ' || e.last_name) AS display_name, '' AS initials, NULL AS manager_name, 0 AS direct_reports FROM employee_directory_view e WHERE LOWER(e.work_email)=LOWER(?) AND e.archived_at IS NULL")
     .bind(email).first<ManagedEmployee>()
 }
 
 async function employeeById(db: Database, employeeId: string): Promise<ManagedEmployee | null> {
-  return db.prepare("SELECT e.*, TRIM(COALESCE(NULLIF(e.preferred_name, ''), e.first_name) || ' ' || e.last_name) AS display_name, '' AS initials, NULL AS manager_name, 0 AS direct_reports FROM employees e WHERE e.employee_id=? AND e.archived_at IS NULL")
+  return db.prepare("SELECT e.*, TRIM(COALESCE(NULLIF(e.preferred_name, ''), e.first_name) || ' ' || e.last_name) AS display_name, '' AS initials, NULL AS manager_name, 0 AS direct_reports FROM employee_directory_view e WHERE e.employee_id=? AND e.archived_at IS NULL")
     .bind(employeeId).first<ManagedEmployee>()
 }
 
@@ -79,7 +80,7 @@ function priorityForDueDate(dueDate: string, today: string): "high" | "medium" {
 
 async function managerOwnerEmail(db: Database, employee: ManagedEmployee): Promise<string> {
   if (!employee.manager_id) return "people-ops@laidbackhr.cloud"
-  const manager = await db.prepare("SELECT work_email FROM employees WHERE employee_id=? AND archived_at IS NULL")
+  const manager = await db.prepare("SELECT work_email FROM employee_directory_view WHERE employee_id=? AND archived_at IS NULL")
     .bind(employee.manager_id).first<{ work_email: string | null }>()
   return manager?.work_email?.trim().toLowerCase() || "people-ops@laidbackhr.cloud"
 }
@@ -101,6 +102,7 @@ export async function getWorkflowActorContext(actor: RequestActor): Promise<Work
   const employee = await employeeByEmail(db, actor.email)
   return {
     role: actor.role,
+    email: actor.email,
     employeeId: employee?.employee_id ?? null,
     employeeName: employee?.display_name ?? null,
     canRequestHiring: ["admin", "hr", "manager"].includes(actor.role),
@@ -117,7 +119,7 @@ export async function createWorkflow(value: unknown, actor: RequestActor) {
   if (input.type === "leave") {
     const employee = await chosenEmployee(db, actor, input.employeeId)
     const days = inclusiveDays(input.startDate, input.endDate)
-    const overlap = await db.prepare("SELECT id FROM leave_records WHERE employee_id=? AND LOWER(data_source) <> 'demo' AND LOWER(approval_status) IN ('pending','approved') AND start_date <= ? AND end_date >= ?")
+    const overlap = await db.prepare("SELECT id FROM leave_requests_view WHERE employee_id=? AND LOWER(data_source) <> 'demo' AND LOWER(approval_status) IN ('pending','approved') AND start_date <= ? AND end_date >= ?")
       .bind(employee.employee_id, input.endDate, input.startDate).first<{ id: string }>()
     if (overlap) throw new PeopleError("This employee already has a pending or approved leave request for those dates.", 409)
     const title = `${input.leaveType} leave request`
@@ -201,6 +203,7 @@ export async function actOnWorkflow(value: unknown, actor: RequestActor) {
     if (!(["admin", "hr"] as string[]).includes(actor.role)) throw new PeopleError("Only HR can approve hiring requisitions.", 403)
     if (!["approve", "reject"].includes(input.action)) throw new PeopleError("Choose approve or reject.", 422)
     if (String(workflow.status ?? "").toLowerCase() !== "requested") throw new PeopleError("This requisition decision has already been recorded.", 409)
+    if (input.action === "reject" && input.note.length < 10) throw new PeopleError("Add a brief reason before declining the requisition.", 422)
     const recruitmentStatus = input.action === "approve" ? "Open" : "Closed"
     if (input.action === "approve") {
       await db.batch([
@@ -215,9 +218,9 @@ export async function actOnWorkflow(value: unknown, actor: RequestActor) {
     await db.batch([
       db.prepare("UPDATE hiring_records SET recruitment_status=?, updated_at=CURRENT_TIMESTAMP WHERE id=?").bind(recruitmentStatus, input.id),
       db.prepare("UPDATE workflow_requests SET status='Rejected', next_action='No further action.', assigned_at=CURRENT_TIMESTAMP, resolved_by_email=?, resolved_at=CURRENT_TIMESTAMP, completed_at=CURRENT_TIMESTAMP, completion_notes=?, updated_at=CURRENT_TIMESTAMP WHERE id=?")
-        .bind(actor.email, `${actor.displayName} rejected the hiring requisition.`, input.id),
+        .bind(actor.email, `${actor.displayName} rejected the hiring requisition: ${input.note}`, input.id),
       db.prepare("INSERT INTO hiring_activity(id, entity_type, entity_id, requisition_id, action, from_status, to_status, detail, actor_email) VALUES (?, 'requisition', ?, ?, 'requisition_rejected', 'Requested', 'Closed', ?, ?)")
-        .bind(crypto.randomUUID(), input.id, input.id, `${actor.displayName} rejected the hiring requisition.`, actor.email),
+        .bind(crypto.randomUUID(), input.id, input.id, `${actor.displayName} rejected the hiring requisition: ${input.note}`, actor.email),
     ])
     return { id: input.id, status: "Rejected", message: "Hiring requisition rejected." }
   }

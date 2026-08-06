@@ -18,10 +18,12 @@ const updateCandidateSchema = z.object({
   stage: z.enum(hiringCandidateStages),
   nextStep: z.string().trim().max(240).optional(),
   nextStepDueAt: date.nullable().optional(),
+  startDate: date.optional(),
   notes: z.string().trim().max(1200).optional(),
   rejectedReason: z.string().trim().max(600).optional(),
 }).superRefine((value, context) => {
   if (value.stage === "Rejected" && !value.rejectedReason) context.addIssue({ code: "custom", message: "Record a rejection reason." })
+  if (value.stage === "Hired" && !value.startDate) context.addIssue({ code: "custom", message: "Record the employee's planned start date." })
 })
 const updateRequisitionSchema = z.object({
   action: z.enum(["follow_up", "close"]),
@@ -77,6 +79,7 @@ type CandidateRow = {
   requested_by_email?: string | null
   requisition_owner_email?: string | null
   recruitment_status?: string
+  details_json?: string | null
 }
 
 type ActivityRow = {
@@ -125,7 +128,7 @@ function nextStepFor(stage: HiringCandidateStage): { action: string; due: string
   if (stage === "Screening") return { action: "Complete recruiter screen", due: dateAfterToday(3) }
   if (stage === "Interview") return { action: "Schedule or record interview outcome", due: dateAfterToday(4) }
   if (stage === "Offer") return { action: "Record offer response", due: dateAfterToday(5) }
-  if (stage === "Hired") return { action: "Complete onboarding handoff", due: dateAfterToday(3) }
+  if (stage === "Hired") return { action: "No further action", due: null }
   return { action: "No further action", due: null }
 }
 
@@ -164,10 +167,10 @@ export async function listHiringOperations(actor: RequestActor): Promise<HiringO
       SUM(CASE WHEN c.stage NOT IN ('Hired', 'Rejected') THEN 1 ELSE 0 END) AS active_candidate_count,
       SUM(CASE WHEN c.stage='Interview' THEN 1 ELSE 0 END) AS interview_count,
       SUM(CASE WHEN c.stage='Offer' THEN 1 ELSE 0 END) AS offer_count
-      FROM hiring_records h
+      FROM hiring_requisitions_view h
       LEFT JOIN workflow_requests w ON w.id=h.id AND w.type='hiring'
       LEFT JOIN app_users au ON LOWER(au.email)=LOWER(w.owner_email)
-      LEFT JOIN hiring_candidates c ON c.requisition_id=h.id
+      LEFT JOIN candidate_applications_view c ON c.requisition_id=h.id
       WHERE LOWER(h.data_source) <> 'demo'
       GROUP BY h.id, h.position, h.department, h.location, h.recruitment_status, h.application_date, h.hiring_source,
         w.details_json, w.owner_email, w.requested_by_email, w.due_at, w.next_action, w.completed_at, au.display_name
@@ -176,14 +179,14 @@ export async function listHiringOperations(actor: RequestActor): Promise<HiringO
     db.prepare(`SELECT c.*, h.position, h.department, h.location, h.recruitment_status,
       COALESCE(NULLIF(au.display_name, ''), c.owner_email) AS owner_name,
       w.requested_by_email, w.owner_email AS requisition_owner_email
-      FROM hiring_candidates c
-      JOIN hiring_records h ON h.id=c.requisition_id
+      FROM candidate_applications_view c
+      JOIN hiring_requisitions_view h ON h.id=c.requisition_id
       LEFT JOIN workflow_requests w ON w.id=h.id AND w.type='hiring'
       LEFT JOIN app_users au ON LOWER(au.email)=LOWER(c.owner_email)
       WHERE LOWER(h.data_source) <> 'demo'
       ORDER BY CASE c.stage WHEN 'Offer' THEN 0 WHEN 'Interview' THEN 1 WHEN 'Screening' THEN 2 WHEN 'Applied' THEN 3 WHEN 'Hired' THEN 4 ELSE 5 END,
         COALESCE(c.next_step_due_at, '9999-12-31'), c.updated_at DESC`).all<CandidateRow>(),
-    db.prepare("SELECT id, position, department, location, hiring_date, time_to_hire_days, hiring_source FROM hiring_records WHERE LOWER(data_source) <> 'demo' AND LOWER(recruitment_status)='hired' AND hiring_date IS NOT NULL ORDER BY hiring_date DESC LIMIT 8")
+    db.prepare("SELECT id, position, department, location, hiring_date, time_to_hire_days, hiring_source FROM hiring_requisitions_view WHERE LOWER(data_source) <> 'demo' AND LOWER(recruitment_status)='hired' AND hiring_date IS NOT NULL ORDER BY hiring_date DESC LIMIT 8")
       .all<{ id: string; position: string; department: string; location: string; hiring_date: string; time_to_hire_days: number | null; hiring_source: string }>(),
     db.prepare("SELECT id, entity_type, entity_id, requisition_id, action, from_status, to_status, detail, actor_email, created_at FROM hiring_activity ORDER BY created_at DESC LIMIT 100")
       .all<ActivityRow>(),
@@ -282,7 +285,7 @@ export async function createHiringCandidate(value: unknown, actor: RequestActor)
   assertHiringEditor(actor)
   const input = createCandidateSchema.parse(value)
   const db = await database()
-  const requisition = await db.prepare("SELECT h.recruitment_status, w.requested_by_email, w.owner_email FROM hiring_records h LEFT JOIN workflow_requests w ON w.id=h.id AND w.type='hiring' WHERE h.id=? AND LOWER(h.data_source) <> 'demo'")
+  const requisition = await db.prepare("SELECT h.recruitment_status, w.requested_by_email, w.owner_email FROM hiring_requisitions_view h LEFT JOIN workflow_requests w ON w.id=h.id AND w.type='hiring' WHERE h.id=? AND LOWER(h.data_source) <> 'demo'")
     .bind(input.requisitionId).first<{ recruitment_status: string; requested_by_email: string | null; owner_email: string | null }>()
   if (!requisition) throw new PeopleError("Requisition not found.", 404)
   if (!["open", "offer"].includes(requisition.recruitment_status.toLowerCase())) throw new PeopleError("Candidates can only be added to approved, active requisitions.", 409)
@@ -310,7 +313,7 @@ export async function updateHiringRequisition(requisitionId: string, value: unkn
   const input = updateRequisitionSchema.parse(value)
   const db = await database()
   const requisition = await db.prepare(`SELECT h.position, h.recruitment_status, w.requested_by_email, w.owner_email
-    FROM hiring_records h LEFT JOIN workflow_requests w ON w.id=h.id AND w.type='hiring'
+    FROM hiring_requisitions_view h LEFT JOIN workflow_requests w ON w.id=h.id AND w.type='hiring'
     WHERE h.id=? AND LOWER(h.data_source) <> 'demo'`)
     .bind(requisitionId).first<{ position: string; recruitment_status: string; requested_by_email: string | null; owner_email: string | null }>()
   if (!requisition) throw new PeopleError("Requisition not found.", 404)
@@ -345,8 +348,8 @@ export async function updateHiringCandidate(candidateId: string, value: unknown,
   assertHiringEditor(actor)
   const input = updateCandidateSchema.parse(value)
   const db = await database()
-  const candidate = await db.prepare(`SELECT c.*, h.recruitment_status, w.requested_by_email, w.owner_email AS requisition_owner_email
-    FROM hiring_candidates c JOIN hiring_records h ON h.id=c.requisition_id
+  const candidate = await db.prepare(`SELECT c.*, h.position, h.department, h.location, h.recruitment_status, w.requested_by_email, w.owner_email AS requisition_owner_email, w.details_json
+    FROM candidate_applications_view c JOIN hiring_requisitions_view h ON h.id=c.requisition_id
     LEFT JOIN workflow_requests w ON w.id=h.id AND w.type='hiring' WHERE c.id=?`)
     .bind(candidateId).first<CandidateRow>()
   if (!candidate) throw new PeopleError("Candidate not found.", 404)
@@ -367,18 +370,41 @@ export async function updateHiringCandidate(candidateId: string, value: unknown,
 
   if (input.stage === "Hired") {
     const today = new Date().toISOString().slice(0, 10)
+    const existingEmployee = await db.prepare("SELECT employee_id FROM employee_directory_view WHERE LOWER(work_email)=LOWER(?)")
+      .bind(candidate.email).first<{ employee_id: string }>()
+    if (existingEmployee) throw new PeopleError(`This candidate email is already linked to employee ${existingEmployee.employee_id}.`, 409)
+    const nameParts = candidate.full_name.trim().split(/\s+/)
+    if (nameParts.length < 2) throw new PeopleError("Record the candidate's first and last name before hiring.", 422)
+    const lastName = nameParts.pop() as string
+    const firstName = nameParts.join(" ")
+    const employeeId = `EMP-${crypto.randomUUID().slice(0, 8).toUpperCase()}`
+    const employmentType = jsonValue(candidate.details_json ?? null, "employmentType", "Full-time")
+    const employeeChanges = JSON.stringify({
+      source: "hiring",
+      candidateId,
+      requisitionId: candidate.requisition_id,
+      plannedStartDate: input.startDate,
+      employmentStatus: "Preboarding",
+    })
+    const completionNote = `${actor.displayName} recorded ${candidate.full_name} as hired and created preboarding profile ${employeeId}.`
     await db.batch([
       candidateUpdate,
       db.prepare("UPDATE hiring_records SET recruitment_status='Hired', hiring_date=?, time_to_hire_days=CAST(julianday(?) - julianday(application_date) AS INTEGER), updated_at=CURRENT_TIMESTAMP WHERE id=?").bind(today, today, candidate.requisition_id),
-      db.prepare("UPDATE workflow_requests SET status='Hired', next_action='Complete onboarding handoff.', due_at=date('now', '+3 days'), resolved_by_email=?, resolved_at=CURRENT_TIMESTAMP, completed_at=CURRENT_TIMESTAMP, completion_notes=?, updated_at=CURRENT_TIMESTAMP WHERE id=? AND type='hiring'")
-        .bind(actor.email, `${actor.displayName} recorded ${candidate.full_name} as hired.`, candidate.requisition_id),
+      db.prepare("INSERT INTO employees(employee_id, first_name, last_name, preferred_name, work_email, phone, department, job_title, location, manager, manager_id, hire_date, employment_type, employment_status, tenure_years, data_source, archived_at, version, created_at, updated_at) VALUES (?, ?, ?, NULL, ?, NULL, ?, ?, ?, 'Not assigned', NULL, ?, ?, 'Preboarding', 0, 'workflow', NULL, 1, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)")
+        .bind(employeeId, firstName, lastName, candidate.email, candidate.department, candidate.position, candidate.location, input.startDate, employmentType),
+      db.prepare("INSERT INTO employee_activity(id, employee_id, event_type, summary, changes_json, actor_email, created_at) VALUES (?, ?, 'preboarding_created', ?, ?, ?, CURRENT_TIMESTAMP)")
+        .bind(crypto.randomUUID(), employeeId, `${actor.displayName} created this preboarding profile from the hiring pipeline`, employeeChanges, actor.email),
+      db.prepare("UPDATE workflow_requests SET status='Hired', next_action='No further action.', due_at=NULL, resolved_by_email=?, resolved_at=CURRENT_TIMESTAMP, completed_at=CURRENT_TIMESTAMP, completion_notes=?, updated_at=CURRENT_TIMESTAMP WHERE id=? AND type='hiring'")
+        .bind(actor.email, completionNote, candidate.requisition_id),
       db.prepare("UPDATE hiring_candidates SET stage='Rejected', next_step='No further action', next_step_due_at=NULL, rejected_reason='Position filled', updated_at=CURRENT_TIMESTAMP WHERE requisition_id=? AND id<>? AND stage NOT IN ('Hired','Rejected')")
         .bind(candidate.requisition_id, candidateId),
-      activityInsert,
+      db.prepare("INSERT INTO hiring_activity(id, entity_type, entity_id, requisition_id, action, from_status, to_status, detail, actor_email) VALUES (?, 'candidate', ?, ?, 'candidate_hired', ?, 'Hired', ?, ?)")
+        .bind(crypto.randomUUID(), candidateId, candidate.requisition_id, candidate.stage, completionNote, actor.email),
     ])
+    return { id: candidateId, stage: "Hired", message: `${candidate.full_name} was hired and preboarding profile ${employeeId} was created.` }
   } else {
     await candidateUpdate.run()
-    const offerCount = await db.prepare("SELECT COUNT(*) AS count FROM hiring_candidates WHERE requisition_id=? AND stage='Offer'").bind(candidate.requisition_id).first<{ count: number }>()
+    const offerCount = await db.prepare("SELECT COUNT(*) AS count FROM candidate_applications_view WHERE requisition_id=? AND stage='Offer'").bind(candidate.requisition_id).first<{ count: number }>()
     const nextStatus = Number(offerCount?.count ?? 0) > 0 ? "Offer" : "Open"
     const workflowNext = nextStatus === "Offer" ? "Record the offer response and proposed start date." : "Review the candidate pipeline and record the next recruiting step."
     await db.batch([

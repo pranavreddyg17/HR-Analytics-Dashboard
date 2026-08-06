@@ -1,5 +1,6 @@
 "use client"
 
+import { useEffect, useRef, useState } from "react"
 import Link from "next/link"
 import { usePathname } from "next/navigation"
 import { signOut } from "next-auth/react"
@@ -13,7 +14,7 @@ export type ShellUser = {
   role?: string
 }
 
-export type NavigationItem = {
+type NavigationItem = {
   href: string
   label: string
   adminOnly?: boolean
@@ -37,7 +38,7 @@ const navigationGroups: Array<{ label: string; items: NavigationItem[] }> = [
     ],
   },
   {
-    label: "Analysis",
+    label: "Reporting",
     items: [
       { href: "/insights", label: "Insights" },
       { href: "/attrition", label: "Attrition risk" },
@@ -65,27 +66,65 @@ function visibleItems(user: ShellUser, items: NavigationItem[]) {
 
 export function AppNavigation({ user }: { user: ShellUser }) {
   const pathname = usePathname()
+  const [workspace, ...menus] = navigationGroups
+  const [openMenu, setOpenMenu] = useState({ label: "", path: pathname })
+  const navigationRef = useRef<HTMLElement>(null)
+  const visibleOpenMenu = openMenu.path === pathname ? openMenu.label : ""
+
+  useEffect(() => {
+    const closeOutside = (event: PointerEvent) => {
+      if (!navigationRef.current?.contains(event.target as Node)) setOpenMenu({ label: "", path: pathname })
+    }
+    document.addEventListener("pointerdown", closeOutside)
+    return () => document.removeEventListener("pointerdown", closeOutside)
+  }, [pathname])
 
   return (
-    <nav className="enterprise-nav" aria-label="Primary navigation">
+    <nav ref={navigationRef} className="enterprise-nav" aria-label="Primary navigation">
       <div className="enterprise-nav__inner">
-        {navigationGroups.map((group) => (
-          <div className="enterprise-nav__group" key={group.label} aria-label={group.label}>
-            {visibleItems(user, group.items).map((item) => {
-              const active = isActive(pathname, item)
-              return (
-                <Link
-                  key={item.href}
-                  href={item.href}
-                  aria-current={active ? "page" : undefined}
-                  className={cn("enterprise-nav__link", active && "enterprise-nav__link--active")}
-                >
-                  {item.label}
-                </Link>
-              )
-            })}
-          </div>
-        ))}
+        <div className="enterprise-nav__primary" aria-label={workspace.label}>
+          {visibleItems(user, workspace.items).map((item) => {
+            const active = isActive(pathname, item)
+            return (
+              <Link
+                key={item.href}
+                href={item.href}
+                aria-current={active ? "page" : undefined}
+                className={cn("enterprise-nav__link", active && "enterprise-nav__link--active")}
+              >
+                {item.label}
+              </Link>
+            )
+          })}
+        </div>
+        <div className="enterprise-nav__menus">
+          {menus.map((group) => {
+            const items = visibleItems(user, group.items)
+            const groupActive = items.some((item) => isActive(pathname, item))
+            if (!items.length) return null
+            return (
+              <div className={cn("enterprise-nav__menu", groupActive && "enterprise-nav__menu--active", visibleOpenMenu === group.label && "enterprise-nav__menu--open")} key={group.label}>
+                <button type="button" aria-expanded={visibleOpenMenu === group.label} onClick={() => setOpenMenu((current) => ({ label: current.path === pathname && current.label === group.label ? "" : group.label, path: pathname }))}>{group.label}</button>
+                {visibleOpenMenu === group.label && <div className="enterprise-nav__popover">
+                  {items.map((item) => {
+                    const active = isActive(pathname, item)
+                    return (
+                      <Link
+                        key={item.href}
+                        href={item.href}
+                        aria-current={active ? "page" : undefined}
+                        className={cn("enterprise-nav__popover-link", active && "enterprise-nav__popover-link--active")}
+                        onClick={() => setOpenMenu({ label: "", path: pathname })}
+                      >
+                        {item.label}
+                      </Link>
+                    )
+                  })}
+                </div>}
+              </div>
+            )
+          })}
+        </div>
       </div>
     </nav>
   )

@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState } from "react"
 import { usePathname, useRouter } from "next/navigation"
-import { Loader2, Search, UserRound } from "lucide-react"
+import { Loader2, Search } from "lucide-react"
 
 import {
   AppNavigation,
@@ -13,21 +13,12 @@ import {
 import { Topbar } from "@/components/topbar"
 import { cn } from "@/lib/utils"
 
-type PersonResult = {
-  employee_id: string
-  display_name: string
-  initials: string
-  job_title: string
-  department: string
-  location: string
-}
-
 type PaletteItem = {
   id: string
   href: string
   label: string
   detail: string
-  kind: "destination" | "person"
+  kind: "destination" | "person" | "record"
   section: string
   initials?: string
 }
@@ -38,8 +29,11 @@ type SearchDestination = {
   label: string
   detail: string
   keywords: string
-  section: "Pages" | "Actions" | "Reports"
+  section: "Pages"
+  adminOnly?: boolean
 }
+
+type WorkspaceSearchResult = Omit<PaletteItem, "kind"> & { kind: "person" | "record" }
 
 const pageDetails: Record<string, string> = {
   "/": "Priorities and upcoming people work",
@@ -55,28 +49,6 @@ const pageDetails: Record<string, string> = {
   "/access": "Accounts, roles, and access history",
 }
 
-const featureDestinationDefinitions: Array<Omit<SearchDestination, "icon">> = [
-  { id: "add-employee", href: "/people?new=employee", label: "Add employee", detail: "Create a new employee profile", keywords: "new member teammate profile onboard hire record", section: "Actions" },
-  { id: "mobility-review", href: "/people?tenure=mobility", label: "Mobility review", detail: "Find employees with 3+ years tenure and no promotion", keywords: "tenure promotion career progression stalled people filter", section: "Actions" },
-  { id: "request-leave", href: "/inbox?new=leave", label: "Request leave", detail: "Submit a time-off request for an employee", keywords: "annual sick holiday absence time off workflow", section: "Actions" },
-  { id: "review-leave", href: "/leaves#pending-decisions", label: "Review pending leave", detail: "Approve or decline outstanding leave requests", keywords: "decision approval reject time off absence manager", section: "Actions" },
-  { id: "request-position", href: "/inbox?new=hiring", label: "Request a position", detail: "Create a new hiring request", keywords: "requisition role vacancy headcount job opening", section: "Actions" },
-  { id: "assign-training", href: "/inbox?new=training", label: "Assign training", detail: "Create an employee learning assignment", keywords: "course mandatory compliance programme learning", section: "Actions" },
-  { id: "review-model-records", href: "/risk-review", label: "Review scored records", detail: "Audit historical attrition model scores", keywords: "attrition risk model high medium low validation", section: "Actions" },
-  { id: "import-records", href: "/imports#import-records", label: "Import HR records", detail: "Upload employee or workflow data from CSV", keywords: "data hub csv upload employees hiring leave training promotions", section: "Actions" },
-  { id: "power-bi-feeds", href: "/imports#power-bi-feeds", label: "Power BI feeds", detail: "Copy reporting endpoints for Power BI", keywords: "csv endpoint reporting connector copy data feed", section: "Actions" },
-  { id: "manage-access", href: "/access", label: "Manage access", detail: "Add, update, or remove workspace accounts", keywords: "allowlist email user role administrator permissions", section: "Actions" },
-  { id: "workforce-summary", href: "/insights", label: "Workforce summary", detail: "Review headcount, movement, and completion metrics", keywords: "executive kpi active employees hires exits attrition rate", section: "Reports" },
-  { id: "headcount-report", href: "/insights", label: "Headcount by department", detail: "Compare active employees across departments", keywords: "organization team workforce status employment type manager span", section: "Reports" },
-  { id: "hiring-pipeline", href: "/hiring", label: "Hiring pipeline", detail: "Review requisitions, candidates, and time to fill", keywords: "requisition recruitment candidate time to hire job", section: "Reports" },
-  { id: "leave-coverage", href: "/leaves", label: "Leave coverage", detail: "Review requests and team availability", keywords: "away today coming up approved days annual sick absence", section: "Reports" },
-  { id: "learning-compliance", href: "/courses", label: "Learning compliance", detail: "Review incomplete and completed training", keywords: "mandatory overdue assessment programme participation", section: "Reports" },
-  { id: "attrition-analysis", href: "/attrition", label: "Attrition analysis", detail: "Review exits, tenure cohorts, and retention priorities", keywords: "turnover resignation voluntary involuntary department risk", section: "Reports" },
-  { id: "data-coverage", href: "/imports#data-coverage", label: "Data coverage", detail: "Review record counts by HR domain", keywords: "database records status domains", section: "Reports" },
-]
-
-const featureDestinations: SearchDestination[] = featureDestinationDefinitions
-
 const searchDestinations: SearchDestination[] = [
   ...commandNavigation.map((item) => ({
     id: `page-${item.href}`,
@@ -85,13 +57,13 @@ const searchDestinations: SearchDestination[] = [
     detail: pageDetails[item.href] ?? "Workspace page",
     keywords: `${item.label} ${item.href}`,
     section: "Pages" as const,
+    adminOnly: item.adminOnly,
   })),
-  ...featureDestinations,
 ]
 
 function destinationScore(item: SearchDestination, query: string): number {
   const normalized = query.trim().toLowerCase()
-  if (!normalized) return item.section === "Pages" ? 1 : 0
+  if (!normalized) return 1
   const label = item.label.toLowerCase()
   const haystack = `${label} ${item.detail} ${item.keywords}`.toLowerCase()
   const words = normalized.split(/\s+/).filter(Boolean)
@@ -105,7 +77,7 @@ function destinationScore(item: SearchDestination, query: string): number {
 function CommandPalette({ onClose, user }: { onClose: () => void; user: ShellUser }) {
   const router = useRouter()
   const [query, setQuery] = useState("")
-  const [people, setPeople] = useState<PersonResult[]>([])
+  const [records, setRecords] = useState<WorkspaceSearchResult[]>([])
   const [loading, setLoading] = useState(false)
   const [activeIndex, setActiveIndex] = useState(0)
   const inputRef = useRef<HTMLInputElement>(null)
@@ -116,13 +88,13 @@ function CommandPalette({ onClose, user }: { onClose: () => void; user: ShellUse
     const timer = window.setTimeout(async () => {
       setLoading(true)
       try {
-        const response = await fetch(`/api/v1/hr/people?search=${encodeURIComponent(query.trim())}&limit=6`, { signal: controller.signal })
+        const response = await fetch(`/api/v1/search?q=${encodeURIComponent(query.trim())}`, { cache: "no-store", signal: controller.signal })
         if (!response.ok) throw new Error("Search unavailable")
-        const body = await response.json() as { items?: PersonResult[] }
-        setPeople(body.items ?? [])
+        const body = await response.json() as { results?: WorkspaceSearchResult[] }
+        setRecords(body.results ?? [])
         setActiveIndex(0)
       } catch (error) {
-        if ((error as { name?: string }).name !== "AbortError") setPeople([])
+        if ((error as { name?: string }).name !== "AbortError") setRecords([])
       } finally {
         if (!controller.signal.aborted) setLoading(false)
       }
@@ -133,28 +105,16 @@ function CommandPalette({ onClose, user }: { onClose: () => void; user: ShellUse
   const items = useMemo<PaletteItem[]>(() => {
     const normalized = query.trim().toLowerCase()
     const destinations = searchDestinations
-      .filter((item) => !item.href.startsWith("/access") || user.role === "admin")
+      .filter((item) => !item.adminOnly || user.role === "admin")
       .map((item) => ({ item, score: destinationScore(item, normalized) }))
       .filter(({ score }) => score >= 0)
       .sort((left, right) => {
-        const sectionOrder = { Pages: 0, Actions: 1, Reports: 2 }
-        return normalized
-          ? sectionOrder[left.item.section] - sectionOrder[right.item.section] || right.score - left.score
-          : right.score - left.score
+        return right.score - left.score
       })
-      .slice(0, normalized ? 12 : 8)
+      .slice(0, normalized ? 5 : 8)
       .map(({ item }) => ({ ...item, kind: "destination" as const }))
-    const employees = people.map((person) => ({
-      id: `person-${person.employee_id}`,
-      href: `/people/${encodeURIComponent(person.employee_id)}`,
-      label: person.display_name,
-      detail: `${person.job_title} · ${person.department}`,
-      kind: "person" as const,
-      section: "People",
-      initials: person.initials,
-    }))
-    return [...destinations, ...employees]
-  }, [people, query, user.role])
+    return [...destinations, ...records]
+  }, [query, records, user.role])
 
   function select(item: PaletteItem) {
     onClose()
@@ -176,7 +136,7 @@ function CommandPalette({ onClose, user }: { onClose: () => void; user: ShellUse
               setQuery(next)
               setActiveIndex(0)
               if (next.trim().length < 2) {
-                setPeople([])
+                setRecords([])
                 setLoading(false)
               }
             }}
@@ -203,7 +163,7 @@ function CommandPalette({ onClose, user }: { onClose: () => void; user: ShellUse
                   onClick={() => select(item)}
                   className={cn("command-result", index === activeIndex && "command-result--active")}
                 >
-                  {item.kind === "person" && <span className="command-result__icon command-result__avatar">{item.initials || <UserRound className="size-4" />}</span>}
+                  {item.kind === "person" && <span className="command-result__icon command-result__avatar">{item.initials}</span>}
                   <span className="min-w-0 flex-1 text-left">
                     <span className="block truncate text-sm font-semibold">{item.label}</span>
                     <span className="block truncate text-xs text-muted-foreground">{item.detail}</span>

@@ -20,6 +20,9 @@ export type EmployeeActivity = {
 export type EmployeeDirectoryResponse = {
   total: number
   items: ManagedEmployee[]
+  composition: {
+    departments: Array<{ name: string; count: number }>
+  }
   dimensions: {
     departments: string[]
     locations: string[]
@@ -59,7 +62,7 @@ export type EmployeeInput = {
 
 export type InboxItem = {
   id: string
-  type: "leave" | "hiring" | "training"
+  type: "leave" | "hiring" | "training" | "insight"
   title: string
   detail: string
   person: string | null
@@ -90,6 +93,7 @@ export type InboxItem = {
 
 export type WorkflowActorContext = {
   role: "admin" | "hr" | "manager" | "viewer"
+  email: string
   employeeId: string | null
   employeeName: string | null
   canRequestHiring: boolean

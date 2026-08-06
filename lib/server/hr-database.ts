@@ -1,8 +1,10 @@
 import { env } from "cloudflare:workers"
 
+import normalizedHrMigration from "@/drizzle/0011_cold_blindfold.sql?raw"
 import { generateCorrelatedDemoData, type CorrelatedDemoData } from "@/lib/server/correlated-demo"
 import { getEmployees, getModelMetadata } from "@/lib/server/runtime"
 import { hrDomains, importFields, type HrDomain } from "@/lib/hr-types"
+import type { ImportIssue, ImportJob, ImportMode, ImportPreview } from "@/lib/data-import-types"
 
 type Statement = {
   bind(...values: unknown[]): Statement
@@ -27,6 +29,15 @@ const tableByDomain: Record<HrDomain, string> = {
   promotions: "promotion_records",
 }
 
+const readViewByDomain: Record<HrDomain, string> = {
+  employees: "employee_directory_view",
+  hiring: "hiring_requisitions_view",
+  attrition: "attrition_events_view",
+  leave: "leave_requests_view",
+  training: "learning_assignments_view",
+  promotions: "promotion_events_view",
+}
+
 const createStatements = [
   "CREATE TABLE IF NOT EXISTS employees (employee_id TEXT PRIMARY KEY, first_name TEXT NOT NULL DEFAULT '', last_name TEXT NOT NULL DEFAULT '', preferred_name TEXT, work_email TEXT, phone TEXT, department TEXT NOT NULL, job_title TEXT NOT NULL, location TEXT NOT NULL, manager TEXT NOT NULL, manager_id TEXT, hire_date TEXT NOT NULL, employment_type TEXT NOT NULL DEFAULT 'Full-time', employment_status TEXT NOT NULL, tenure_years REAL NOT NULL, data_source TEXT NOT NULL DEFAULT 'imported', archived_at TEXT, version INTEGER NOT NULL DEFAULT 1, created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP, updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP)",
   "CREATE TABLE IF NOT EXISTS employee_activity (id TEXT PRIMARY KEY, employee_id TEXT NOT NULL, event_type TEXT NOT NULL, summary TEXT NOT NULL, changes_json TEXT, actor_email TEXT NOT NULL, created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP)",
@@ -46,18 +57,19 @@ const createStatements = [
   "CREATE TABLE IF NOT EXISTS leave_records (id TEXT PRIMARY KEY, employee_id TEXT NOT NULL, leave_type TEXT NOT NULL, start_date TEXT NOT NULL, end_date TEXT NOT NULL, leave_days REAL NOT NULL, approval_status TEXT NOT NULL, department TEXT NOT NULL, data_source TEXT NOT NULL DEFAULT 'imported', updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP)",
   "CREATE TABLE IF NOT EXISTS training_records (id TEXT PRIMARY KEY, training_program TEXT NOT NULL, employee_id TEXT NOT NULL, completion_status TEXT NOT NULL, completion_date TEXT, training_hours REAL NOT NULL, assessment_score REAL, department TEXT NOT NULL, data_source TEXT NOT NULL DEFAULT 'imported', updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP)",
   "CREATE TABLE IF NOT EXISTS promotion_records (id TEXT PRIMARY KEY, employee_id TEXT NOT NULL, previous_title TEXT NOT NULL, new_title TEXT NOT NULL, promotion_date TEXT NOT NULL, department TEXT NOT NULL, months_since_previous_promotion INTEGER NOT NULL, data_source TEXT NOT NULL DEFAULT 'imported', updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP)",
-  "CREATE TABLE IF NOT EXISTS data_imports (id TEXT PRIMARY KEY, domain TEXT NOT NULL, filename TEXT NOT NULL, row_count INTEGER NOT NULL, status TEXT NOT NULL, imported_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP)",
+  "CREATE TABLE IF NOT EXISTS data_imports (id TEXT PRIMARY KEY, domain TEXT NOT NULL, filename TEXT NOT NULL, mode TEXT NOT NULL DEFAULT 'merge', total_rows INTEGER NOT NULL DEFAULT 0, row_count INTEGER NOT NULL, inserted_rows INTEGER NOT NULL DEFAULT 0, updated_rows INTEGER NOT NULL DEFAULT 0, deleted_rows INTEGER NOT NULL DEFAULT 0, error_count INTEGER NOT NULL DEFAULT 0, error_summary TEXT, imported_by_email TEXT, status TEXT NOT NULL, completed_at TEXT, imported_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP)",
+  "CREATE INDEX IF NOT EXISTS data_imports_domain_date_idx ON data_imports(domain, imported_at)",
+  "CREATE INDEX IF NOT EXISTS data_imports_status_date_idx ON data_imports(status, imported_at)",
+  "CREATE TABLE IF NOT EXISTS data_import_rows (job_id TEXT NOT NULL, row_key TEXT NOT NULL, payload_json TEXT NOT NULL, PRIMARY KEY(job_id, row_key))",
   "CREATE TABLE IF NOT EXISTS workflow_requests (id TEXT PRIMARY KEY, type TEXT NOT NULL, employee_id TEXT, title TEXT NOT NULL, status TEXT NOT NULL, details_json TEXT NOT NULL DEFAULT '{}', requested_by_email TEXT NOT NULL, priority TEXT NOT NULL DEFAULT 'medium', owner_email TEXT, due_at TEXT, next_action TEXT, source_entity_type TEXT, source_entity_id TEXT, assigned_at TEXT, blocked_reason TEXT, confidentiality_level TEXT NOT NULL DEFAULT 'internal', resolved_by_email TEXT, resolved_at TEXT, completed_at TEXT, completion_notes TEXT, created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP, updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP)",
   "CREATE INDEX IF NOT EXISTS workflow_type_status_idx ON workflow_requests(type, status)",
   "CREATE INDEX IF NOT EXISTS workflow_employee_idx ON workflow_requests(employee_id)",
   "CREATE INDEX IF NOT EXISTS workflow_requester_idx ON workflow_requests(requested_by_email)",
   "CREATE TABLE IF NOT EXISTS ai_workflow_drafts (id TEXT PRIMARY KEY, type TEXT NOT NULL, title TEXT NOT NULL, status TEXT NOT NULL DEFAULT 'ready', employee_ids_json TEXT NOT NULL DEFAULT '[]', details_json TEXT NOT NULL DEFAULT '{}', created_by_email TEXT NOT NULL, opened_at TEXT, created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP, updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP)",
   "CREATE INDEX IF NOT EXISTS ai_workflow_creator_idx ON ai_workflow_drafts(created_by_email)",
-  "CREATE INDEX IF NOT EXISTS ai_workflow_status_idx ON ai_workflow_drafts(status)",
   "CREATE TABLE IF NOT EXISTS ai_conversations (id TEXT PRIMARY KEY, user_email TEXT NOT NULL, title TEXT NOT NULL, created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP, updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP)",
   "CREATE INDEX IF NOT EXISTS ai_conversations_user_updated_idx ON ai_conversations(user_email, updated_at)",
   "CREATE TABLE IF NOT EXISTS ai_conversation_messages (id TEXT PRIMARY KEY, conversation_id TEXT NOT NULL, position INTEGER NOT NULL, role TEXT NOT NULL, content TEXT NOT NULL, tools_json TEXT, context_json TEXT, data_mode TEXT, provider TEXT, created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP)",
-  "CREATE INDEX IF NOT EXISTS ai_conversation_messages_conversation_created_idx ON ai_conversation_messages(conversation_id, created_at)",
   "CREATE INDEX IF NOT EXISTS ai_conversation_messages_conversation_position_idx ON ai_conversation_messages(conversation_id, position)",
   "CREATE TABLE IF NOT EXISTS app_users (email TEXT PRIMARY KEY, display_name TEXT NOT NULL DEFAULT '', role TEXT NOT NULL DEFAULT 'viewer', status TEXT NOT NULL DEFAULT 'active', invited_by TEXT NOT NULL, created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP, updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP, last_login_at TEXT)",
   "CREATE TABLE IF NOT EXISTS access_audit (id TEXT PRIMARY KEY, actor_email TEXT NOT NULL, action TEXT NOT NULL, target_email TEXT NOT NULL, details_json TEXT, created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP)",
@@ -65,6 +77,42 @@ const createStatements = [
   "CREATE INDEX IF NOT EXISTS access_audit_target_idx ON access_audit(target_email)",
   "PRAGMA optimize",
 ]
+
+const normalizedHrStatements = normalizedHrMigration
+  .split("--> statement-breakpoint")
+  .map((statement) => statement.trim())
+  .filter(Boolean)
+
+const reconciliationStart = normalizedHrStatements.findIndex((statement) => statement.startsWith("INSERT OR IGNORE INTO departments"))
+const reconciliationEnd = normalizedHrStatements.findIndex((statement) => statement.startsWith("CREATE VIEW IF NOT EXISTS employee_directory_view"))
+if (reconciliationStart < 0 || reconciliationEnd <= reconciliationStart) throw new Error("Normalized HR reconciliation statements are missing.")
+const normalizedHrReconciliationStatements = normalizedHrStatements.slice(reconciliationStart, reconciliationEnd)
+
+async function applyNormalizedHrSchema(database: Database): Promise<void> {
+  const applied = await database.prepare("SELECT value FROM workspace_settings WHERE key = 'normalized_hr_schema_v1'").first<{ value: string }>()
+  if (applied) return
+  for (const [index, statement] of normalizedHrStatements.entries()) {
+    try {
+      await database.prepare(statement).run()
+    } catch (error) {
+      const detail = error instanceof Error ? error.message : String(error)
+      throw new Error(`NORMALIZED_SCHEMA_STATEMENT_${index + 1}: ${detail}; ${statement.slice(0, 120)}`, { cause: error })
+    }
+  }
+  await database.prepare("INSERT INTO workspace_settings(key, value, updated_at) VALUES ('normalized_hr_schema_v1', 'true', CURRENT_TIMESTAMP) ON CONFLICT(key) DO UPDATE SET value='true', updated_at=CURRENT_TIMESTAMP").run()
+}
+
+async function refreshNormalizedReportingLines(database: Database): Promise<void> {
+  await database.prepare(`
+    UPDATE employment_assignments
+    SET manager_employee_id = (
+      SELECT e.manager_id FROM employees e
+      WHERE e.employee_id = employment_assignments.employee_id
+        AND EXISTS (SELECT 1 FROM employees m WHERE m.employee_id = e.manager_id)
+    ), updated_at = CURRENT_TIMESTAMP
+    WHERE is_primary = 1
+  `).run()
+}
 
 let readyDatabase: Database | null = null
 let setupPromise: Promise<void> | null = null
@@ -88,6 +136,64 @@ function generateDemoDataset(): Dataset {
 
 function generateDemoModelProfiles() {
   return correlatedDemo().modelProfiles
+}
+
+async function syncModelRuntime(database: Database): Promise<void> {
+  const metadata = getModelMetadata()
+  await database.prepare(`
+    INSERT INTO model_versions(
+      id, model_name, algorithm, review_threshold, evaluation_window_days,
+      metrics_json, intended_use, prohibited_use, trained_at, status
+    ) VALUES (?, ?, ?, ?, 365, ?, ?, ?, ?, 'active')
+    ON CONFLICT(id) DO UPDATE SET
+      model_name=excluded.model_name,
+      algorithm=excluded.algorithm,
+      review_threshold=excluded.review_threshold,
+      metrics_json=excluded.metrics_json,
+      intended_use=excluded.intended_use,
+      prohibited_use=excluded.prohibited_use,
+      trained_at=excluded.trained_at,
+      status='active'
+  `).bind(
+    metadata.model_version,
+    metadata.model_name,
+    metadata.model_family,
+    metadata.threshold,
+    JSON.stringify({
+      evaluation: metadata.evaluation,
+      thresholdPolicy: metadata.threshold_policy,
+      explanationMethod: metadata.explanation_method,
+      metrics: metadata.metrics,
+    }),
+    "Aggregate workforce analysis and qualified review of historical demonstration profiles.",
+    "Automated employment decisions, resignation timing, causal claims, or use as the sole basis for employee action.",
+    metadata.trained_at,
+  ).run()
+
+  const current = await database.prepare("SELECT COUNT(*) AS count FROM attrition_model_profiles WHERE data_source='demo' AND model_version=?")
+    .bind(metadata.model_version).first<{ count: number }>()
+  if (Number(current?.count ?? 0) === generateDemoModelProfiles().length) return
+
+  await database.prepare("DELETE FROM attrition_model_profiles WHERE data_source='demo'").run()
+  const statements = generateDemoModelProfiles().map((profile) => database.prepare(modelProfileInsertSql).bind(
+    profile.employee_id,
+    profile.observed_attrition,
+    profile.risk_score,
+    profile.risk_level,
+    profile.top_driver,
+    profile.monthly_income,
+    profile.distance_from_home,
+    profile.education_level,
+    profile.education_field,
+    profile.environment_satisfaction,
+    profile.job_satisfaction,
+    profile.prior_companies,
+    profile.work_life_balance,
+    profile.years_at_company,
+    profile.model_version,
+    profile.data_source,
+  ))
+  for (let index = 0; index < statements.length; index += 80) await database.batch(statements.slice(index, index + 80))
 }
 
 const insertSql: Record<HrDomain, string> = {
@@ -116,7 +222,7 @@ async function seedEmptyDomains(database: Database): Promise<void> {
       await database.batch(statements.slice(index, index + 80))
     }
   }
-  const profileCount = await database.prepare("SELECT COUNT(*) AS count FROM attrition_model_profiles").first<{ count: number }>()
+  const profileCount = await database.prepare("SELECT COUNT(*) AS count FROM attrition_model_profiles_view").first<{ count: number }>()
   if (Number(profileCount?.count ?? 0) === 0) {
     const profileStatements = generateDemoModelProfiles().map((profile) => database.prepare(modelProfileInsertSql).bind(
       profile.employee_id,
@@ -220,6 +326,36 @@ const workflowColumnDefinitions: Record<string, string> = {
   completion_notes: "TEXT",
 }
 
+const modelVersionColumnDefinitions: Record<string, string> = {
+  algorithm: "TEXT",
+  review_threshold: "REAL",
+  evaluation_window_days: "INTEGER",
+  metrics_json: "TEXT",
+  intended_use: "TEXT",
+  prohibited_use: "TEXT",
+  trained_at: "TEXT",
+  status: "TEXT NOT NULL DEFAULT 'active'",
+  created_at: "TEXT",
+}
+
+const dataImportColumnDefinitions: Record<string, string> = {
+  mode: "TEXT NOT NULL DEFAULT 'merge'",
+  total_rows: "INTEGER NOT NULL DEFAULT 0",
+  inserted_rows: "INTEGER NOT NULL DEFAULT 0",
+  updated_rows: "INTEGER NOT NULL DEFAULT 0",
+  deleted_rows: "INTEGER NOT NULL DEFAULT 0",
+  error_count: "INTEGER NOT NULL DEFAULT 0",
+  error_summary: "TEXT",
+  imported_by_email: "TEXT",
+  completed_at: "TEXT",
+}
+
+const assessmentFeatureColumnDefinitions: Record<string, string> = {
+  contribution: "REAL",
+  contribution_rank: "INTEGER",
+  explanation: "TEXT",
+}
+
 async function ensureEmployeeProfileColumns(database: Database): Promise<void> {
   const result = await database.prepare("PRAGMA table_info(employees)").all<{ name: string }>()
   const present = new Set((result.results ?? []).map((column) => column.name))
@@ -241,6 +377,36 @@ async function ensureWorkflowAccountabilityColumns(database: Database): Promise<
   await database.prepare("PRAGMA optimize").run()
 }
 
+async function ensureModelVersionColumns(database: Database): Promise<void> {
+  const result = await database.prepare("PRAGMA table_info(model_versions)").all<{ name: string }>()
+  const present = new Set((result.results ?? []).map((column) => column.name))
+  for (const [name, definition] of Object.entries(modelVersionColumnDefinitions)) {
+    if (!present.has(name)) await database.prepare(`ALTER TABLE model_versions ADD COLUMN ${name} ${definition}`).run()
+  }
+}
+
+async function ensureDataImportColumns(database: Database): Promise<void> {
+  const result = await database.prepare("PRAGMA table_info(data_imports)").all<{ name: string }>()
+  const present = new Set((result.results ?? []).map((column) => column.name))
+  for (const [name, definition] of Object.entries(dataImportColumnDefinitions)) {
+    if (!present.has(name)) await database.prepare(`ALTER TABLE data_imports ADD COLUMN ${name} ${definition}`).run()
+  }
+  await database.batch([
+    database.prepare("DROP INDEX IF EXISTS data_imports_domain_idx"),
+    database.prepare("CREATE INDEX IF NOT EXISTS data_imports_domain_date_idx ON data_imports(domain, imported_at)"),
+    database.prepare("CREATE INDEX IF NOT EXISTS data_imports_status_date_idx ON data_imports(status, imported_at)"),
+  ])
+}
+
+async function ensureAssessmentFeatureColumns(database: Database): Promise<void> {
+  const result = await database.prepare("PRAGMA table_info(attrition_assessment_features)").all<{ name: string }>()
+  if (!(result.results ?? []).length) return
+  const present = new Set((result.results ?? []).map((column) => column.name))
+  for (const [name, definition] of Object.entries(assessmentFeatureColumnDefinitions)) {
+    if (!present.has(name)) await database.prepare(`ALTER TABLE attrition_assessment_features ADD COLUMN ${name} ${definition}`).run()
+  }
+}
+
 async function backfillWorkflowAccountabilityOnce(database: Database): Promise<void> {
   const settingKey = "workflow_accountability_v1"
   const initialized = await database.prepare("SELECT value FROM workspace_settings WHERE key = ?").bind(settingKey).first<{ value: string }>()
@@ -251,8 +417,8 @@ async function backfillWorkflowAccountabilityOnce(database: Database): Promise<v
       UPDATE workflow_requests
       SET owner_email = COALESCE(NULLIF(owner_email, ''), (
             SELECT NULLIF(m.work_email, '')
-            FROM employees e
-            LEFT JOIN employees m ON m.employee_id = e.manager_id
+            FROM employee_directory_view e
+            LEFT JOIN employee_directory_view m ON m.employee_id = e.manager_id
             WHERE e.employee_id = workflow_requests.employee_id
           ), 'people-ops@laidbackhr.cloud'),
           due_at = COALESCE(due_at, MIN(date(created_at, '+3 days'), date(json_extract(details_json, '$.startDate'), '-1 day'))),
@@ -299,7 +465,7 @@ async function backfillWorkflowAccountabilityOnce(database: Database): Promise<v
     `),
     database.prepare(`
       UPDATE workflow_requests
-      SET owner_email = COALESCE(NULLIF(owner_email, ''), (SELECT NULLIF(work_email, '') FROM employees WHERE employee_id = workflow_requests.employee_id), requested_by_email),
+      SET owner_email = COALESCE(NULLIF(owner_email, ''), (SELECT NULLIF(work_email, '') FROM employee_directory_view WHERE employee_id = workflow_requests.employee_id), requested_by_email),
           due_at = COALESCE(due_at, json_extract(details_json, '$.dueDate')),
           priority = CASE
             WHEN LOWER(status) = 'completed' THEN 'low'
@@ -319,8 +485,8 @@ async function backfillWorkflowAccountabilityOnce(database: Database): Promise<v
   ])
 }
 
-async function syncOpenOperationalWork(database: Database): Promise<void> {
-  await database.batch([
+function operationalWorkStatements(database: Database): Statement[] {
+  return [
     database.prepare(`
       INSERT OR IGNORE INTO workflow_requests(
         id, type, employee_id, title, status, details_json, requested_by_email,
@@ -334,9 +500,9 @@ async function syncOpenOperationalWork(database: Database): Promise<void> {
         COALESCE(NULLIF(m.work_email, ''), 'people-ops@laidbackhr.cloud'),
         MIN(date('now', '+3 days'), date(l.start_date, '-1 day')),
         'Approve or decline the request.', 'leave_record', l.id, CURRENT_TIMESTAMP, 'restricted', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP
-      FROM leave_records l
-      LEFT JOIN employees e ON e.employee_id = l.employee_id
-      LEFT JOIN employees m ON m.employee_id = e.manager_id
+      FROM leave_requests_view l
+      LEFT JOIN employee_directory_view e ON e.employee_id = l.employee_id
+      LEFT JOIN employee_directory_view m ON m.employee_id = e.manager_id
       WHERE LOWER(l.data_source) <> 'demo' AND LOWER(l.approval_status) = 'pending'
     `),
     database.prepare(`
@@ -357,7 +523,7 @@ async function syncOpenOperationalWork(database: Database): Promise<void> {
           ELSE 'Record recruiting progress or confirm the requisition remains active.'
         END,
         'hiring_record', h.id, CURRENT_TIMESTAMP, 'internal', h.application_date, CURRENT_TIMESTAMP
-      FROM hiring_records h
+      FROM hiring_requisitions_view h
       WHERE LOWER(h.data_source) <> 'demo' AND LOWER(h.recruitment_status) IN ('requested', 'open', 'offer')
     `),
     database.prepare(`
@@ -371,15 +537,19 @@ async function syncOpenOperationalWork(database: Database): Promise<void> {
         'data-import@laidbackhr.cloud', 'medium', COALESCE(NULLIF(e.work_email, ''), 'learning@laidbackhr.cloud'), NULL,
         'Set a due date before escalation.', 'training_record', t.id, CURRENT_TIMESTAMP,
         'No assignment due date was included in the imported record.', 'internal', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP
-      FROM training_records t
-      LEFT JOIN employees e ON e.employee_id = t.employee_id
+      FROM learning_assignments_view t
+      LEFT JOIN employee_directory_view e ON e.employee_id = t.employee_id
       WHERE LOWER(t.data_source) <> 'demo' AND LOWER(t.completion_status) <> 'completed'
     `),
-  ])
+  ]
+}
+
+async function syncOpenOperationalWork(database: Database): Promise<void> {
+  await database.batch(operationalWorkStatements(database))
 }
 
 async function backfillDemoProfiles(database: Database): Promise<void> {
-  const blanks = await database.prepare("SELECT employee_id FROM employees WHERE data_source = 'demo' AND COALESCE(first_name, '') = ''").all<{ employee_id: string }>()
+  const blanks = await database.prepare("SELECT employee_id FROM employee_directory_view WHERE data_source = 'demo' AND COALESCE(first_name, '') = ''").all<{ employee_id: string }>()
   if (!(blanks.results ?? []).length) return
   const demoById = new Map(generateDemoDataset().employees.map((row) => [String(row.employee_id), row]))
   const statements = (blanks.results ?? []).flatMap(({ employee_id }) => {
@@ -404,7 +574,7 @@ async function seedLeaveWorkflowExamplesOnce(database: Database): Promise<void> 
   const initialized = await database.prepare("SELECT value FROM workspace_settings WHERE key = 'leave_workflow_examples_v1'").first<{ value: string }>()
   if (initialized) return
 
-  const result = await database.prepare("SELECT employee_id, department FROM employees WHERE archived_at IS NULL AND LOWER(employment_status) <> 'terminated' ORDER BY CASE WHEN LOWER(data_source) = 'demo' THEN 1 ELSE 0 END, employee_id LIMIT 18").all<LeaveExampleEmployee>()
+  const result = await database.prepare("SELECT employee_id, department FROM employee_directory_view WHERE archived_at IS NULL AND LOWER(employment_status) <> 'terminated' ORDER BY CASE WHEN LOWER(data_source) = 'demo' THEN 1 ELSE 0 END, employee_id LIMIT 18").all<LeaveExampleEmployee>()
   const employees = result.results ?? []
   if (!employees.length) return
 
@@ -453,7 +623,7 @@ async function seedTrainingWorkflowExamplesOnce(database: Database): Promise<voi
   const initialized = await database.prepare("SELECT value FROM workspace_settings WHERE key = 'training_workflow_examples_v1'").first<{ value: string }>()
   if (initialized) return
 
-  const result = await database.prepare("SELECT employee_id, department FROM employees WHERE archived_at IS NULL AND LOWER(employment_status) <> 'terminated' ORDER BY CASE WHEN LOWER(data_source) = 'demo' THEN 1 ELSE 0 END, employee_id LIMIT 18").all<LeaveExampleEmployee>()
+  const result = await database.prepare("SELECT employee_id, department FROM employee_directory_view WHERE archived_at IS NULL AND LOWER(employment_status) <> 'terminated' ORDER BY CASE WHEN LOWER(data_source) = 'demo' THEN 1 ELSE 0 END, employee_id LIMIT 18").all<LeaveExampleEmployee>()
   const employees = result.results ?? []
   if (!employees.length) return
 
@@ -506,7 +676,7 @@ async function seedSoftwareCompanyWorkflowsOnce(database: Database): Promise<voi
     .bind(settingKey).first<{ value: string }>()
   if (initialized) return
 
-  const result = await database.prepare("SELECT employee_id, department FROM employees WHERE archived_at IS NULL AND LOWER(employment_status) <> 'terminated' AND LOWER(COALESCE(work_email, '')) <> 'pranavreddyg17@gmail.com' ORDER BY employee_id LIMIT 48")
+  const result = await database.prepare("SELECT employee_id, department FROM employee_directory_view WHERE archived_at IS NULL AND LOWER(employment_status) <> 'terminated' AND LOWER(COALESCE(work_email, '')) <> 'pranavreddyg17@gmail.com' ORDER BY employee_id LIMIT 48")
     .all<SoftwareWorkflowEmployee>()
   const employees = result.results ?? []
   if (!employees.length) return
@@ -633,6 +803,29 @@ async function seedSoftwareCompanyWorkflowsOnce(database: Database): Promise<voi
     .bind(settingKey).run()
 }
 
+async function refreshCurrentLeaveExamples(database: Database): Promise<void> {
+  const today = dateFromToday(0)
+  const settingKey = "software_company_leave_calendar_date"
+  const refreshed = await database.prepare("SELECT value FROM workspace_settings WHERE key = ?")
+    .bind(settingKey).first<{ value: string }>()
+  if (refreshed?.value === today) return
+
+  const examples = [
+    { id: "LEV-SOFTWARE-007", start: -1, days: 4 },
+    { id: "LEV-SOFTWARE-008", start: 0, days: 1 },
+  ] as const
+  for (const example of examples) {
+    const startDate = dateFromToday(example.start)
+    const endDate = dateFromToday(example.start + example.days - 1)
+    await database.prepare("UPDATE leave_records SET start_date=?, end_date=?, leave_days=?, updated_at=CURRENT_TIMESTAMP WHERE id=? AND data_source='workflow' AND approval_status='Approved'")
+      .bind(startDate, endDate, example.days, example.id).run()
+    await database.prepare("UPDATE workflow_requests SET details_json=json_set(details_json, '$.startDate', ?, '$.endDate', ?, '$.days', ?), updated_at=CURRENT_TIMESTAMP WHERE id=? AND EXISTS (SELECT 1 FROM leave_records l WHERE l.id=? AND l.approval_status='Approved')")
+      .bind(startDate, endDate, example.days, example.id, example.id).run()
+  }
+  await database.prepare("INSERT INTO workspace_settings(key, value, updated_at) VALUES (?, ?, CURRENT_TIMESTAMP) ON CONFLICT(key) DO UPDATE SET value=excluded.value, updated_at=CURRENT_TIMESTAMP")
+    .bind(settingKey, today).run()
+}
+
 async function seedHiringCandidatePipelineOnce(database: Database): Promise<void> {
   const settingKey = "hiring_candidate_pipeline_seed_v1"
   const initialized = await database.prepare("SELECT value FROM workspace_settings WHERE key=?").bind(settingKey).first<{ value: string }>()
@@ -672,15 +865,22 @@ export async function ensureHrDatabase(): Promise<Database | null> {
     for (const statement of createStatements) await database.prepare(statement).run()
     await ensureEmployeeProfileColumns(database)
     await ensureWorkflowAccountabilityColumns(database)
+    await ensureDataImportColumns(database)
+    await ensureAssessmentFeatureColumns(database)
+    await applyNormalizedHrSchema(database)
+    await ensureModelVersionColumns(database)
     await seedDemoOnce(database)
     await seedCorrelatedDemoOnce(database)
+    await syncModelRuntime(database)
     await backfillDemoProfiles(database)
     await seedLeaveWorkflowExamplesOnce(database)
     await seedTrainingWorkflowExamplesOnce(database)
     await seedSoftwareCompanyWorkflowsOnce(database)
+    await refreshCurrentLeaveExamples(database)
     await seedHiringCandidatePipelineOnce(database)
     await backfillWorkflowAccountabilityOnce(database)
     await syncOpenOperationalWork(database)
+    await refreshNormalizedReportingLines(database)
     await database.prepare("INSERT OR IGNORE INTO app_users(email, display_name, role, status, invited_by) VALUES ('pranavreddyg17@gmail.com', 'Pranav Reddy', 'admin', 'active', 'system')").run()
   })()
   try {
@@ -704,86 +904,323 @@ const nullableFields = new Set(["preferred_name", "work_email", "phone", "manage
 const numberFields = new Set(["tenure_years", "time_to_hire_days", "leave_days", "training_hours", "assessment_score", "months_since_previous_promotion"])
 const dateFields = new Set(["hire_date", "application_date", "hiring_date", "exit_date", "start_date", "end_date", "completion_date", "promotion_date"])
 
-function validatedRows(domain: HrDomain, rows: unknown[]): Array<Record<string, string | number | null>> {
-  const errors: string[] = []
-  const normalized = rows.map((source, index) => {
-    try {
-      const row = normalizeRow(source)
-      const result: Record<string, string | number | null> = {}
-      for (const field of importFields[domain]) {
-        let value = row[field]
-        if (field === "id" && (value === undefined || value === "")) value = `${domain.slice(0, 3).toUpperCase()}-${crypto.randomUUID()}`
-        if (domain === "employees" && field === "first_name" && (value === undefined || value === "")) value = "Employee"
-        if (domain === "employees" && field === "last_name" && (value === undefined || value === "")) value = String(row.employee_id ?? "")
-        if (domain === "employees" && field === "employment_type" && (value === undefined || value === "")) value = "Full-time"
-        if ((value === undefined || value === "") && nullableFields.has(field)) {
-          result[field] = null
-          continue
-        }
-        if (value === undefined || value === null || value === "") throw new Error(`missing ${field}`)
-        if (numberFields.has(field)) {
-          const number = typeof value === "number" ? value : Number(value)
-          if (!Number.isFinite(number) || number < 0) throw new Error(`${field} must be a non-negative number`)
-          result[field] = number
-        } else {
-          const text = String(value)
-          if (dateFields.has(field) && !/^\d{4}-\d{2}-\d{2}$/.test(text)) throw new Error(`${field} must use YYYY-MM-DD`)
-          result[field] = text
-        }
-      }
-      result.data_source = "imported"
-      return result
-    } catch (error) {
-      errors.push(`Row ${index + 2}: ${error instanceof Error ? error.message : "invalid data"}`)
-      return null
-    }
-  }).filter((row): row is Record<string, string | number | null> => row !== null)
-  if (errors.length) throw new Error(errors.slice(0, 20).join("\n"))
-  return normalized
+const primaryKeyByDomain: Record<HrDomain, string> = {
+  employees: "employee_id",
+  hiring: "id",
+  attrition: "id",
+  leave: "id",
+  training: "id",
+  promotions: "id",
 }
 
-export async function importHrData({
-  domain,
-  rows,
-  filename,
-  replace = false,
-}: {
+const enumValues: Partial<Record<HrDomain, Record<string, string[]>>> = {
+  employees: { employment_status: ["Active", "On Leave", "Preboarding", "Terminated"] },
+  hiring: { recruitment_status: ["Requested", "Approved", "Open", "Applied", "Screening", "Interview", "Offer", "Hired", "Rejected", "Closed", "Cancelled"] },
+  attrition: { exit_type: ["Voluntary", "Involuntary"] },
+  leave: { approval_status: ["Pending", "Approved", "Rejected", "Cancelled"] },
+  training: { completion_status: ["Assigned", "In progress", "Completed", "Incomplete", "Cancelled"] },
+}
+
+function isIsoDate(value: string): boolean {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) return false
+  const parsed = new Date(`${value}T00:00:00Z`)
+  return !Number.isNaN(parsed.getTime()) && parsed.toISOString().slice(0, 10) === value
+}
+
+function canonicalEnum(domain: HrDomain, field: string, value: string): string | null {
+  const allowed = enumValues[domain]?.[field]
+  if (!allowed) return value
+  return allowed.find((item) => item.toLowerCase() === value.toLowerCase()) ?? null
+}
+
+function addIssue(issues: ImportIssue[], issue: ImportIssue): void {
+  if (issues.length < 100) issues.push(issue)
+}
+
+async function selectExistingValues(database: Database, table: string, column: string, values: string[]): Promise<Set<string>> {
+  const found = new Set<string>()
+  for (let index = 0; index < values.length; index += 80) {
+    const chunk = values.slice(index, index + 80)
+    if (!chunk.length) continue
+    const result = await database.prepare(`SELECT ${column} AS value FROM ${table} WHERE ${column} IN (${chunk.map(() => "?").join(",")})`)
+      .bind(...chunk).all<{ value: string }>()
+    for (const row of result.results ?? []) found.add(String(row.value))
+  }
+  return found
+}
+
+async function selectExistingSources(database: Database, domain: HrDomain, values: string[]): Promise<Map<string, string>> {
+  const found = new Map<string, string>()
+  const column = primaryKeyByDomain[domain]
+  for (let index = 0; index < values.length; index += 80) {
+    const chunk = values.slice(index, index + 80)
+    if (!chunk.length) continue
+    const result = await database.prepare(`SELECT ${column} AS value, data_source AS dataSource FROM ${tableByDomain[domain]} WHERE ${column} IN (${chunk.map(() => "?").join(",")})`)
+      .bind(...chunk).all<{ value: string; dataSource: string }>()
+    for (const row of result.results ?? []) found.set(String(row.value), String(row.dataSource))
+  }
+  return found
+}
+
+type ValidatedImport = { preview: ImportPreview; rows: Array<Record<string, string | number | null>> }
+
+async function validateImportRows({ database, domain, rows, filename, mode }: {
+  database: Database
   domain: HrDomain
   rows: unknown[]
   filename: string
-  replace?: boolean
-}): Promise<{ domain: HrDomain; imported: number; filename: string }> {
+  mode: ImportMode
+}): Promise<ValidatedImport> {
+  const issues: ImportIssue[] = []
+  const invalidRows = new Set<number>()
+  const normalizedSource = rows.map((source, index) => {
+    try {
+      return normalizeRow(source)
+    } catch (error) {
+      invalidRows.add(index)
+      addIssue(issues, { severity: "error", code: "invalid_row", message: error instanceof Error ? error.message : "Invalid row.", row: index + 2 })
+      return {}
+    }
+  })
+  const availableColumns = new Set(Object.keys(normalizedSource[0] ?? {}))
+  for (const field of importFields[domain]) {
+    if (!availableColumns.has(field)) {
+      normalizedSource.forEach((_, index) => invalidRows.add(index))
+      addIssue(issues, { severity: "error", code: "missing_column", field, message: `Required column “${field}” is missing.` })
+    }
+  }
+
+  const clean = normalizedSource.map((row, index) => {
+    const result: Record<string, string | number | null> = {}
+    for (const field of importFields[domain]) {
+      const value = row[field]
+      if ((value === undefined || value === null || value === "") && nullableFields.has(field)) {
+        result[field] = null
+        continue
+      }
+      if (value === undefined || value === null || value === "") {
+        invalidRows.add(index)
+        addIssue(issues, { severity: "error", code: "required_value", field, row: index + 2, message: `${field} is required.` })
+        continue
+      }
+      if (numberFields.has(field)) {
+        const numeric = typeof value === "number" ? value : Number(value)
+        if (!Number.isFinite(numeric) || numeric < 0) {
+          invalidRows.add(index)
+          addIssue(issues, { severity: "error", code: "invalid_number", field, row: index + 2, message: `${field} must be a non-negative number.` })
+        } else result[field] = numeric
+        continue
+      }
+      const text = String(value).trim()
+      if (dateFields.has(field) && !isIsoDate(text)) {
+        invalidRows.add(index)
+        addIssue(issues, { severity: "error", code: "invalid_date", field, row: index + 2, message: `${field} must be a valid YYYY-MM-DD date.` })
+        continue
+      }
+      const canonical = canonicalEnum(domain, field, text)
+      if (canonical === null) {
+        invalidRows.add(index)
+        addIssue(issues, { severity: "error", code: "invalid_value", field, row: index + 2, message: `${field} has an unsupported value.` })
+      } else result[field] = canonical
+    }
+    if (result.work_email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(String(result.work_email))) {
+      invalidRows.add(index)
+      addIssue(issues, { severity: "error", code: "invalid_email", field: "work_email", row: index + 2, message: "work_email is not a valid email address." })
+    }
+    const datePairs: Array<[string, string]> = domain === "hiring" ? [["application_date", "hiring_date"]] : domain === "leave" ? [["start_date", "end_date"]] : []
+    for (const [start, end] of datePairs) {
+      if (result[start] && result[end] && String(result[end]) < String(result[start])) {
+        invalidRows.add(index)
+        addIssue(issues, { severity: "error", code: "date_order", field: end, row: index + 2, message: `${end} cannot be before ${start}.` })
+      }
+    }
+    result.data_source = "imported"
+    return result
+  })
+
+  const primaryKey = primaryKeyByDomain[domain]
+  const seenKeys = new Map<string, number>()
+  for (const [index, row] of clean.entries()) {
+    const key = String(row[primaryKey] ?? "")
+    if (!key) continue
+    const previous = seenKeys.get(key)
+    if (previous !== undefined) {
+      invalidRows.add(index)
+      invalidRows.add(previous)
+      addIssue(issues, { severity: "error", code: "duplicate_id", field: primaryKey, row: index + 2, message: `${primaryKey} duplicates row ${previous + 2}.` })
+    } else seenKeys.set(key, index)
+  }
+
+  const allKeys = [...seenKeys.keys()]
+  if (domain !== "employees") {
+    const employeeIds = [...new Set(clean.map((row) => String(row.employee_id ?? "")).filter(Boolean))]
+    const existingEmployees = await selectExistingValues(database, "employees", "employee_id", employeeIds)
+    for (const [index, row] of clean.entries()) {
+      const employeeId = String(row.employee_id ?? "")
+      if (employeeId && !existingEmployees.has(employeeId)) {
+        invalidRows.add(index)
+        addIssue(issues, { severity: "error", code: "unknown_employee", field: "employee_id", row: index + 2, message: `Employee ${employeeId} is not in the employee directory.` })
+      }
+    }
+  } else {
+    const managerIds = [...new Set(clean.map((row) => String(row.manager_id ?? "")).filter(Boolean))]
+    const existingManagers = await selectExistingValues(database, "employees", "employee_id", managerIds)
+    const fileEmployees = new Set(allKeys)
+    for (const [index, row] of clean.entries()) {
+      const managerId = String(row.manager_id ?? "")
+      if (managerId && !existingManagers.has(managerId) && !fileEmployees.has(managerId)) {
+        addIssue(issues, { severity: "warning", code: "unknown_manager", field: "manager_id", row: index + 2, message: `Manager ${managerId} is not in this file or the employee directory.` })
+      }
+    }
+  }
+
+  const replaced = mode === "replace_imported"
+    ? await database.prepare(`SELECT COUNT(*) AS count FROM ${tableByDomain[domain]} WHERE data_source = 'imported'`).first<{ count: number }>()
+    : null
+  const validKeys = allKeys.filter((key) => {
+    const rowIndex = seenKeys.get(key)
+    return rowIndex !== undefined && !invalidRows.has(rowIndex)
+  })
+  const existingSources = await selectExistingSources(database, domain, validKeys)
+  const updateKeys = mode === "replace_imported"
+    ? validKeys.filter((key) => existingSources.has(key) && existingSources.get(key) !== "imported")
+    : validKeys.filter((key) => existingSources.has(key))
+  const errorCount = issues.filter((issue) => issue.severity === "error").length
+  return {
+    rows: clean.filter((_, index) => !invalidRows.has(index)),
+    preview: {
+      domain,
+      filename: filename.slice(0, 240) || `${domain}.csv`,
+      mode,
+      totalRows: rows.length,
+      validRows: rows.length - invalidRows.size,
+      invalidRows: invalidRows.size,
+      inserts: validKeys.length - updateKeys.length,
+      updates: updateKeys.length,
+      replacedRows: Number(replaced?.count ?? 0),
+      canApply: errorCount === 0 && invalidRows.size === 0,
+      issues,
+    },
+  }
+}
+
+export async function validateHrImport({ domain, rows, filename, mode = "merge" }: {
+  domain: HrDomain
+  rows: unknown[]
+  filename: string
+  mode?: ImportMode
+}): Promise<ImportPreview> {
   if (!hrDomains.includes(domain)) throw new Error("Unsupported HR data domain.")
   if (!Array.isArray(rows) || rows.length < 1 || rows.length > 5000) throw new Error("Import must contain between 1 and 5,000 rows.")
+  if (mode !== "merge" && mode !== "replace_imported") throw new Error("Unsupported import mode.")
   const database = await ensureHrDatabase()
   if (!database) throw new Error("Persistent HR database is unavailable.")
-  const clean = validatedRows(domain, rows)
+  return (await validateImportRows({ database, domain, rows, filename, mode })).preview
+}
+
+function stagedImportSql(domain: HrDomain): string {
+  const fields = importFields[domain]
   const table = tableByDomain[domain]
-  if (replace) await database.prepare(`DELETE FROM ${table}`).run()
-  else await database.prepare(`DELETE FROM ${table} WHERE data_source = 'demo'`).run()
-  const statements = clean.map((row) => database.prepare(insertSql[domain]).bind(...valuesFor(domain, row)))
-  for (let index = 0; index < statements.length; index += 80) await database.batch(statements.slice(index, index + 80))
-  await database.prepare("INSERT INTO data_imports(id, domain, filename, row_count, status, imported_at) VALUES (?, ?, ?, ?, 'completed', CURRENT_TIMESTAMP)")
-    .bind(crypto.randomUUID(), domain, filename.slice(0, 240) || `${domain}.csv`, clean.length)
-    .run()
-  await syncOpenOperationalWork(database)
-  return { domain, imported: clean.length, filename }
+  const primaryKey = primaryKeyByDomain[domain]
+  const select = fields.map((field) => `json_extract(payload_json, '$.${field}')`).join(", ")
+  const updates = fields.filter((field) => field !== primaryKey).map((field) => `${field}=excluded.${field}`)
+  updates.push("data_source=excluded.data_source")
+  if (domain === "employees") updates.push("archived_at=NULL", `version=${table}.version+1`, "updated_at=CURRENT_TIMESTAMP")
+  else updates.push("updated_at=CURRENT_TIMESTAMP")
+  return `INSERT INTO ${table}(${fields.join(", ")}, data_source) SELECT ${select}, 'imported' FROM data_import_rows WHERE job_id = ? AND true ON CONFLICT(${primaryKey}) DO UPDATE SET ${updates.join(",")}`
+}
+
+export async function importHrData({ domain, rows, filename, mode = "merge", actorEmail }: {
+  domain: HrDomain
+  rows: unknown[]
+  filename: string
+  mode?: ImportMode
+  actorEmail?: string
+}): Promise<{ domain: HrDomain; imported: number; filename: string; jobId: string; preview: ImportPreview }> {
+  if (!hrDomains.includes(domain)) throw new Error("Unsupported HR data domain.")
+  if (!Array.isArray(rows) || rows.length < 1 || rows.length > 5000) throw new Error("Import must contain between 1 and 5,000 rows.")
+  if (mode !== "merge" && mode !== "replace_imported") throw new Error("Unsupported import mode.")
+  const database = await ensureHrDatabase()
+  if (!database) throw new Error("Persistent HR database is unavailable.")
+  const validation = await validateImportRows({ database, domain, rows, filename, mode })
+  if (!validation.preview.canApply) throw Object.assign(new Error("Import validation failed."), { preview: validation.preview })
+
+  const jobId = crypto.randomUUID()
+  const safeFilename = filename.slice(0, 240) || `${domain}.csv`
+  await database.prepare("INSERT INTO data_imports(id, domain, filename, mode, total_rows, row_count, inserted_rows, updated_rows, deleted_rows, error_count, imported_by_email, status, imported_at) VALUES (?, ?, ?, ?, ?, 0, 0, 0, 0, 0, ?, 'processing', CURRENT_TIMESTAMP)")
+    .bind(jobId, domain, safeFilename, mode, validation.preview.totalRows, actorEmail ?? null).run()
+  try {
+    const primaryKey = primaryKeyByDomain[domain]
+    const stageStatements = validation.rows.map((row) => database.prepare("INSERT INTO data_import_rows(job_id, row_key, payload_json) VALUES (?, ?, ?)")
+      .bind(jobId, String(row[primaryKey]), JSON.stringify(row)))
+    for (let index = 0; index < stageStatements.length; index += 80) await database.batch(stageStatements.slice(index, index + 80))
+    const finalStatements: Statement[] = []
+    if (mode === "replace_imported") finalStatements.push(database.prepare(`DELETE FROM ${tableByDomain[domain]} WHERE data_source = 'imported'`))
+    finalStatements.push(database.prepare(stagedImportSql(domain)).bind(jobId))
+    if (domain === "employees") {
+      finalStatements.push(...normalizedHrReconciliationStatements.map((statement) => database.prepare(statement)))
+      finalStatements.push(database.prepare(`
+        UPDATE employment_assignments
+        SET manager_employee_id = (
+          SELECT e.manager_id FROM employees e
+          WHERE e.employee_id = employment_assignments.employee_id
+            AND EXISTS (SELECT 1 FROM employees m WHERE m.employee_id = e.manager_id)
+        ), updated_at = CURRENT_TIMESTAMP
+        WHERE is_primary = 1
+      `))
+    }
+    finalStatements.push(
+      ...operationalWorkStatements(database),
+      database.prepare("UPDATE data_imports SET row_count=?, inserted_rows=?, updated_rows=?, deleted_rows=?, status='completed', completed_at=CURRENT_TIMESTAMP WHERE id=?")
+        .bind(validation.preview.validRows, validation.preview.inserts, validation.preview.updates, validation.preview.replacedRows, jobId),
+      database.prepare("DELETE FROM data_import_rows WHERE job_id=?").bind(jobId),
+    )
+    await database.batch(finalStatements)
+    return { domain, imported: validation.preview.validRows, filename: safeFilename, jobId, preview: validation.preview }
+  } catch (error) {
+    const detail = error instanceof Error ? error.message.slice(0, 1000) : "Import failed."
+    await database.batch([
+      database.prepare("DELETE FROM data_import_rows WHERE job_id=?").bind(jobId),
+      database.prepare("UPDATE data_imports SET status='failed', error_count=1, error_summary=?, completed_at=CURRENT_TIMESTAMP WHERE id=?").bind(detail, jobId),
+    ])
+    throw error
+  }
+}
+
+export async function getDataImportJobs(limit = 20): Promise<ImportJob[]> {
+  const database = await ensureHrDatabase()
+  if (!database) return []
+  const result = await database.prepare("SELECT id, domain, filename, mode, status, total_rows AS totalRows, row_count AS rowCount, inserted_rows AS insertedRows, updated_rows AS updatedRows, deleted_rows AS deletedRows, error_count AS errorCount, error_summary AS errorSummary, imported_by_email AS importedByEmail, imported_at AS startedAt, COALESCE(completed_at, CASE WHEN status='completed' THEN imported_at END) AS completedAt FROM data_imports ORDER BY imported_at DESC LIMIT ?")
+    .bind(Math.min(Math.max(limit, 1), 100)).all<ImportJob>()
+  return result.results ?? []
+}
+
+export async function getDataImportSummary(): Promise<{ completedImports: number; failedImports: number; lastCompletedAt: string | null }> {
+  const database = await ensureHrDatabase()
+  if (!database) return { completedImports: 0, failedImports: 0, lastCompletedAt: null }
+  const result = await database.prepare("SELECT SUM(CASE WHEN status='completed' THEN 1 ELSE 0 END) AS completedImports, SUM(CASE WHEN status='failed' THEN 1 ELSE 0 END) AS failedImports, MAX(CASE WHEN status='completed' THEN COALESCE(completed_at, imported_at) END) AS lastCompletedAt FROM data_imports")
+    .first<{ completedImports: number | null; failedImports: number | null; lastCompletedAt: string | null }>()
+  return {
+    completedImports: Number(result?.completedImports ?? 0),
+    failedImports: Number(result?.failedImports ?? 0),
+    lastCompletedAt: result?.lastCompletedAt ?? null,
+  }
 }
 
 export async function readDomainRows(domain: HrDomain): Promise<Array<Record<string, unknown>>> {
   const database = await ensureHrDatabase()
   if (!database) return generateDemoDataset()[domain]
   if (domain === "training") {
-    const result = await database.prepare("SELECT t.*, json_extract(w.details_json, '$.dueDate') AS due_date, w.requested_by_email, w.created_at AS assigned_at FROM training_records t LEFT JOIN workflow_requests w ON w.id=t.id AND w.type='training' ORDER BY t.updated_at DESC LIMIT 10000").all<Record<string, unknown>>()
+    const result = await database.prepare("SELECT t.*, COALESCE(t.due_date, json_extract(w.details_json, '$.dueDate')) AS due_date, w.requested_by_email, COALESCE(t.assigned_at, w.created_at) AS assigned_at FROM learning_assignments_view t LEFT JOIN workflow_requests w ON w.id=t.id AND w.type='training' ORDER BY t.updated_at DESC LIMIT 10000").all<Record<string, unknown>>()
     return result.results ?? []
   }
-  const result = await database.prepare(`SELECT * FROM ${tableByDomain[domain]} ORDER BY updated_at DESC LIMIT 10000`).all<Record<string, unknown>>()
+  const result = await database.prepare(`SELECT * FROM ${readViewByDomain[domain]} ORDER BY updated_at DESC LIMIT 10000`).all<Record<string, unknown>>()
   return result.results ?? []
 }
 
 export async function readAttritionModelProfiles(): Promise<Array<Record<string, unknown>>> {
   const database = await ensureHrDatabase()
   if (!database) return generateDemoModelProfiles()
-  const result = await database.prepare("SELECT * FROM attrition_model_profiles ORDER BY risk_score DESC LIMIT 10000").all<Record<string, unknown>>()
+  const result = await database.prepare("SELECT * FROM attrition_model_profiles_view ORDER BY risk_score DESC LIMIT 10000").all<Record<string, unknown>>()
   return result.results ?? []
 }

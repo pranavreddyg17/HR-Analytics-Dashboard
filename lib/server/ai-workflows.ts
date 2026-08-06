@@ -70,7 +70,7 @@ async function availableEmployees(db: Database, actor: RequestActor): Promise<Co
       location,
       tenure_years,
       data_source
-    FROM employees
+    FROM employee_directory_view
     WHERE archived_at IS NULL
       AND LOWER(employment_status) <> 'terminated'
       AND LOWER(data_source) <> 'demo'
@@ -79,7 +79,7 @@ async function availableEmployees(db: Database, actor: RequestActor): Promise<Co
 
   let available = rows.results ?? []
   if (actor.role === "manager") {
-    const manager = await db.prepare("SELECT employee_id FROM employees WHERE LOWER(work_email)=LOWER(?) AND archived_at IS NULL")
+    const manager = await db.prepare("SELECT employee_id FROM employee_directory_view WHERE LOWER(work_email)=LOWER(?) AND archived_at IS NULL")
       .bind(actor.email)
       .first<{ employee_id: string }>()
     if (!manager) throw new PeopleError("Your account is not linked to an employee record.", 409)
@@ -191,7 +191,7 @@ export async function planAiCalendarWorkflow(value: unknown, actor: RequestActor
 
   const db = await database()
   const available = await availableEmployees(db, actor)
-  const promoted = await db.prepare("SELECT DISTINCT employee_id FROM promotion_records").all<{ employee_id: string }>()
+  const promoted = await db.prepare("SELECT DISTINCT employee_id FROM promotion_events_view").all<{ employee_id: string }>()
   const promotedIds = new Set((promoted.results ?? []).map((row) => row.employee_id))
 
   const exactMatches = available.filter((employee) => {
@@ -307,7 +307,7 @@ function publicDraft(row: DraftRow) {
 
 export async function listAiWorkflowDrafts(actor: RequestActor) {
   const db = await database()
-  const rows = await db.prepare("SELECT * FROM ai_workflow_drafts WHERE LOWER(created_by_email)=LOWER(?) ORDER BY created_at DESC LIMIT 12")
+  const rows = await db.prepare("SELECT * FROM ai_workflow_drafts WHERE created_by_email = ? ORDER BY created_at DESC LIMIT 12")
     .bind(actor.email)
     .all<DraftRow>()
   return { items: (rows.results ?? []).map(publicDraft) }

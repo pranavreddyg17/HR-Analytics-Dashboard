@@ -127,7 +127,7 @@ function wantsExplanation(message: string): boolean {
 }
 
 function wantsRetentionPlan(message: string): boolean {
-  return /\bprevent\b|\breduce\b|\bmitigate\b|\baddress\b|\bretention plan\b|\baction plan\b|what should (?:i|we|hr) do|how (?:can|should) (?:i|we|hr) (?:retain|prevent|reduce|address)/i.test(message)
+  return /\bprevent\b|\breduce\b|\bmitigate\b|\baddress\b|\bretention plan\b|\baction plan\b|\b360(?:-degree)?\b|skill continuity|technical skills?|downstream impact|what (?:else )?(?:does|gets) affected|best practices?|boost (?:their )?confidence|what should (?:i|we|hr) do|how (?:can|should) (?:i|we|hr) (?:retain|prevent|reduce|address|manage)/i.test(message)
 }
 
 function referencesPriorSelection(message: string): boolean {

@@ -3,40 +3,43 @@
 import { useEffect, useMemo, useState } from "react"
 import Link from "next/link"
 import { useRouter, useSearchParams } from "next/navigation"
-import { CheckCircle2, CircleAlert, LoaderCircle } from "lucide-react"
+import { CheckCircle2, CircleAlert, LoaderCircle, X } from "lucide-react"
 
+import { Button } from "@/components/ui/button"
 import { WorkflowCreator, type WorkflowType } from "@/components/workflow-creator"
+import { WorkspaceHeader, WorkspacePage } from "@/components/workspace-ui"
+import type { InboxOperations } from "@/lib/inbox-types"
+import type { LeaveOperationRecord, LeaveOperations } from "@/lib/leave-types"
+import { safeReturnTo, withReturnTo } from "@/lib/navigation"
 import type { InboxItem, ManagedEmployee, WorkflowActorContext } from "@/lib/people-types"
 import { cn } from "@/lib/utils"
-import { WorkspaceHeader, WorkspacePage } from "@/components/workspace-ui"
-import { safeReturnTo, withReturnTo } from "@/lib/navigation"
 
-type QueueView = "my_work" | "decisions" | "managers" | "employees" | "overdue" | "completed"
+type QueueView = "my_work" | "decisions" | "overdue" | "managers" | "employees" | "open" | "completed"
 type DomainFilter = "all" | InboxItem["type"]
+type WorkflowAction = "approve" | "reject" | "complete"
 
-const queueOptions: Array<{ id: QueueView; label: string }> = [
-  { id: "my_work", label: "My work" },
-  { id: "decisions", label: "Awaiting my decision" },
-  { id: "managers", label: "Assigned to managers" },
-  { id: "employees", label: "Awaiting employee" },
-  { id: "overdue", label: "Overdue" },
-  { id: "completed", label: "Completed" },
+const queueOptions: Array<{ id: QueueView; label: string; count: keyof InboxOperations["summary"] }> = [
+  { id: "my_work", label: "Assigned to me", count: "assignedToMe" },
+  { id: "decisions", label: "Decisions", count: "decisions" },
+  { id: "overdue", label: "Overdue", count: "overdue" },
+  { id: "managers", label: "Manager queue", count: "managerQueue" },
+  { id: "employees", label: "Employee queue", count: "employeeQueue" },
+  { id: "open", label: "All open", count: "allOpen" },
+  { id: "completed", label: "Completed", count: "completed" },
 ]
 
 const domainOptions: Array<{ id: DomainFilter; label: string }> = [
-  { id: "all", label: "All work" },
+  { id: "all", label: "All domains" },
   { id: "leave", label: "Leave" },
   { id: "hiring", label: "Hiring" },
-  { id: "training", label: "Training" },
+  { id: "training", label: "Learning" },
+  { id: "insight", label: "Insights" },
 ]
 
-const domainMeta: Record<InboxItem["type"], { label: string }> = {
-  leave: { label: "Leave" },
-  hiring: { label: "Hiring" },
-  training: { label: "Training" },
-}
-
+const domainLabel: Record<InboxItem["type"], string> = { leave: "Leave", hiring: "Hiring", training: "Learning", insight: "Insights" }
 const PAGE_SIZE = 10
+const inputClass = "h-9 w-full rounded-md border border-border bg-background px-3 text-control outline-none focus:border-ring focus:ring-2 focus:ring-ring/20"
+const textareaClass = "min-h-20 w-full resize-y rounded-md border border-border bg-background px-3 py-2.5 text-control outline-none focus:border-ring focus:ring-2 focus:ring-ring/20"
 
 function validQueue(value: string | null): QueueView {
   return queueOptions.some((option) => option.id === value) ? value as QueueView : "my_work"
@@ -46,108 +49,152 @@ function validDomain(value: string | null): DomainFilter {
   return domainOptions.some((option) => option.id === value) ? value as DomainFilter : "all"
 }
 
-function matchesQueue(item: InboxItem, queue: QueueView): boolean {
-  if (queue === "my_work") return !item.isCompleted
-  if (queue === "decisions") return item.requiresDecision && !item.isCompleted
-  if (queue === "managers") return item.assignedTo === "manager" && !item.isCompleted
-  if (queue === "employees") return item.assignedTo === "employee" && !item.isCompleted
-  if (queue === "overdue") return item.slaStatus === "overdue" && !item.isCompleted
+function assignedToActor(item: InboxItem, actorEmail: string): boolean {
+  return !item.isCompleted && (item.actionable || item.ownerEmail?.toLowerCase() === actorEmail.toLowerCase())
+}
+
+function matchesQueue(item: InboxItem, queue: QueueView, actorEmail: string): boolean {
+  if (queue === "my_work") return assignedToActor(item, actorEmail)
+  if (queue === "decisions") return !item.isCompleted && item.requiresDecision && item.actionable
+  if (queue === "overdue") return !item.isCompleted && item.slaStatus === "overdue"
+  if (queue === "managers") return !item.isCompleted && item.assignedTo === "manager"
+  if (queue === "employees") return !item.isCompleted && item.assignedTo === "employee"
+  if (queue === "open") return !item.isCompleted
   return item.isCompleted
 }
 
-function queueForItem(item: InboxItem): QueueView {
+function queueForItem(item: InboxItem, actorEmail: string): QueueView {
   if (item.isCompleted) return "completed"
-  if (item.requiresDecision) return "decisions"
-  if (item.assignedTo === "manager") return "managers"
-  if (item.assignedTo === "employee") return "employees"
-  return "my_work"
+  if (item.requiresDecision && item.actionable) return "decisions"
+  if (assignedToActor(item, actorEmail)) return "my_work"
+  return "open"
 }
 
 function formatDate(value: string | null): string {
   if (!value) return "Not scheduled"
-  const normalized = value.slice(0, 10)
-  const parsed = new Date(`${normalized}T00:00:00`)
+  const parsed = new Date(`${value.slice(0, 10)}T00:00:00`)
   if (!Number.isFinite(parsed.getTime())) return value
   return new Intl.DateTimeFormat("en", { month: "short", day: "numeric", year: parsed.getFullYear() === new Date().getFullYear() ? undefined : "numeric" }).format(parsed)
 }
 
-function slaLabel(item: InboxItem): string {
-  if (item.slaStatus === "overdue") return "Overdue"
+function dueLabel(item: InboxItem): string {
+  if (item.slaStatus === "overdue") return `Overdue · ${formatDate(item.dueDate)}`
   if (item.slaStatus === "due_today") return "Due today"
-  if (item.slaStatus === "due_soon") return "Due soon"
-  if (item.slaStatus === "complete") return "Completed"
-  if (item.slaStatus === "unscheduled") return "No due date"
-  return "On track"
+  if (item.slaStatus === "complete") return item.completedAt ? `Completed ${formatDate(item.completedAt)}` : "Completed"
+  return item.dueDate ? `Due ${formatDate(item.dueDate)}` : "No due date"
 }
 
-function statusTone(item: InboxItem): string {
-  if (item.slaStatus === "overdue" || item.slaStatus === "due_today") return "text-destructive"
-  if (item.isCompleted) return "text-emerald-700 dark:text-emerald-300"
-  return "text-muted-foreground"
+function actionLabel(item: InboxItem): string {
+  if (item.actions?.includes("approve")) return "Decide"
+  if (item.actions?.includes("complete")) return "Complete"
+  return "Open"
 }
 
-function ItemRow({ item, onAction, disabled, selected, returnTo }: { item: InboxItem; onAction: (item: InboxItem, action: "approve" | "reject" | "complete") => void; disabled: boolean; selected: boolean; returnTo: string }) {
-  const meta = domainMeta[item.type]
+function ItemRow({ item, onAction, selected, returnTo }: { item: InboxItem; onAction: (item: InboxItem) => void; selected: boolean; returnTo: string }) {
   const recordHref = withReturnTo(item.recordHref, returnTo)
-
+  const hasAction = Boolean(item.actions?.length)
   return (
-    <article id={`work-${item.id}`} aria-current={selected ? "true" : undefined} className={cn("scroll-mt-24 border-t border-border/70 px-4 py-3.5 first:border-t-0", selected && "bg-accent/45 ring-1 ring-inset ring-primary/30")}>
-      <div className="flex flex-col gap-3 xl:flex-row xl:items-start xl:justify-between">
-        <div className="min-w-0 flex-1">
-          <div className="flex flex-wrap items-center gap-x-3 gap-y-1.5">
-            <span className="text-meta font-semibold text-muted-foreground">{meta.label}</span>
-            <span className={cn("text-status font-semibold", statusTone(item))}>{slaLabel(item)}</span>
-            {item.priority === "high" && !item.isCompleted && <span className="text-status font-semibold text-destructive">High priority</span>}
+    <article id={`work-${item.id}`} aria-current={selected ? "true" : undefined} className={cn("scroll-mt-24 border-t border-border/70 px-4 py-3 first:border-t-0", selected && "bg-accent/45 ring-1 ring-inset ring-primary/30")}>
+      <div className="grid gap-3 md:grid-cols-[minmax(0,1fr)_160px_130px_auto] md:items-center">
+        <div className="min-w-0">
+          <div className="flex flex-wrap items-center gap-2 text-status font-semibold">
+            <span className="text-muted-foreground">{domainLabel[item.type]}</span>
+            {item.priority === "high" && !item.isCompleted && <span className="text-destructive">High priority</span>}
           </div>
-          <Link href={recordHref} className="mt-1.5 block text-sm font-semibold hover:text-primary hover:underline">{item.title}</Link>
-          <p className="mt-1 text-xs text-muted-foreground">
-            {item.person && <span className="font-semibold text-foreground">{item.person} · </span>}
-            {item.detail}
-          </p>
-
-          <p className="mt-2 text-meta text-muted-foreground">{item.nextAction}</p>
-          <div className="mt-1 flex flex-wrap gap-x-5 gap-y-1 text-meta text-muted-foreground"><span>Owner: {item.owner}</span><span>Due: {formatDate(item.dueDate)}</span></div>
-
-          {item.requestContext.length > 0 && <details className="mt-2 text-meta"><summary className="w-fit font-semibold text-primary">Request details</summary><div className="mt-2 grid gap-3 rounded-md border border-border/70 bg-muted/20 p-3 sm:grid-cols-2 xl:grid-cols-3">
-            {item.requestContext.map((context) => <div key={context.label} className={context.label.toLowerCase().includes("justification") || context.label.toLowerCase().includes("note") ? "sm:col-span-2 xl:col-span-3" : undefined}><p className="font-semibold text-muted-foreground">{context.label}</p><p className="mt-0.5 text-foreground">{context.value}</p></div>)}
-          </div></details>}
-
-          {item.blockedReason && <p className="mt-3 rounded-md border border-border bg-muted/30 px-3 py-2 text-xs"><span className="font-semibold">Blocked:</span> {item.blockedReason}</p>}
-          {item.isCompleted && item.completionNotes && <p className="mt-3 text-xs text-muted-foreground">Completion record: {item.completionNotes}</p>}
+          <Link href={recordHref} className="mt-1 block truncate text-card-title font-semibold hover:text-primary hover:underline">{item.title}</Link>
+          <p className="mt-0.5 truncate text-meta text-muted-foreground">{item.person ? `${item.person} · ` : ""}{item.detail}</p>
+          <p className="mt-1 line-clamp-2 text-meta text-muted-foreground">{item.nextAction}</p>
         </div>
-
-        <div className="flex shrink-0 items-center gap-2 xl:pt-4">
-          {item.actions?.includes("approve") ? (
-            <>
-              <button type="button" disabled={disabled} onClick={() => onAction(item, "reject")} className="inline-flex h-9 items-center rounded-md border border-border bg-background px-3 text-xs font-semibold text-muted-foreground hover:bg-muted disabled:opacity-50">Decline</button>
-              <button type="button" disabled={disabled} onClick={() => onAction(item, "approve")} className="inline-flex h-9 items-center rounded-md bg-foreground px-3 text-xs font-semibold text-background disabled:opacity-50">Approve</button>
-            </>
-          ) : item.actions?.includes("complete") ? (
-            <button type="button" disabled={disabled} onClick={() => onAction(item, "complete")} className="inline-flex h-9 items-center rounded-md bg-foreground px-3 text-xs font-semibold text-background disabled:opacity-50">Mark complete</button>
-          ) : null}
+        <div className="min-w-0 text-meta">
+          <p className="truncate font-semibold text-foreground">{item.owner}</p>
+          <p className="truncate text-muted-foreground">{item.assignedTo === "employee" ? "Employee action" : item.assignedTo === "manager" ? "Manager action" : "People team"}</p>
+        </div>
+        <p className={cn("whitespace-nowrap text-meta", (item.slaStatus === "overdue" || item.slaStatus === "due_today") && !item.isCompleted ? "font-semibold text-destructive" : "text-muted-foreground")}>{dueLabel(item)}</p>
+        <div className="flex justify-end gap-2">
+          {hasAction ? <Button size="xs" onClick={() => onAction(item)}>{actionLabel(item)}</Button> : <Button nativeButton={false} size="xs" variant="outline" render={<Link href={recordHref} />}>Open</Button>}
         </div>
       </div>
     </article>
   )
 }
 
-export function InboxClient({ initialItems, actor, people }: { initialItems: InboxItem[]; actor: WorkflowActorContext; people: ManagedEmployee[] }) {
+function ActionDialog({ pending, leave, note, score, busy, error, onActionChange, onNoteChange, onScoreChange, onClose, onSubmit }: {
+  pending: { item: InboxItem; action: WorkflowAction }
+  leave: LeaveOperationRecord | null
+  note: string
+  score: string
+  busy: boolean
+  error: string
+  onActionChange: (action: WorkflowAction) => void
+  onNoteChange: (note: string) => void
+  onScoreChange: (score: string) => void
+  onClose: () => void
+  onSubmit: (event: React.FormEvent) => void
+}) {
+  const { item, action } = pending
+  const isDecision = item.actions?.includes("approve")
+  const declineNeedsReason = action === "reject"
+  return <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
+    <button type="button" aria-label="Close action" className="absolute inset-0 bg-slate-950/45" onClick={() => !busy && onClose()} />
+    <form onSubmit={onSubmit} className="relative max-h-[92dvh] w-full max-w-lg overflow-y-auto rounded-lg border border-border bg-background shadow-xl">
+      <header className="border-b border-border px-5 py-4 pr-14">
+        <h2 className="text-section font-semibold">{isDecision ? item.type === "leave" ? "Leave decision" : "Headcount decision" : "Record course completion"}</h2>
+        <p className="mt-0.5 text-description text-muted-foreground">{item.title}{item.person ? ` · ${item.person}` : ""}</p>
+      </header>
+      <button type="button" aria-label="Close" onClick={onClose} className="absolute right-5 top-5 text-muted-foreground hover:text-foreground"><X className="size-4" /></button>
+      <div className="space-y-4 p-5">
+        <div className="grid gap-3 rounded-md border border-border bg-muted/25 p-3 sm:grid-cols-2">
+          {item.requestContext.map((context) => <div key={context.label} className={context.label.toLowerCase().includes("justification") || context.label.toLowerCase().includes("note") ? "sm:col-span-2" : undefined}><p className="text-label font-semibold text-muted-foreground">{context.label}</p><p className="mt-0.5 text-body">{context.value}</p></div>)}
+          {item.type === "leave" && leave && <div className="sm:col-span-2 border-t border-border pt-3"><p className="text-label font-semibold text-muted-foreground">Department coverage</p><p className="mt-0.5 text-body">{leave.coverage.approvedAway} of {leave.coverage.departmentHeadcount} employees already have approved overlapping leave; {leave.coverage.pendingRequests} other request{leave.coverage.pendingRequests === 1 ? " is" : "s are"} pending.</p></div>}
+        </div>
+
+        {isDecision && <div>
+          <span className="mb-1.5 block text-label font-semibold">Decision</span>
+          <div className="flex gap-2">
+            <Button type="button" variant={action === "approve" ? "default" : "outline"} onClick={() => onActionChange("approve")}>Approve</Button>
+            <Button type="button" variant={action === "reject" ? "destructive" : "outline"} onClick={() => onActionChange("reject")}>Decline</Button>
+          </div>
+        </div>}
+
+        {item.type === "training" && <label className="block"><span className="mb-1.5 block text-label font-semibold">Assessment score</span><input type="number" min="0" max="100" step="1" value={score} onChange={(event) => onScoreChange(event.target.value)} className={inputClass} placeholder="Optional, 0–100" /></label>}
+        <label className="block"><span className="mb-1.5 block text-label font-semibold">{declineNeedsReason ? "Reason" : item.type === "training" ? "Completion note" : "Decision note"}</span><textarea required={declineNeedsReason} minLength={declineNeedsReason ? 10 : undefined} value={note} onChange={(event) => onNoteChange(event.target.value)} className={textareaClass} placeholder={declineNeedsReason ? "Record a clear reason for the requester and audit history" : "Optional context for the audit history"} /></label>
+        {error && <p role="alert" className="text-meta text-destructive">{error}</p>}
+      </div>
+      <footer className="flex justify-end gap-2 border-t border-border px-5 py-4">
+        <Button type="button" variant="ghost" onClick={onClose} disabled={busy}>Cancel</Button>
+        <Button type="submit" variant={action === "reject" ? "destructive" : "default"} disabled={busy || declineNeedsReason && note.trim().length < 10}>{busy && <LoaderCircle className="size-4 animate-spin" />}{action === "approve" ? "Approve request" : action === "reject" ? "Decline request" : "Record completion"}</Button>
+      </footer>
+    </form>
+  </div>
+}
+
+export function InboxClient({ initialData, actor, people }: { initialData: InboxOperations; actor: WorkflowActorContext; people: ManagedEmployee[] }) {
   const router = useRouter()
   const searchParams = useSearchParams()
   const returnTo = safeReturnTo(searchParams.get("returnTo"))
   const selectedId = searchParams.get("item")
-  const initiallySelected = selectedId ? initialItems.find((item) => item.id === selectedId) : undefined
-  const [items, setItems] = useState(initialItems)
-  const [queue, setQueue] = useState<QueueView>(() => searchParams.get("view") ? validQueue(searchParams.get("view")) : initiallySelected ? queueForItem(initiallySelected) : "my_work")
+  const initiallySelected = selectedId ? initialData.items.find((item) => item.id === selectedId) : undefined
+  const [data, setData] = useState(initialData)
+  const [queue, setQueue] = useState<QueueView>(() => searchParams.get("view") ? validQueue(searchParams.get("view")) : initiallySelected ? queueForItem(initiallySelected, actor.email) : "my_work")
   const [domain, setDomain] = useState<DomainFilter>(() => searchParams.get("type") ? validDomain(searchParams.get("type")) : initiallySelected?.type ?? "all")
-  const [busyId, setBusyId] = useState<string | null>(null)
+  const [query, setQuery] = useState("")
   const [refreshing, setRefreshing] = useState(false)
   const [error, setError] = useState("")
   const [notice, setNotice] = useState("")
   const [page, setPage] = useState(0)
+  const [pending, setPending] = useState<{ item: InboxItem; action: WorkflowAction } | null>(null)
+  const [actionNote, setActionNote] = useState("")
+  const [assessmentScore, setAssessmentScore] = useState("")
+  const [actionError, setActionError] = useState("")
+  const [actionBusy, setActionBusy] = useState(false)
+  const [leaveContext, setLeaveContext] = useState<LeaveOperationRecord | null>(null)
 
-  const queueCounts = useMemo(() => Object.fromEntries(queueOptions.map((option) => [option.id, items.filter((item) => matchesQueue(item, option.id)).length])) as Record<QueueView, number>, [items])
-  const visibleItems = useMemo(() => items.filter((item) => matchesQueue(item, queue) && (domain === "all" || item.type === domain)), [domain, items, queue])
+  const visibleItems = useMemo(() => {
+    const normalized = query.trim().toLowerCase()
+    return data.items.filter((item) => matchesQueue(item, queue, actor.email)
+      && (domain === "all" || item.type === domain)
+      && (!normalized || [item.id, item.title, item.detail, item.person ?? "", item.owner, item.nextAction].some((value) => value.toLowerCase().includes(normalized))))
+  }, [actor.email, data.items, domain, query, queue])
   const totalPages = Math.max(1, Math.ceil(visibleItems.length / PAGE_SIZE))
   const pagedItems = visibleItems.slice(page * PAGE_SIZE, (page + 1) * PAGE_SIZE)
   const currentInboxHref = useMemo(() => {
@@ -158,6 +205,7 @@ export function InboxClient({ initialItems, actor, people }: { initialItems: Inb
     if (returnTo) params.set("returnTo", returnTo)
     return `/inbox${params.size ? `?${params.toString()}` : ""}`
   }, [domain, queue, returnTo, selectedId])
+
   useEffect(() => {
     if (!selectedId || !pagedItems.some((item) => item.id === selectedId)) return
     const frame = window.requestAnimationFrame(() => document.getElementById(`work-${selectedId}`)?.scrollIntoView({ block: "center" }))
@@ -173,28 +221,11 @@ export function InboxClient({ initialItems, actor, people }: { initialItems: Inb
   }
 
   function updateWorkflowType(next: WorkflowType | null) {
-    if (next) {
-      const params = new URLSearchParams(currentInboxHref.split("?")[1] ?? "")
-      params.delete("item")
-      params.set("new", next)
-      router.push(`/inbox?${params.toString()}`, { scroll: false })
-      return
-    }
     const params = new URLSearchParams(currentInboxHref.split("?")[1] ?? "")
     params.delete("item")
-    router.replace(`/inbox${params.size ? `?${params.toString()}` : ""}`, { scroll: false })
-  }
-
-  function chooseQueue(next: QueueView) {
-    setQueue(next)
-    setPage(0)
-    updateUrl(next, domain)
-  }
-
-  function chooseDomain(next: DomainFilter) {
-    setDomain(next)
-    setPage(0)
-    updateUrl(queue, next)
+    if (next) params.set("new", next); else params.delete("new")
+    const href = `/inbox${params.size ? `?${params.toString()}` : ""}`
+    if (next) router.push(href, { scroll: false }); else router.replace(href, { scroll: false })
   }
 
   async function refreshInbox(successMessage = "Inbox is up to date.") {
@@ -202,9 +233,9 @@ export function InboxClient({ initialItems, actor, people }: { initialItems: Inb
     setError("")
     try {
       const response = await fetch("/api/v1/hr/inbox", { cache: "no-store" })
-      const result = await response.json() as { items?: InboxItem[]; error?: string }
-      if (!response.ok || !result.items) throw new Error(result.error === "AUTH_REQUIRED" ? "Sign in is required to refresh the inbox." : result.error || "Inbox refresh failed.")
-      setItems(result.items)
+      const result = await response.json() as InboxOperations & { error?: string }
+      if (!response.ok || !result.items || !result.summary) throw new Error(result.error === "AUTH_REQUIRED" ? "Sign in is required to refresh the inbox." : result.error || "Inbox refresh failed.")
+      setData(result)
       setNotice(successMessage)
       window.setTimeout(() => setNotice(""), 2800)
       router.refresh()
@@ -215,59 +246,87 @@ export function InboxClient({ initialItems, actor, people }: { initialItems: Inb
     }
   }
 
-  async function runAction(item: InboxItem, action: "approve" | "reject" | "complete") {
-    setBusyId(item.id)
-    setError("")
-    setNotice("")
+  async function openAction(item: InboxItem) {
+    setActionError("")
+    setActionNote("")
+    setAssessmentScore("")
+    setLeaveContext(null)
+    setPending({ item, action: item.actions?.includes("approve") ? "approve" : "complete" })
+    if (item.type !== "leave") return
     try {
-      const response = await fetch("/api/v1/hr/workflows/action", {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({ id: item.id, type: item.type, action }),
-      })
-      const result = await response.json() as { error?: string; message?: string }
-      if (!response.ok) throw new Error(result.error === "AUTH_REQUIRED" ? "Sign in is required to update this workflow." : result.error || "The action could not be saved.")
-      await refreshInbox(result.message ?? "Workflow updated.")
+      const response = await fetch(`/api/v1/hr/leave?id=${encodeURIComponent(item.id)}`, { cache: "no-store" })
+      const result = await response.json() as LeaveOperations & { error?: string }
+      if (!response.ok) throw new Error(result.error || "Leave coverage could not be loaded.")
+      setLeaveContext(result.requests.find((row) => row.id === item.id) ?? null)
     } catch (reason) {
-      setError(reason instanceof Error ? reason.message : "The action could not be saved.")
-    } finally {
-      setBusyId(null)
+      setActionError(reason instanceof Error ? reason.message : "Leave coverage could not be loaded.")
     }
   }
 
+  async function submitAction(event: React.FormEvent) {
+    event.preventDefault()
+    if (!pending) return
+    setActionBusy(true)
+    setActionError("")
+    try {
+      const { item, action } = pending
+      const request = item.type === "leave"
+        ? { url: `/api/v1/hr/leave/${encodeURIComponent(item.id)}/decision`, method: "POST", body: { decision: action === "approve" ? "Approved" : "Rejected", note: actionNote } }
+        : item.type === "training"
+          ? { url: `/api/v1/hr/learning/assignments/${encodeURIComponent(item.id)}`, method: "PATCH", body: { assessmentScore: assessmentScore ? Number(assessmentScore) : null, note: actionNote } }
+          : { url: "/api/v1/hr/workflows/action", method: "POST", body: { id: item.id, type: item.type, action, note: actionNote } }
+      const response = await fetch(request.url, { method: request.method, headers: { "content-type": "application/json" }, body: JSON.stringify(request.body) })
+      const result = await response.json() as { error?: string; message?: string }
+      if (!response.ok) throw new Error(result.error === "AUTH_REQUIRED" ? "Sign in is required to update this work item." : result.error || "The update could not be saved.")
+      setPending(null)
+      await refreshInbox(result.message || "Work item updated.")
+    } catch (reason) {
+      setActionError(reason instanceof Error ? reason.message : "The update could not be saved.")
+    } finally {
+      setActionBusy(false)
+    }
+  }
+
+  const selectedWorkflow = searchParams.get("new") === "leave" ? "leave" : searchParams.get("new") === "hiring" ? "hiring" : undefined
   return (
     <WorkspacePage>
       <WorkspaceHeader
         title="Inbox"
         description="Approvals and assigned work."
-        actions={<button type="button" onClick={() => void refreshInbox()} disabled={refreshing} className="inline-flex h-9 items-center rounded-md border border-border bg-background px-3 font-semibold text-muted-foreground hover:bg-muted hover:text-foreground disabled:opacity-50">Refresh</button>}
+        actions={<div className="flex items-center gap-2">
+          <Button variant="outline" onClick={() => void refreshInbox()} disabled={refreshing}>{refreshing && <LoaderCircle className="size-3.5 animate-spin" />}Refresh</Button>
+          <details className="relative">
+            <summary className="inline-flex h-9 cursor-pointer list-none items-center rounded-md bg-primary px-3 font-semibold text-primary-foreground hover:bg-primary/85">New</summary>
+            <div className="absolute right-0 z-20 mt-1 w-44 overflow-hidden rounded-md border border-border bg-card p-1 shadow-lg">
+              <button type="button" onClick={() => updateWorkflowType("leave")} className="block w-full rounded px-3 py-2 text-left text-body hover:bg-muted">Request leave</button>
+              {actor.canRequestHiring && <button type="button" onClick={() => updateWorkflowType("hiring")} className="block w-full rounded px-3 py-2 text-left text-body hover:bg-muted">Request position</button>}
+              {actor.canAssignTraining && <Link href={withReturnTo("/courses?new=course", "/inbox")} className="block rounded px-3 py-2 text-body hover:bg-muted">Assign course</Link>}
+            </div>
+          </details>
+        </div>}
       />
 
-      <WorkflowCreator actor={actor} people={people} initialType={searchParams.get("new") === "leave" ? "leave" : searchParams.get("new") === "hiring" ? "hiring" : searchParams.get("new") === "training" ? "training" : undefined} onTypeChange={updateWorkflowType} onCreated={(message) => void refreshInbox(message)} />
+      <WorkflowCreator actor={actor} people={people} initialType={selectedWorkflow} showLauncher={false} onTypeChange={updateWorkflowType} onCreated={(message) => void refreshInbox(message)} />
 
-      <div className="overflow-x-auto border-b border-border" role="tablist" aria-label="Work queue">
-        <div className="flex min-w-max">
-          {queueOptions.map((option) => <button key={option.id} type="button" role="tab" aria-selected={queue === option.id} onClick={() => chooseQueue(option.id)} className={cn("inline-flex h-11 items-center gap-2 border-b-2 px-3 text-xs font-semibold", queue === option.id ? "border-foreground text-foreground" : "border-transparent text-muted-foreground hover:text-foreground")}>{option.label}<span className="text-meta tabular-nums text-muted-foreground">{queueCounts[option.id]}</span></button>)}
-        </div>
-      </div>
+      <section className="grid gap-2 rounded-lg border border-border bg-card p-3 md:grid-cols-[minmax(220px,1fr)_190px_170px]" aria-label="Inbox filters">
+        <label><span className="sr-only">Search work</span><input type="search" value={query} onChange={(event) => { setQuery(event.target.value); setPage(0) }} placeholder="Search work, owner, or employee" className={inputClass} /></label>
+        <label><span className="sr-only">Work queue</span><select value={queue} onChange={(event) => { const next = event.target.value as QueueView; setQueue(next); setPage(0); updateUrl(next, domain) }} className={inputClass}>{queueOptions.map((option) => <option key={option.id} value={option.id}>{option.label} ({Number(data.summary[option.count]).toLocaleString()})</option>)}</select></label>
+        <label><span className="sr-only">Work domain</span><select value={domain} onChange={(event) => { const next = event.target.value as DomainFilter; setDomain(next); setPage(0); updateUrl(queue, next) }} className={inputClass}>{domainOptions.map((option) => <option key={option.id} value={option.id}>{option.label}</option>)}</select></label>
+      </section>
 
-      <div className="flex flex-wrap items-center gap-2" aria-label="Domain filters">
-        <span className="mr-1 text-meta font-semibold text-muted-foreground">Filter</span>
-        {domainOptions.map((option) => <button key={option.id} type="button" onClick={() => chooseDomain(option.id)} className={cn("h-8 rounded-md border px-3 text-xs font-semibold", domain === option.id ? "border-foreground bg-foreground text-background" : "border-border bg-background text-muted-foreground hover:bg-muted hover:text-foreground")}>{option.label}</button>)}
-      </div>
+      {error && <div className="flex items-center gap-2 rounded-md border border-rose-200 bg-rose-50 px-4 py-3 text-meta font-semibold text-rose-800 dark:border-rose-800/30 dark:bg-rose-950/20 dark:text-rose-200"><CircleAlert className="size-4 shrink-0" />{error}</div>}
+      {notice && <div className="flex items-center gap-2 rounded-md border border-emerald-200 bg-emerald-50 px-4 py-3 text-meta font-semibold text-emerald-800 dark:border-emerald-800/30 dark:bg-emerald-950/20 dark:text-emerald-200"><CheckCircle2 className="size-4 shrink-0" />{notice}</div>}
 
-      {error && <div className="flex items-center gap-2 rounded-md border border-rose-200 bg-rose-50 px-4 py-3 text-xs font-semibold text-rose-800 dark:border-rose-800/30 dark:bg-rose-950/20 dark:text-rose-200"><CircleAlert className="size-4 shrink-0" />{error}</div>}
-      {notice && <div className="flex items-center gap-2 rounded-md border border-emerald-200 bg-emerald-50 px-4 py-3 text-xs font-semibold text-emerald-800 dark:border-emerald-800/30 dark:bg-emerald-950/20 dark:text-emerald-200"><CheckCircle2 className="size-4 shrink-0" />{notice}</div>}
-      {refreshing && <div className="flex items-center justify-center gap-2 py-2 text-xs text-muted-foreground"><LoaderCircle className="size-3.5 animate-spin" />Refreshing work queue</div>}
+      <section className="overflow-hidden rounded-lg border border-border bg-card" aria-label={`${queueOptions.find((option) => option.id === queue)?.label} items`}>
+        <header className="flex items-center justify-between border-b border-border bg-muted/20 px-4 py-2.5">
+          <p className="text-card-title font-semibold">{queueOptions.find((option) => option.id === queue)?.label}</p>
+          <p className="text-meta text-muted-foreground">{visibleItems.length.toLocaleString()} item{visibleItems.length === 1 ? "" : "s"}</p>
+        </header>
+        {pagedItems.length ? pagedItems.map((item) => <ItemRow key={`${item.type}-${item.id}`} item={item} onAction={(selected) => void openAction(selected)} selected={item.id === selectedId} returnTo={currentInboxHref} />) : <div className="flex min-h-[160px] flex-col items-center justify-center px-6 text-center"><h3 className="text-subsection font-semibold">No matching work</h3><p className="mt-1 text-meta text-muted-foreground">Change the queue, domain, or search filter.</p></div>}
+        {visibleItems.length > PAGE_SIZE && <footer className="flex items-center justify-between border-t border-border bg-muted/20 px-4 py-3"><p className="text-meta text-muted-foreground">{page * PAGE_SIZE + 1}–{Math.min((page + 1) * PAGE_SIZE, visibleItems.length)} of {visibleItems.length}</p><div className="flex gap-2"><Button size="xs" variant="outline" disabled={page === 0} onClick={() => setPage((current) => Math.max(0, current - 1))}>Previous</Button><Button size="xs" variant="outline" disabled={page + 1 >= totalPages} onClick={() => setPage((current) => Math.min(totalPages - 1, current + 1))}>Next</Button></div></footer>}
+      </section>
 
-      {pagedItems.length ? (
-        <section className="overflow-hidden rounded-lg border border-border bg-card" aria-label={`${queueOptions.find((option) => option.id === queue)?.label} items`}>
-          {pagedItems.map((item) => <ItemRow key={`${item.type}-${item.id}`} item={item} onAction={runAction} disabled={busyId !== null} selected={item.id === selectedId} returnTo={currentInboxHref} />)}
-          {visibleItems.length > PAGE_SIZE && <div className="flex items-center justify-between border-t border-border bg-muted/20 px-4 py-3"><p className="text-meta text-muted-foreground">{page * PAGE_SIZE + 1}–{Math.min((page + 1) * PAGE_SIZE, visibleItems.length)} of {visibleItems.length}</p><div className="flex gap-2"><button type="button" className="h-8 rounded-md border border-border bg-background px-3 font-semibold disabled:opacity-40" disabled={page === 0} onClick={() => setPage((current) => Math.max(0, current - 1))}>Previous</button><button type="button" className="h-8 rounded-md border border-border bg-background px-3 font-semibold disabled:opacity-40" disabled={page + 1 >= totalPages} onClick={() => setPage((current) => Math.min(totalPages - 1, current + 1))}>Next</button></div></div>}
-        </section>
-      ) : (
-        <div className="flex min-h-[180px] flex-col items-center justify-center rounded-lg border border-border bg-card px-6 text-center"><h3>No matching work</h3>{domain !== "all" && <button type="button" onClick={() => chooseDomain("all")} className="mt-3 text-xs font-semibold text-primary hover:underline">Clear filter</button>}</div>
-      )}
+      {pending && <ActionDialog pending={pending} leave={leaveContext} note={actionNote} score={assessmentScore} busy={actionBusy} error={actionError} onActionChange={(action) => setPending({ ...pending, action })} onNoteChange={setActionNote} onScoreChange={setAssessmentScore} onClose={() => !actionBusy && setPending(null)} onSubmit={submitAction} />}
     </WorkspacePage>
   )
 }

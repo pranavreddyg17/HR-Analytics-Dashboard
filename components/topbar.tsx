@@ -19,11 +19,12 @@ export function Topbar({ user, onOpenPalette, onOpenNavigation }: { user: ShellU
   return (
     <header className="topbar">
       <div className="topbar__inner">
-        <Link href="/" className="topbar__brand" aria-label="LaidbackHR.AI home">
-          <BrandLogo />
-        </Link>
-
-        {returnTo && <Link href={returnTo} className="topbar-back-link">Back to {returnDestinationLabel(returnTo)}</Link>}
+        <div className="topbar__leading">
+          <Link href="/" className="topbar__brand" aria-label="LaidbackHR.AI home">
+            <BrandLogo />
+          </Link>
+          {returnTo && <Link href={returnTo} className="topbar-back-link">Back to {returnDestinationLabel(returnTo)}</Link>}
+        </div>
 
         <button
           type="button"
@@ -31,7 +32,7 @@ export function Topbar({ user, onOpenPalette, onOpenNavigation }: { user: ShellU
           className="topbar-search"
           aria-label="Search pages, actions, reports, and people"
         >
-          <span className="topbar-search__full">Search people, pages, and actions</span>
+          <span className="topbar-search__full">Search workspace records and pages</span>
           <span className="topbar-search__compact">Search</span>
         </button>
 

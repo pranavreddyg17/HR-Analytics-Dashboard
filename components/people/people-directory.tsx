@@ -3,8 +3,8 @@
 import Link from "next/link"
 import { useRouter, useSearchParams } from "next/navigation"
 import { useCallback, useEffect, useMemo, useState } from "react"
-import { motion } from "motion/react"
 import { Archive, FilterX, Plus, Search, SlidersHorizontal } from "lucide-react"
+import { Cell, Pie, PieChart, ResponsiveContainer, Tooltip } from "recharts"
 
 import { Button } from "@/components/ui/button"
 import { Card } from "@/components/ui/card"
@@ -27,6 +27,7 @@ type Filters = {
 
 const initialFilters: Filters = { department: "", location: "", status: "", employmentType: "", tenure: "", includeArchived: false }
 const PAGE_SIZE = 25
+const compositionColors = ["#146aa3", "#4f6bed", "#038387", "#8764b8", "#ca5010", "#69797e"]
 const tenureOptions = [
   { value: "under1", label: "Under 1 year" },
   { value: "1to2", label: "1–2 years" },
@@ -162,6 +163,17 @@ export function PeopleDirectory() {
         actions={<Button onClick={openDrawer}><Plus className="size-3.5" />Add employee</Button>}
       />
 
+      {data && data.composition.departments.length > 0 && (
+        <WorkforceComposition
+          rows={data.composition.departments}
+          selected={filters.department}
+          onSelect={(department) => {
+            setFilters((current) => ({ ...current, department: current.department === department ? "" : department }))
+            setPage(0)
+          }}
+        />
+      )}
+
       <Card className="gap-0 overflow-hidden py-0 shadow-none">
         <div className="border-b border-border/70 p-3 sm:p-4">
           <div className="flex flex-col gap-3 lg:flex-row lg:items-center">
@@ -198,7 +210,7 @@ export function PeopleDirectory() {
         </div>
 
         <div className="relative min-h-48">
-          {loading && data && <div className="absolute inset-x-0 top-0 z-10 h-0.5 overflow-hidden bg-primary/10"><motion.div className="h-full w-1/3 bg-primary" animate={{ x: ["-120%", "340%"] }} transition={{ repeat: Infinity, duration: 1.2, ease: "easeInOut" }} /></div>}
+          {loading && data && <div className="absolute inset-x-0 top-0 z-10 h-0.5 overflow-hidden bg-primary/10"><div className="h-full w-full animate-pulse bg-primary" /></div>}
           {!data && loading ? <DirectorySkeleton /> : error ? (
             <div className="flex min-h-64 flex-col items-center justify-center gap-3 p-6 text-center"><div><p className="font-semibold">Employee records could not be loaded</p><p className="mt-1 text-sm text-muted-foreground">{error}</p></div><Button variant="outline" onClick={() => setRetry((current) => current + 1)}>Try again</Button></div>
           ) : data?.items.length ? (
@@ -222,6 +234,91 @@ export function PeopleDirectory() {
         onSaved={openCreatedEmployee}
       />
     </WorkspacePage>
+  )
+}
+
+function WorkforceComposition({
+  rows,
+  selected,
+  onSelect,
+}: {
+  rows: Array<{ name: string; count: number }>
+  selected: string
+  onSelect: (department: string) => void
+}) {
+  const total = rows.reduce((sum, row) => sum + row.count, 0)
+  const visible = rows.slice(0, 6)
+  const remaining = rows.slice(6).reduce((sum, row) => sum + row.count, 0)
+  const data = remaining ? [...visible, { name: "Other", count: remaining }] : visible
+
+  return (
+    <Card className="gap-0 overflow-hidden py-0 shadow-none">
+      <div className="grid items-center gap-3 p-4 lg:grid-cols-[240px_minmax(0,1fr)]">
+        <div>
+          <p className="text-card-title font-semibold">Workforce by department</p>
+          <p className="mt-0.5 text-meta text-muted-foreground">Current employee distribution</p>
+          <div className="relative mt-2 h-36">
+            <ResponsiveContainer width="100%" height="100%">
+              <PieChart>
+                <Pie
+                  data={data}
+                  dataKey="count"
+                  nameKey="name"
+                  cx="50%"
+                  cy="50%"
+                  innerRadius={40}
+                  outerRadius={61}
+                  paddingAngle={1}
+                  stroke="#ffffff"
+                  strokeWidth={2}
+                  onClick={(entry) => {
+                    const name = String((entry as { name?: unknown }).name ?? "")
+                    if (name && name !== "Other") onSelect(name)
+                  }}
+                >
+                  {data.map((row, index) => (
+                    <Cell
+                      key={row.name}
+                      fill={compositionColors[index % compositionColors.length]}
+                      opacity={!selected || selected === row.name ? 1 : 0.35}
+                      style={{ cursor: row.name === "Other" ? "default" : "pointer" }}
+                    />
+                  ))}
+                </Pie>
+                <Tooltip formatter={(value) => [Number(value).toLocaleString(), "Employees"]} />
+              </PieChart>
+            </ResponsiveContainer>
+            <div className="pointer-events-none absolute inset-0 flex flex-col items-center justify-center">
+              <span className="text-lg font-semibold tabular-nums">{total.toLocaleString()}</span>
+              <span className="text-status text-muted-foreground">Employees</span>
+            </div>
+          </div>
+        </div>
+        <div className="grid gap-x-5 sm:grid-cols-2 xl:grid-cols-3">
+          {data.map((row, index) => {
+            const share = total ? Math.round((row.count / total) * 100) : 0
+            const active = selected === row.name
+            return (
+              <button
+                key={row.name}
+                type="button"
+                disabled={row.name === "Other"}
+                onClick={() => onSelect(row.name)}
+                className={cn(
+                  "grid grid-cols-[8px_minmax(0,1fr)_auto] items-center gap-2 border-b border-border/60 py-2 text-left",
+                  row.name !== "Other" && "hover:text-primary",
+                  active && "text-primary",
+                )}
+              >
+                <span className="size-2 rounded-sm" style={{ backgroundColor: compositionColors[index % compositionColors.length] }} />
+                <span className="truncate text-xs">{row.name}</span>
+                <span className="text-meta tabular-nums text-muted-foreground">{row.count.toLocaleString()} · {share}%</span>
+              </button>
+            )
+          })}
+        </div>
+      </div>
+    </Card>
   )
 }
 

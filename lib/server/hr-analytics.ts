@@ -16,6 +16,7 @@ import type {
 } from "@/lib/hr-types"
 import { hrDomains } from "@/lib/hr-types"
 import { ensureHrDatabase, readAttritionModelProfiles, readDomainRows } from "@/lib/server/hr-database"
+import { buildWorkforceImpact } from "@/lib/server/workforce-impact"
 
 function inRange(date: string | null, filters: HrFilters): boolean {
   if (!date) return false
@@ -101,8 +102,9 @@ async function getDomainStatus(rowsByDomain: Record<HrDomain, Array<Record<strin
   })
 }
 
-export async function getWorkforceAnalytics(filters: HrFilters = {}): Promise<WorkforceAnalytics> {
+export async function getWorkforceAnalytics(filters: HrFilters = {}, options: { rowLimit?: number | null } = {}): Promise<WorkforceAnalytics> {
   const normalizedFilters: WorkforceAnalytics["filters"] = { ...filters, period: filters.period ?? "month" }
+  const outputRows = <T>(rows: T[], defaultLimit: number): T[] => options.rowLimit === null ? rows : rows.slice(0, options.rowLimit ?? defaultLimit)
   const [employeeRows, hiringRows, attritionRows, leaveRows, trainingRows, promotionRows, modelProfileRows] = await Promise.all([
     readDomainRows("employees"),
     readDomainRows("hiring"),
@@ -274,6 +276,205 @@ export async function getWorkforceAnalytics(filters: HrFilters = {}): Promise<Wo
     return rank[left.status] - rank[right.status] || left.netMovement - right.netMovement || right.exits - left.exits
   })
 
+  const coverageByDepartment = new Map(replacementCoverage.map((row) => [row.department, row]))
+  const decisionDepartments = unique([
+    ...operatingDepartments,
+    ...approvedLeave.map((record) => record.department),
+    ...leave.map((record) => record.department),
+    ...training.map((record) => record.department),
+    ...promotions.map((record) => record.department),
+  ])
+  const mandatoryTraining = (record: TrainingRecord) => /security|safety/i.test(record.training_program)
+  const departmentDecisionMetrics: WorkforceAnalytics["decisionSupport"]["departments"] = decisionDepartments.map((department) => {
+    const activeCount = activeByDepartment.get(department) ?? 0
+    const departmentHires = hired.filter((record) => record.department === department).length
+    const departmentExits = attrition.filter((record) => record.department === department).length
+    const departmentLeave = approvedLeave.filter((record) => record.department === department)
+    const departmentTraining = training.filter((record) => record.department === department)
+    const departmentCompletedTraining = departmentTraining.filter((record) => record.completion_status.toLowerCase() === "completed")
+    const departmentPromotions = promotions.filter((record) => record.department === department).length
+    const coverage = coverageByDepartment.get(department)
+    const openRoles = coverage?.openRequisitions ?? openRequisitions.filter((record) => record.department === department).length
+    const mobilityReviews = mobilityByDepartment.get(department) ?? 0
+    return {
+      department,
+      activeEmployees: activeCount,
+      hires: departmentHires,
+      exits: departmentExits,
+      attritionRate: percent(departmentExits, activeCount + departmentExits),
+      netMovement: departmentHires - departmentExits,
+      replacementRate: departmentExits ? percent(departmentHires, departmentExits) : null,
+      openRequisitions: openRoles,
+      vacancyRate: percent(openRoles, activeCount),
+      coverageStatus: coverage?.status ?? "Covered",
+      approvedLeaveDays: Number(departmentLeave.reduce((sum, record) => sum + record.leave_days, 0).toFixed(1)),
+      leaveDaysPerActiveEmployee: activeCount
+        ? Number((departmentLeave.reduce((sum, record) => sum + record.leave_days, 0) / activeCount).toFixed(1))
+        : 0,
+      pendingLeaveRequests: leave.filter((record) => record.department === department && record.approval_status.toLowerCase() === "pending").length,
+      trainingAssignments: departmentTraining.length,
+      trainingCompletionRate: percent(departmentCompletedTraining.length, departmentTraining.length),
+      mandatoryTrainingGaps: departmentTraining.filter((record) => record.completion_status.toLowerCase() !== "completed" && mandatoryTraining(record)).length,
+      promotions: departmentPromotions,
+      promotionRate: percent(departmentPromotions, activeCount),
+      mobilityReviewCount: mobilityReviews,
+      mobilityReviewShare: percent(mobilityReviews, activeCount),
+    }
+  })
+
+  const companyDecisionMetrics: WorkforceAnalytics["decisionSupport"]["company"] = {
+    replacementRate: attrition.length ? percent(hired.length, attrition.length) : null,
+    vacancyRate: percent(openRequisitions.length, activeEmployees.length),
+    voluntaryExitShare: percent(attrition.filter((record) => record.exit_type.toLowerCase() === "voluntary").length, attrition.length),
+    leaveDaysPerActiveEmployee: activeEmployees.length
+      ? Number((approvedLeave.reduce((sum, record) => sum + record.leave_days, 0) / activeEmployees.length).toFixed(1))
+      : 0,
+    mobilityReviewShare: percent(withoutPromotion, activeEmployees.length),
+    trainingCompletionRate: percent(completedTraining.length, training.length),
+    mandatoryTrainingGaps: training.filter((record) => record.completion_status.toLowerCase() !== "completed" && mandatoryTraining(record)).length,
+  }
+
+  const tenureCohort = (years: number): string => years < 1 ? "< 1 year" : years < 3 ? "1–2 years" : years < 5 ? "3–4 years" : "5+ years"
+  const tenureOrder = ["< 1 year", "1–2 years", "3–4 years", "5+ years"]
+  const activeByTenure = new Map(groupBy(activeEmployees, (record) => tenureCohort(record.tenure_years)).map((row) => [row.label, row.value]))
+  const exitsByTenure = new Map(groupBy(attrition, (record) => tenureCohort(record.tenure_years)).map((row) => [row.label, row.value]))
+  const tenureAttrition: WorkforceAnalytics["decisionSupport"]["tenureAttrition"] = tenureOrder.map((cohort) => {
+    const activeCount = activeByTenure.get(cohort) ?? 0
+    const exits = exitsByTenure.get(cohort) ?? 0
+    const population = activeCount + exits
+    return {
+      cohort,
+      activeEmployees: activeCount,
+      exits,
+      population,
+      attritionRate: percent(exits, population),
+      shareOfExits: percent(exits, attrition.length),
+    }
+  })
+
+  const workforceImpact = buildWorkforceImpact({
+    activeEmployees,
+    attrition,
+    hired,
+    openRequisitions,
+    training,
+    modelEmployees: joinedModelRecords,
+    assumptions: {
+      currency: "USD",
+      recruitingCostPerHire: normalizedFilters.recruitingCostPerHire ?? 7_500,
+      vacancyProductivityPercent: normalizedFilters.vacancyProductivityPercent ?? 50,
+      onboardingDays: normalizedFilters.onboardingDays ?? 90,
+      onboardingProductivityPercent: normalizedFilters.onboardingProductivityPercent ?? 25,
+      courseFeePerLearner: normalizedFilters.courseFeePerLearner ?? 500,
+      courseHoursPerLearner: normalizedFilters.courseHoursPerLearner ?? 8,
+    },
+  })
+
+  type DecisionAction = Omit<WorkforceAnalytics["decisionSupport"]["actions"][number], "workItem"> & { rank: number }
+  const decisionActions: DecisionAction[] = []
+  for (const row of departmentDecisionMetrics) {
+    const key = row.department.toLowerCase().replace(/[^a-z0-9]+/g, "-")
+    if (row.coverageStatus === "Gap") decisionActions.push({
+      id: `coverage-${key}`,
+      department: row.department,
+      category: "workforce_coverage",
+      severity: "high",
+      title: "Replacement coverage gap",
+      evidence: `${row.exits} exits, ${row.hires} completed hires, and ${row.openRequisitions} open roles`,
+      recommendedAction: "Reconcile approved hiring, succession coverage, and knowledge transfer for exposed roles.",
+      target: "hiring",
+      rank: 400 + row.exits,
+    })
+    if (row.exits >= 3 && row.attritionRate > attritionRate) decisionActions.push({
+      id: `attrition-${key}`,
+      department: row.department,
+      category: "attrition",
+      severity: row.attritionRate >= attritionRate + 3 ? "high" : "medium",
+      title: "Attrition above company rate",
+      evidence: `${row.attritionRate}% department rate versus ${attritionRate}% company rate`,
+      recommendedAction: "Review exit reasons, tenure cohorts, and current employee evidence before choosing an intervention.",
+      target: "attrition",
+      rank: 300 + row.attritionRate - attritionRate,
+    })
+    if (row.mandatoryTrainingGaps > 0) decisionActions.push({
+      id: `learning-${key}`,
+      department: row.department,
+      category: "mandatory_learning",
+      severity: "high",
+      title: "Mandatory learning incomplete",
+      evidence: `${row.mandatoryTrainingGaps} incomplete security or safety assignments`,
+      recommendedAction: "Confirm assignment ownership, access, and a completion date for each outstanding requirement.",
+      target: "courses",
+      rank: 200 + row.mandatoryTrainingGaps,
+    })
+    if (row.mobilityReviewCount > 0 && row.mobilityReviewShare > companyDecisionMetrics.mobilityReviewShare) decisionActions.push({
+      id: `mobility-${key}`,
+      department: row.department,
+      category: "mobility",
+      severity: "medium",
+      title: "Mobility review above company share",
+      evidence: `${row.mobilityReviewCount} employees (${row.mobilityReviewShare}%) meet the tenure and no-promotion-record definition`,
+      recommendedAction: "Validate promotion history and discuss career interests through the normal talent-review process.",
+      target: "people",
+      rank: 100 + row.mobilityReviewShare - companyDecisionMetrics.mobilityReviewShare,
+    })
+  }
+  for (const role of workforceImpact.roles.filter((row) => row.continuityStatus === "Critical").slice(0, 3)) {
+    const key = `${role.department}-${role.jobTitle}`.toLowerCase().replace(/[^a-z0-9]+/g, "-")
+    decisionActions.push({
+      id: `role-continuity-${key}`,
+      department: role.department,
+      category: "workforce_coverage",
+      severity: "high",
+      title: `${role.jobTitle} continuity review`,
+      evidence: `${role.activeEmployees} active, ${role.recordedExits} exits, ${role.openRequisitions} open roles, and ${role.refillDays} estimated refill days`,
+      recommendedAction: "Confirm a named backup and knowledge-transfer plan, then reconcile succession and approved hiring coverage.",
+      target: "hiring",
+      rank: 500 + role.reviewWeightedExposure / 10_000,
+    })
+  }
+  const database = await ensureHrDatabase()
+  const insightWorkflowRows = database
+    ? await database.prepare(`
+        SELECT id, source_entity_id, status, owner_email, due_at, created_at, completed_at
+        FROM workflow_requests
+        WHERE type='insight'
+        ORDER BY created_at DESC, rowid DESC
+      `).all<Record<string, string | null>>()
+    : { results: [] }
+  const latestInsightWorkflow = new Map<string, Record<string, string | null>>()
+  for (const workflow of insightWorkflowRows.results ?? []) {
+    const sourceId = workflow.source_entity_id
+    if (sourceId && !latestInsightWorkflow.has(sourceId)) latestInsightWorkflow.set(sourceId, workflow)
+  }
+  const workflowStatus = (status: string | null): "pending" | "in_progress" | "completed" => {
+    const normalized = status?.toLowerCase().replaceAll(" ", "_")
+    return normalized === "in_progress" ? "in_progress" : normalized === "completed" ? "completed" : "pending"
+  }
+  const actions: WorkforceAnalytics["decisionSupport"]["actions"] = decisionActions
+    .sort((left, right) => right.rank - left.rank || left.department.localeCompare(right.department))
+    .map((action) => {
+      const workflow = latestInsightWorkflow.get(action.id)
+      return {
+        id: action.id,
+        department: action.department,
+        category: action.category,
+        severity: action.severity,
+        title: action.title,
+        evidence: action.evidence,
+        recommendedAction: action.recommendedAction,
+        target: action.target,
+        workItem: workflow ? {
+          id: String(workflow.id),
+          status: workflowStatus(workflow.status),
+          ownerEmail: workflow.owner_email,
+          dueAt: workflow.due_at,
+          createdAt: String(workflow.created_at),
+          completedAt: workflow.completed_at,
+        } : null,
+      }
+    })
+
   const managerGroups = new Map<string, { managerId: string | null; manager: string; department: string; exits: number; voluntaryExits: number }>()
   for (const exit of operatingAttrition) {
     const employee = employeeMap.get(exit.employee_id)
@@ -332,7 +533,7 @@ export async function getWorkforceAnalytics(filters: HrFilters = {}): Promise<Wo
       byEmploymentType: groupBy(employees, (record) => record.employment_type || "Not specified"),
       byTenure: groupBy(employees, (record) => record.tenure_years < 1 ? "< 1 year" : record.tenure_years < 3 ? "1–2 years" : record.tenure_years < 5 ? "3–4 years" : "5+ years"),
       managerSpan,
-      rows: employees.slice(0, 500),
+      rows: outputRows(employees, 500),
     },
     hiring: {
       totalHired: hired.length,
@@ -348,7 +549,7 @@ export async function getWorkforceAnalytics(filters: HrFilters = {}): Promise<Wo
       byLocation: groupBy(hiring, (record) => record.location),
       sourceStats,
       statuses: groupBy(hiring, (record) => record.recruitment_status),
-      rows: hiring.slice(0, 250),
+      rows: outputRows(hiring, 250),
     },
     attrition: {
       totalExits: attrition.length,
@@ -362,7 +563,7 @@ export async function getWorkforceAnalytics(filters: HrFilters = {}): Promise<Wo
       byTenure: groupBy(attrition, (record) => record.tenure_years < 1 ? "< 1 year" : record.tenure_years < 3 ? "1–2 years" : record.tenure_years < 5 ? "3–4 years" : "5+ years"),
       highRiskEmployees,
       employeeRecords: joinedModelRecords,
-      rows: attrition.slice(0, 250),
+      rows: outputRows(attrition, 250),
     },
     leave: {
       totalRequests: leave.length,
@@ -377,7 +578,7 @@ export async function getWorkforceAnalytics(filters: HrFilters = {}): Promise<Wo
       byType: groupBy(approvedLeave, (record) => record.leave_type, (record) => record.leave_days),
       byDepartment: leaveByDepartment,
       statuses: groupBy(leave, (record) => record.approval_status),
-      rows: leave.slice(0, 250),
+      rows: outputRows(leave, 250),
     },
     training: {
       completionRate: percent(completedTraining.length, training.length),
@@ -388,7 +589,7 @@ export async function getWorkforceAnalytics(filters: HrFilters = {}): Promise<Wo
       byDepartment: trainingByDepartment,
       byProgram: groupBy(training, (record) => record.training_program, (record) => record.training_hours),
       statuses: groupBy(training, (record) => record.completion_status),
-      rows: training.slice(0, 250),
+      rows: outputRows(training, 250),
     },
     promotions: {
       total: promotions.length,
@@ -398,21 +599,34 @@ export async function getWorkforceAnalytics(filters: HrFilters = {}): Promise<Wo
       trend: trend(promotions, (record) => record.promotion_date, normalizedFilters.period),
       byDepartment: promotionByDepartment,
       mobilityReview,
-      rows: promotions.slice(0, 250),
+      rows: outputRows(promotions, 250),
     },
     operatingSignals: {
       windowLabel: operatingWindowLabel,
       managerExitConcentration,
       replacementCoverage,
     },
-    employees: employees.slice(0, 500),
-    directoryEmployees: directoryEmployees.slice(0, 500),
+    decisionSupport: {
+      company: companyDecisionMetrics,
+      departments: departmentDecisionMetrics,
+      tenureAttrition,
+      workforceImpact,
+      actions,
+    },
+    employees: outputRows(employees, 500),
+    directoryEmployees: outputRows(directoryEmployees, 500),
     executiveInsights: insights.slice(0, 5),
   }
 }
 
 export function filtersFromSearchParams(params: URLSearchParams): HrFilters {
   const period = params.get("period")
+  const boundedNumber = (name: string, minimum: number, maximum: number): number | undefined => {
+    const raw = params.get(name)
+    if (raw === null || raw.trim() === "") return undefined
+    const value = Number(raw)
+    return Number.isFinite(value) && value >= minimum && value <= maximum ? value : undefined
+  }
   return {
     from: params.get("from") || undefined,
     to: params.get("to") || undefined,
@@ -422,5 +636,11 @@ export function filtersFromSearchParams(params: URLSearchParams): HrFilters {
     leaveType: params.get("leaveType") || undefined,
     dataMode: params.get("dataMode") === "live" ? "live" : "all",
     period: period === "quarter" || period === "year" ? period : "month",
+    recruitingCostPerHire: boundedNumber("recruitingCostPerHire", 0, 250_000),
+    vacancyProductivityPercent: boundedNumber("vacancyProductivityPercent", 0, 100),
+    onboardingDays: boundedNumber("onboardingDays", 0, 730),
+    onboardingProductivityPercent: boundedNumber("onboardingProductivityPercent", 0, 100),
+    courseFeePerLearner: boundedNumber("courseFeePerLearner", 0, 100_000),
+    courseHoursPerLearner: boundedNumber("courseHoursPerLearner", 0.5, 500),
   }
 }

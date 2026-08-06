@@ -13,15 +13,38 @@ import type {
   RiskLevel,
 } from "@/lib/types"
 
-type PredictionModel = {
+type SharedPredictionModel = {
   numericColumns: Array<keyof PredictionInput>
   categoricalColumns: Array<keyof PredictionInput>
+  numericMedians: number[]
+  categoricalValues: string[][]
+  referenceProfile: PredictionInput
+}
+
+type LogisticPredictionModel = SharedPredictionModel & {
+  type: "logistic"
   coefficients: number[]
   intercept: number
   numericMeans: number[]
   numericScales: number[]
-  categoricalValues: string[][]
 }
+
+type GradientTree = {
+  childrenLeft: number[]
+  childrenRight: number[]
+  features: number[]
+  thresholds: number[]
+  values: number[]
+}
+
+type GradientBoostingPredictionModel = SharedPredictionModel & {
+  type: "gradient_boosting"
+  learningRate: number
+  initialRawScore: number
+  trees: GradientTree[]
+}
+
+type PredictionModel = LogisticPredictionModel | GradientBoostingPredictionModel
 
 type RuntimeData = {
   sourceSha256: string
@@ -34,17 +57,6 @@ type RuntimeData = {
 }
 
 const runtime = runtimeJson as unknown as RuntimeData
-
-const numericBounds: Record<string, [number, number]> = {
-  DistanceFromHome: [0, 100],
-  Education: [1, 5],
-  EnvironmentSatisfaction: [1, 4],
-  JobSatisfaction: [1, 4],
-  MonthlyIncome: [0, 1_000_000],
-  NumCompaniesWorked: [0, 100],
-  WorkLifeBalance: [1, 4],
-  YearsAtCompany: [0, 100],
-}
 
 export class RequestValidationError extends Error {}
 
@@ -118,7 +130,9 @@ function validatePrediction(value: unknown): PredictionInput {
 
   for (const column of runtime.predictionModel.numericColumns) {
     const number = record[column]
-    const [minimum, maximum] = numericBounds[column]
+    const observed = runtime.schema.numericRanges[column]
+    const minimum = Math.floor(observed.min)
+    const maximum = Math.ceil(observed.max)
     if (!Number.isInteger(number) || (number as number) < minimum || (number as number) > maximum) {
       throw new RequestValidationError(`${column} must be an integer between ${minimum} and ${maximum}.`)
     }
@@ -189,33 +203,61 @@ function recommendation(feature: keyof PredictionInput): string {
   return suggestions[feature]
 }
 
+function vectorFor(record: PredictionInput, model: PredictionModel): number[] {
+  const vector = model.numericColumns.map((column, index) => {
+    const value = Number(record[column])
+    return Number.isFinite(value) ? value : model.numericMedians[index]
+  })
+  model.categoricalColumns.forEach((column, columnIndex) => {
+    for (const option of model.categoricalValues[columnIndex]) vector.push(record[column] === option ? 1 : 0)
+  })
+  return vector
+}
+
+function evaluateTree(tree: GradientTree, vector: number[]): number {
+  let node = 0
+  while (tree.childrenLeft[node] !== -1) {
+    node = vector[tree.features[node]] <= tree.thresholds[node]
+      ? tree.childrenLeft[node]
+      : tree.childrenRight[node]
+  }
+  return tree.values[node]
+}
+
+function probabilityFor(record: PredictionInput): number {
+  const model = runtime.predictionModel
+  const vector = vectorFor(record, model)
+  let rawScore: number
+  if (model.type === "gradient_boosting") {
+    rawScore = model.initialRawScore
+    for (const tree of model.trees) rawScore += model.learningRate * evaluateTree(tree, vector)
+  } else {
+    rawScore = model.intercept
+    let coefficientIndex = 0
+    model.numericColumns.forEach((_, index) => {
+      const transformed = (vector[index] - model.numericMeans[index]) / model.numericScales[index]
+      rawScore += transformed * model.coefficients[coefficientIndex]
+      coefficientIndex += 1
+    })
+    for (let index = model.numericColumns.length; index < vector.length; index += 1) {
+      rawScore += vector[index] * model.coefficients[coefficientIndex]
+      coefficientIndex += 1
+    }
+  }
+  return 1 / (1 + Math.exp(-rawScore))
+}
+
 export function predict(value: unknown): PredictionResult {
   const record = validatePrediction(value)
   const model = runtime.predictionModel
-  const contributions = new Map<keyof PredictionInput, number>()
-  let logit = model.intercept
-  let coefficientIndex = 0
-
-  model.numericColumns.forEach((column, index) => {
-    const transformed = (Number(record[column]) - model.numericMeans[index]) / model.numericScales[index]
-    const contribution = transformed * model.coefficients[coefficientIndex]
-    contributions.set(column, contribution)
-    logit += contribution
-    coefficientIndex += 1
-  })
-  model.categoricalColumns.forEach((column, columnIndex) => {
-    let grouped = 0
-    for (const option of model.categoricalValues[columnIndex]) {
-      const contribution = record[column] === option ? model.coefficients[coefficientIndex] : 0
-      grouped += contribution
-      logit += contribution
-      coefficientIndex += 1
-    }
-    contributions.set(column, grouped)
+  const probability = probabilityFor(record)
+  const referenceProbability = probabilityFor(model.referenceProfile)
+  const effects = [...model.numericColumns, ...model.categoricalColumns].map((feature) => {
+    const comparison = { ...record, [feature]: model.referenceProfile[feature] }
+    return [feature, (probability - probabilityFor(comparison)) * 100] as const
   })
 
-  const probability = 1 / (1 + Math.exp(-logit))
-  const ranked = [...contributions.entries()].sort((left, right) => right[1] - left[1])
+  const ranked = effects.sort((left, right) => right[1] - left[1])
   const positive = ranked.filter(([, contribution]) => contribution > 0)
   const selected = (positive.length ? positive : ranked).slice(0, 3)
   const topDrivers: PredictionDriver[] = selected.map(([feature, contribution]) => ({
@@ -223,6 +265,7 @@ export function predict(value: unknown): PredictionResult {
     label: labels[feature],
     value: record[feature],
     contribution: Number(contribution.toFixed(4)),
+    referenceValue: model.referenceProfile[feature],
     explanation: explanation(feature, record),
   }))
 
@@ -232,6 +275,7 @@ export function predict(value: unknown): PredictionResult {
     riskLevel: riskLevel(probability),
     decisionThreshold: Number(runtime.schema.threshold.toFixed(4)),
     aboveInterventionThreshold: probability >= runtime.schema.threshold,
+    referenceProbability: Number(referenceProbability.toFixed(6)),
     topDrivers,
     recommendation: recommendation(topDrivers[0].feature as keyof PredictionInput),
     disclaimer: "This is a statistical estimate for human review. Do not use it as the sole basis for an employment decision.",

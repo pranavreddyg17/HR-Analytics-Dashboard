@@ -8,11 +8,6 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { RiskBadge } from "@/components/risk-badge"
 import type { PredictionInput, PredictionResult, PredictionSchema } from "@/lib/types"
 
-function integer(value: string): number {
-  const parsed = Number.parseInt(value, 10)
-  return Number.isFinite(parsed) ? parsed : 0
-}
-
 export function AttritionPredictor({ schema }: { schema: PredictionSchema }) {
   const initial = useMemo<PredictionInput>(() => ({
     Department: schema.categoricalOptions.Department?.[0] ?? "Research & Development",
@@ -31,6 +26,8 @@ export function AttritionPredictor({ schema }: { schema: PredictionSchema }) {
   const [result, setResult] = useState<PredictionResult | null>(null)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [invalidFields, setInvalidFields] = useState<Set<string>>(new Set())
+  const [resetVersion, setResetVersion] = useState(0)
 
   function update<K extends keyof PredictionInput>(key: K, value: PredictionInput[K]) {
     setForm((current) => ({ ...current, [key]: value }))
@@ -38,6 +35,10 @@ export function AttritionPredictor({ schema }: { schema: PredictionSchema }) {
 
   async function submit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault()
+    if (invalidFields.size) {
+      setError("Complete the highlighted fields before calculating.")
+      return
+    }
     setLoading(true)
     setError(null)
     try {
@@ -62,6 +63,17 @@ export function AttritionPredictor({ schema }: { schema: PredictionSchema }) {
     setForm(initial)
     setResult(null)
     setError(null)
+    setInvalidFields(new Set())
+    setResetVersion((current) => current + 1)
+  }
+
+  function setFieldValidity(field: string, valid: boolean) {
+    setInvalidFields((current) => {
+      const next = new Set(current)
+      if (valid) next.delete(field)
+      else next.add(field)
+      return next
+    })
   }
 
   const fieldClass = "h-9 w-full rounded-md border border-input bg-background px-3 text-control outline-none focus:ring-2 focus:ring-ring/40"
@@ -71,7 +83,7 @@ export function AttritionPredictor({ schema }: { schema: PredictionSchema }) {
       <Card className="gap-0 py-0 shadow-none">
         <CardHeader className="border-b border-border px-5 py-4">
           <CardTitle>Risk inputs</CardTitle>
-          <CardDescription>Adjust the fields used by the model.</CardDescription>
+          <CardDescription>Test a historical scenario.</CardDescription>
         </CardHeader>
         <CardContent className="px-5 py-4">
           <form onSubmit={submit} className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
@@ -89,14 +101,14 @@ export function AttritionPredictor({ schema }: { schema: PredictionSchema }) {
               </select>
             </label>
 
-            <NumberField label="Distance from home" value={form.DistanceFromHome} min={0} max={100} onChange={(value) => update("DistanceFromHome", value)} />
-            <NumberField label="Monthly income" value={form.MonthlyIncome} min={0} max={1000000} onChange={(value) => update("MonthlyIncome", value)} />
-            <NumberField label="Education level (1-5)" value={form.Education} min={1} max={5} onChange={(value) => update("Education", value)} />
-            <NumberField label="Environment satisfaction (1-4)" value={form.EnvironmentSatisfaction} min={1} max={4} onChange={(value) => update("EnvironmentSatisfaction", value)} />
-            <NumberField label="Job satisfaction (1-4)" value={form.JobSatisfaction} min={1} max={4} onChange={(value) => update("JobSatisfaction", value)} />
-            <NumberField label="Work-life balance (1-4)" value={form.WorkLifeBalance} min={1} max={4} onChange={(value) => update("WorkLifeBalance", value)} />
-            <NumberField label="Prior companies worked" value={form.NumCompaniesWorked} min={0} max={100} onChange={(value) => update("NumCompaniesWorked", value)} />
-            <NumberField label="Years at company" value={form.YearsAtCompany} min={0} max={100} onChange={(value) => update("YearsAtCompany", value)} />
+            <NumberField key={`distance-${resetVersion}`} field="DistanceFromHome" label="Distance from home" value={form.DistanceFromHome} range={schema.numericRanges.DistanceFromHome} onChange={(value) => update("DistanceFromHome", value)} onValidityChange={setFieldValidity} />
+            <NumberField key={`income-${resetVersion}`} field="MonthlyIncome" label="Monthly income" value={form.MonthlyIncome} range={schema.numericRanges.MonthlyIncome} onChange={(value) => update("MonthlyIncome", value)} onValidityChange={setFieldValidity} />
+            <NumberField key={`education-${resetVersion}`} field="Education" label="Education level (1-5)" value={form.Education} range={schema.numericRanges.Education} onChange={(value) => update("Education", value)} onValidityChange={setFieldValidity} />
+            <NumberField key={`environment-${resetVersion}`} field="EnvironmentSatisfaction" label="Environment satisfaction (1-4)" value={form.EnvironmentSatisfaction} range={schema.numericRanges.EnvironmentSatisfaction} onChange={(value) => update("EnvironmentSatisfaction", value)} onValidityChange={setFieldValidity} />
+            <NumberField key={`satisfaction-${resetVersion}`} field="JobSatisfaction" label="Job satisfaction (1-4)" value={form.JobSatisfaction} range={schema.numericRanges.JobSatisfaction} onChange={(value) => update("JobSatisfaction", value)} onValidityChange={setFieldValidity} />
+            <NumberField key={`balance-${resetVersion}`} field="WorkLifeBalance" label="Work-life balance (1-4)" value={form.WorkLifeBalance} range={schema.numericRanges.WorkLifeBalance} onChange={(value) => update("WorkLifeBalance", value)} onValidityChange={setFieldValidity} />
+            <NumberField key={`companies-${resetVersion}`} field="NumCompaniesWorked" label="Prior companies worked" value={form.NumCompaniesWorked} range={schema.numericRanges.NumCompaniesWorked} onChange={(value) => update("NumCompaniesWorked", value)} onValidityChange={setFieldValidity} />
+            <NumberField key={`tenure-${resetVersion}`} field="YearsAtCompany" label="Years at company" value={form.YearsAtCompany} range={schema.numericRanges.YearsAtCompany} onChange={(value) => update("YearsAtCompany", value)} onValidityChange={setFieldValidity} />
 
             <div className="flex flex-wrap items-center gap-3 sm:col-span-2 lg:col-span-3">
               <Button type="submit" disabled={loading} className="gap-2">
@@ -107,7 +119,7 @@ export function AttritionPredictor({ schema }: { schema: PredictionSchema }) {
                 Reset
               </Button>
               <span className="text-meta text-muted-foreground">
-                Threshold {(schema.threshold * 100).toFixed(0)}%
+                Model {schema.modelVersion} · review threshold {(schema.threshold * 100).toFixed(0)}%
               </span>
             </div>
             {error && <p className="text-body text-destructive sm:col-span-2 lg:col-span-3">{error}</p>}
@@ -118,7 +130,7 @@ export function AttritionPredictor({ schema }: { schema: PredictionSchema }) {
       <Card className="gap-0 py-0 shadow-none">
         <CardHeader className="border-b border-border px-5 py-4">
           <CardTitle>Result</CardTitle>
-          <CardDescription>Estimated probability and contributing signals.</CardDescription>
+          <CardDescription>Score and strongest sensitivities.</CardDescription>
         </CardHeader>
         <CardContent className="px-5 py-4">
           {!result ? (
@@ -136,12 +148,20 @@ export function AttritionPredictor({ schema }: { schema: PredictionSchema }) {
                 <RiskBadge level={result.riskLevel} />
               </div>
 
+              <p className="text-meta text-muted-foreground">
+                Reference profile estimate {(result.referenceProbability * 100).toFixed(1)}%. The comparison changes one field at a time and is not a causal explanation.
+              </p>
+
               <div className="flex flex-col gap-2">
-                <p className="text-label font-semibold text-muted-foreground">Top model contributions</p>
+                <p className="text-label font-semibold text-muted-foreground">Local sensitivity</p>
                 {result.topDrivers.map((driver) => (
                   <div key={driver.feature} className="rounded-md border border-border p-3">
-                    <p className="text-card-title font-semibold">{driver.label}</p>
+                    <div className="flex items-center justify-between gap-3">
+                      <p className="text-card-title font-semibold">{driver.label}</p>
+                      <p className="text-meta tabular-nums text-muted-foreground">{driver.contribution >= 0 ? "+" : ""}{driver.contribution.toFixed(1)} points</p>
+                    </div>
                     <p className="text-meta text-muted-foreground">{driver.explanation}</p>
+                    <p className="mt-1 text-meta text-muted-foreground">Reference value: {String(driver.referenceValue)}</p>
                   </div>
                 ))}
               </div>
@@ -162,28 +182,53 @@ export function AttritionPredictor({ schema }: { schema: PredictionSchema }) {
 
 function NumberField({
   label,
+  field,
   value,
-  min,
-  max,
+  range,
   onChange,
+  onValidityChange,
 }: {
   label: string
+  field: string
   value: number
-  min: number
-  max: number
+  range: { min: number; max: number; median: number }
   onChange: (value: number) => void
+  onValidityChange: (field: string, valid: boolean) => void
 }) {
+  const [draft, setDraft] = useState(String(value))
+  const [valid, setValid] = useState(true)
+
+  function change(next: string) {
+    setDraft(next)
+    const parsed = Number(next)
+    const isValid = next.trim() !== ""
+      && Number.isInteger(parsed)
+      && parsed >= range.min
+      && parsed <= range.max
+    setValid(isValid)
+    onValidityChange(field, isValid)
+    if (isValid) onChange(parsed)
+  }
+
+  function normalize() {
+    if (!valid) return
+    setDraft(String(Number(draft)))
+  }
+
   return (
     <label className="flex flex-col gap-1.5 text-label font-semibold text-muted-foreground">
       {label}
       <input
         type="number"
-        value={value}
-        min={min}
-        max={max}
-        onChange={(event) => onChange(integer(event.target.value))}
+        value={draft}
+        min={range.min}
+        max={range.max}
+        aria-invalid={!valid}
+        onChange={(event) => change(event.target.value)}
+        onBlur={normalize}
         className="h-9 w-full rounded-md border border-input bg-background px-3 text-control text-foreground outline-none focus:ring-2 focus:ring-ring/40"
       />
+      {!valid && <span className="text-meta font-normal text-destructive">Enter {range.min}–{range.max}.</span>}
     </label>
   )
 }

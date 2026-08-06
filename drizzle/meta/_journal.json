@@ -78,6 +78,27 @@
       "when": 1785708749823,
       "tag": "0010_hard_sunfire",
       "breakpoints": true
+    },
+    {
+      "idx": 11,
+      "version": "6",
+      "when": 1785868927349,
+      "tag": "0011_cold_blindfold",
+      "breakpoints": true
+    },
+    {
+      "idx": 12,
+      "version": "6",
+      "when": 1785940891482,
+      "tag": "0012_flawless_zodiak",
+      "breakpoints": true
+    },
+    {
+      "idx": 13,
+      "version": "6",
+      "when": 1785958374378,
+      "tag": "0013_chunky_zarda",
+      "breakpoints": true
     }
   ]
 }

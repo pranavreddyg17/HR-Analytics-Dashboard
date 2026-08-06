@@ -39,10 +39,10 @@ The deployed application is a single Cloudflare-compatible web runtime:
 ## Data truth
 
 - All 1,470 historical rows are scored by the deployed model.
-- `POST /api/v1/predict` runs the real logistic-regression coefficients and preprocessing statistics.
+- `POST /api/v1/predict` runs the selected compact gradient-boosted model exported from the persisted scikit-learn pipeline.
 - The LangChain agent calls MCP tools and answers from the returned HR analytics evidence.
-- Employee and leave mutations are durable and write an attributable activity entry.
-- Imports replace demo rows one HR domain at a time and remain labelled by source.
+- Employee, hiring, leave, and learning mutations are durable and write an attributable activity entry.
+- Imports are validated before writes. Merge mode upserts matching IDs, while replace mode replaces only previously imported rows in the selected domain; managed and seeded records are preserved.
 - Age and marital status are excluded from training.
 
 The IBM source dataset has no employee names, managers, locations, dates, hiring events, leave records, training records, promotion records, or exit reasons. The initial workspace therefore derives a deterministic, internally consistent synthetic workforce from those rows. Every generated record remains labelled `data_source=demo`; imported and HR-managed records remain separate and are never assigned IBM model scores.
@@ -108,11 +108,21 @@ PYTHONPATH=. .venv/bin/python scripts/export_worker_runtime.py
 | GET | `/api/v1/hr/inbox` | Unified HR work queue |
 | GET | `/api/v1/hr/hiring` | Operational requisitions and candidate pipeline |
 | POST | `/api/v1/hr/hiring/candidates` | Add a candidate to an approved requisition |
-| PATCH | `/api/v1/hr/hiring/candidates/{id}` | Advance, reject, or hire a candidate |
+| PATCH | `/api/v1/hr/hiring/candidates/{id}` | Advance or reject a candidate; hiring creates a preboarding employee profile |
+| PATCH | `/api/v1/hr/hiring/requisitions/{id}` | Update the accountable follow-up or close a requisition |
 | POST | `/api/v1/hr/workflows` | Create leave, hiring, or training work |
 | POST | `/api/v1/hr/workflows/action` | Record an approval, rejection, or completion |
-| POST | `/api/v1/hr/leave/{id}/decision` | Approve or reject leave with audit history |
-| GET | `/api/v1/workforce` | Filtered seven-view workforce analytics |
+| GET | `/api/v1/hr/leave` | Role-scoped leave register, schedules, decision counts, and overlap context |
+| POST | `/api/v1/hr/leave/{id}/decision` | Approve or reject leave with an attributable decision note |
+| GET/POST | `/api/v1/hr/learning` | Role-scoped assignment register or create a catalog-backed assignment |
+| POST | `/api/v1/hr/learning/courses` | Add an HR-managed course to the catalog |
+| PATCH | `/api/v1/hr/learning/assignments/{id}` | Record completion, assessment score, and supporting note |
+| GET | `/api/v1/workforce` | Filtered workforce analytics, normalized department measures, and calculated action signals |
+| POST | `/api/v1/insights/actions` | Create an attributable work item from a current calculated exception |
+| PATCH | `/api/v1/insights/actions/{id}` | Start or complete an insight work item with a recorded plan or outcome |
+| GET | `/api/v1/retention/insights` | Versioned cohort, continuity, intervention, and workflow evidence |
+| POST | `/api/v1/retention/reviews` | Create an accountable retention cohort review |
+| PATCH | `/api/v1/retention/reviews/{id}` | Start or complete a retention review with an attributable note |
 | POST | `/api/v1/data/import` | Authenticated domain import |
 | GET | `/api/v1/reports` | PDF or Excel report export |
 | GET | `/api/v1/power-bi/{domain}` | Power BI-ready CSV feed |
@@ -121,14 +131,19 @@ PYTHONPATH=. .venv/bin/python scripts/export_worker_runtime.py
 | POST | `/api/v1/chat` | Grounded analytics agent |
 | GET | `/api/v1/data-dictionary` | Source schema and model-use flags |
 
+Insights uses transparent calculations rather than a composite workforce score: attrition rate is exits divided by active employees plus exits; replacement rate is completed hires divided by exits; vacancy rate is open requisitions divided by active headcount; and mobility review share is the defined tenure/no-promotion cohort divided by active headcount. Department action signals include their supporting counts and route users to the operational workspace that owns the follow-up.
+
 ## Model results
 
-- ROC-AUC: 0.71
-- Precision: 0.31
-- Recall: 0.54
-- F1: 0.39
-- Review threshold: 21%
-- Evaluation: five-fold stratified out-of-fold
+- Selected model: compact gradient boosting 2.0.0
+- Logistic baseline ROC-AUC: 0.710
+- Selected model ROC-AUC: 0.727 (95% bootstrap interval 0.693–0.763)
+- Average precision: 0.364
+- Precision / recall: 0.370 / 0.527
+- F1: 0.435
+- Brier score: 0.1216
+- Review threshold: 20%
+- Evaluation: five-fold stratified out-of-fold plus ten repeated five-fold stability checks
 
 The limited sample is suitable for demonstrating a working architecture, not for production employment decisions.
 

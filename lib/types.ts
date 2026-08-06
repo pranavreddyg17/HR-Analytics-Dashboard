@@ -101,6 +101,13 @@ export type PredictionSchema = {
   categoricalOptions: Record<string, string[]>
   excludedFromModel: string[]
   threshold: number
+  modelName: string
+  modelVersion: string
+  evaluation: string
+  explanationMethod: string
+  thresholdPolicy: string
+  metrics: Record<string, number | number[][]>
+  confidenceIntervals95: Record<string, number[]>
 }
 
 export type PredictionInput = {
@@ -121,6 +128,7 @@ export type PredictionDriver = {
   label: string
   value: string | number
   contribution: number
+  referenceValue: string | number
   explanation: string
 }
 
@@ -130,6 +138,7 @@ export type PredictionResult = {
   riskLevel: RiskLevel
   decisionThreshold: number
   aboveInterventionThreshold: boolean
+  referenceProbability: number
   topDrivers: PredictionDriver[]
   recommendation: string
   disclaimer: string
@@ -140,7 +149,10 @@ export type ModelMetadata = {
   model_version: string
   trained_at: string
   evaluation: string
+  model_family: string
   threshold: number
+  threshold_policy: string
+  explanation_method: string
   metrics: Record<string, number | number[][]>
   dataset: {
     rows: number

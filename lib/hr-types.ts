@@ -12,6 +12,22 @@ export type HrFilters = {
   leaveType?: string
   dataMode?: "live" | "all"
   period?: TrendPeriod
+  recruitingCostPerHire?: number
+  vacancyProductivityPercent?: number
+  onboardingDays?: number
+  onboardingProductivityPercent?: number
+  courseFeePerLearner?: number
+  courseHoursPerLearner?: number
+}
+
+export type WorkforceCostAssumptions = {
+  currency: "USD"
+  recruitingCostPerHire: number
+  vacancyProductivityPercent: number
+  onboardingDays: number
+  onboardingProductivityPercent: number
+  courseFeePerLearner: number
+  courseHoursPerLearner: number
 }
 
 export type BreakdownPoint = { label: string; value: number; secondary?: number }
@@ -284,6 +300,132 @@ export type WorkforceAnalytics = {
       averageTimeToHire: number
       mobilityReviewCount: number
       status: "Gap" | "Watch" | "Covered"
+    }>
+  }
+  decisionSupport: {
+    company: {
+      replacementRate: number | null
+      vacancyRate: number
+      voluntaryExitShare: number
+      leaveDaysPerActiveEmployee: number
+      mobilityReviewShare: number
+      trainingCompletionRate: number
+      mandatoryTrainingGaps: number
+    }
+    departments: Array<{
+      department: string
+      activeEmployees: number
+      hires: number
+      exits: number
+      attritionRate: number
+      netMovement: number
+      replacementRate: number | null
+      openRequisitions: number
+      vacancyRate: number
+      coverageStatus: "Gap" | "Watch" | "Covered"
+      approvedLeaveDays: number
+      leaveDaysPerActiveEmployee: number
+      pendingLeaveRequests: number
+      trainingAssignments: number
+      trainingCompletionRate: number
+      mandatoryTrainingGaps: number
+      promotions: number
+      promotionRate: number
+      mobilityReviewCount: number
+      mobilityReviewShare: number
+    }>
+    tenureAttrition: Array<{
+      cohort: string
+      activeEmployees: number
+      exits: number
+      population: number
+      attritionRate: number
+      shareOfExits: number
+    }>
+    workforceImpact: {
+      assumptions: WorkforceCostAssumptions
+      summary: {
+        payDataCoverage: number
+        estimatedCostOfRecordedExits: number
+        averageReplacementCost: number
+        reviewWeightedExposure: number
+        rolesNeedingContinuityReview: number
+      }
+      roles: Array<{
+        department: string
+        jobTitle: string
+        activeEmployees: number
+        recordedExits: number
+        completedHires: number
+        openRequisitions: number
+        reviewProfiles: number
+        reviewShare: number
+        meanModelRisk: number
+        averageAnnualPay: number
+        payDataCoverage: number
+        refillDays: number
+        refillBasis: "role" | "department" | "company"
+        directRecruitingCost: number
+        vacancyCost: number
+        onboardingCost: number
+        replacementCostPerExit: number
+        reviewWeightedExposure: number
+        continuityStatus: "Critical" | "Watch" | "Covered"
+      }>
+      employees: Array<{
+        employeeId: string
+        name: string
+        department: string
+        jobTitle: string
+        manager: string
+        riskScore: number
+        topDriver: string
+        activeRolePeers: number
+        directReports: number
+        openMatchingRequisitions: number
+        refillDays: number
+        refillBasis: "role" | "department" | "company"
+        annualPay: number
+        directRecruitingCost: number
+        vacancyCost: number
+        onboardingCost: number
+        replacementCost: number
+        reviewWeightedExposure: number
+        incompleteLearningAssignments: number
+        proposedLearningInvestment: number
+        learningBreakEvenPercent: number
+        continuityStatus: "Critical" | "Watch" | "Covered"
+      }>
+      learningCases: Array<{
+        department: string
+        employeesInReview: number
+        employeesWithLearningGap: number
+        incompleteAssignments: number
+        assignedHours: number
+        proposedLearningInvestment: number
+        reviewWeightedExposure: number
+        breakEvenPercent: number | null
+        leadingProgram: string | null
+        decision: "Assess skill fit" | "No linked gap"
+      }>
+    }
+    actions: Array<{
+      id: string
+      department: string
+      category: "workforce_coverage" | "attrition" | "mandatory_learning" | "mobility"
+      severity: "high" | "medium"
+      title: string
+      evidence: string
+      recommendedAction: string
+      target: "hiring" | "attrition" | "courses" | "people"
+      workItem: {
+        id: string
+        status: "pending" | "in_progress" | "completed"
+        ownerEmail: string | null
+        dueAt: string | null
+        createdAt: string
+        completedAt: string | null
+      } | null
     }>
   }
   employees: EmployeeRecord[]

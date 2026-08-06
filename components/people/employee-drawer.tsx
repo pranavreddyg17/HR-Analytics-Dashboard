@@ -1,7 +1,6 @@
 "use client"
 
 import { useEffect, useMemo, useState } from "react"
-import { AnimatePresence, motion, useReducedMotion } from "motion/react"
 import { ChevronRight, Mail, MapPin, Save, X } from "lucide-react"
 
 import { Button } from "@/components/ui/button"
@@ -66,7 +65,7 @@ type EmployeeDrawerProps = {
 }
 
 export function EmployeeDrawer({ open, ...props }: EmployeeDrawerProps) {
-  return <AnimatePresence>{open && <EmployeeDrawerPanel {...props} />}</AnimatePresence>
+  return open ? <EmployeeDrawerPanel {...props} /> : null
 }
 
 function EmployeeDrawerPanel({
@@ -77,7 +76,6 @@ function EmployeeDrawerPanel({
   onClose,
   onSaved,
 }: Omit<EmployeeDrawerProps, "open">) {
-  const reduceMotion = useReducedMotion()
   const [form, setForm] = useState<EmployeeInput>(() => employee ? toInput(employee) : emptyEmployee())
   const [step, setStep] = useState(0)
   const [saving, setSaving] = useState(false)
@@ -173,25 +171,17 @@ function EmployeeDrawerPanel({
 
   return (
     <div className="fixed inset-0 z-[80]">
-          <motion.button
+          <button
             type="button"
             aria-label="Close employee form"
             className="absolute inset-0 bg-slate-950/25"
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            transition={{ duration: reduceMotion ? 0 : 0.2 }}
             onClick={() => { if (!saving) onClose() }}
           />
-          <motion.aside
+          <aside
             role="dialog"
             aria-modal="true"
             aria-labelledby="employee-drawer-title"
             className="absolute right-0 top-0 flex h-[100dvh] w-full max-w-xl flex-col overflow-hidden border-l border-border/70 bg-background shadow-none"
-            initial={{ x: reduceMotion ? 0 : "100%" }}
-            animate={{ x: 0 }}
-            exit={{ x: reduceMotion ? 0 : "100%" }}
-            transition={{ type: "spring", damping: 30, stiffness: 320 }}
           >
             <div className="border-b border-border px-6 pb-5 pt-6">
               <div className="flex items-start gap-4">
@@ -221,15 +211,7 @@ function EmployeeDrawerPanel({
 
             <form onSubmit={submit} className="relative flex min-h-0 flex-1 flex-col overflow-hidden">
               <div className="flex-1 overflow-y-auto px-6 py-6">
-                <AnimatePresence mode="wait" initial={false}>
-                  <motion.div
-                    key={step}
-                    initial={{ opacity: 0, x: reduceMotion ? 0 : 12 }}
-                    animate={{ opacity: 1, x: 0 }}
-                    exit={{ opacity: 0, x: reduceMotion ? 0 : -12 }}
-                    transition={{ duration: reduceMotion ? 0 : 0.18 }}
-                    className="space-y-5"
-                  >
+                  <div key={step} className="space-y-5">
                     {step === 0 && (
                       <>
                         <SectionIntro title="Personal information" detail="Name and contact details" />
@@ -274,13 +256,12 @@ function EmployeeDrawerPanel({
                         </div>
                       </>
                     )}
-                  </motion.div>
-                </AnimatePresence>
+                  </div>
                 {error && <p role="alert" aria-live="polite" className="mt-5 rounded-md border border-destructive/20 bg-destructive/5 px-3 py-2.5 text-sm text-destructive">{error}</p>}
               </div>
 
             </form>
-          </motion.aside>
+          </aside>
     </div>
   )
 }

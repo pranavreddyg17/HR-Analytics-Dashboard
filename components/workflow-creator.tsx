@@ -12,7 +12,7 @@ const inputClass = "h-10 w-full rounded-md border border-border bg-background px
 const textareaClass = "min-h-24 w-full resize-y rounded-md border border-border bg-background px-3 py-2.5 text-sm outline-none focus:border-ring focus:ring-2 focus:ring-ring/20"
 const today = () => new Date().toISOString().slice(0, 10)
 
-export function WorkflowCreator({ actor, people, initialType, onCreated, onTypeChange }: { actor: WorkflowActorContext; people: ManagedEmployee[]; initialType?: WorkflowType; onCreated: (message: string) => void; onTypeChange?: (type: WorkflowType | null) => void }) {
+export function WorkflowCreator({ actor, people, initialType, onCreated, onTypeChange, showLauncher = true }: { actor: WorkflowActorContext; people: ManagedEmployee[]; initialType?: WorkflowType; onCreated: (message: string) => void; onTypeChange?: (type: WorkflowType | null) => void; showLauncher?: boolean }) {
   const type = initialType ?? null
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState("")
@@ -57,7 +57,7 @@ export function WorkflowCreator({ actor, people, initialType, onCreated, onTypeC
 
   return (
     <>
-      <section className="flex flex-wrap items-center gap-2" aria-label="Create HR workflow">
+      {showLauncher && <section className="flex flex-wrap items-center gap-2" aria-label="Create HR workflow">
         <span className="mr-1 text-label font-semibold text-muted-foreground">Create</span>
         {cards.map((card) => {
           return (
@@ -66,7 +66,7 @@ export function WorkflowCreator({ actor, people, initialType, onCreated, onTypeC
             </button>
           )
         })}
-      </section>
+      </section>}
 
       {type && (
         <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
@@ -116,7 +116,9 @@ function Field({ label, children }: { label: string; children: React.ReactNode }
   return <label className="block"><span className="mb-1.5 block text-xs font-semibold">{label}</span>{children}</label>
 }
 
-export function SelectEmployee({ value, people, onChange }: { value: string; people: ManagedEmployee[]; onChange: (value: string) => void }) {
+type EmployeeSelectOption = Pick<ManagedEmployee, "employee_id" | "display_name" | "department" | "job_title" | "location"> & { initials?: string }
+
+export function SelectEmployee({ value, people, onChange }: { value: string; people: EmployeeSelectOption[]; onChange: (value: string) => void }) {
   const [open, setOpen] = useState(false)
   const [query, setQuery] = useState("")
   const selected = people.find((person) => person.employee_id === value)
@@ -168,7 +170,7 @@ export function SelectEmployee({ value, people, onChange }: { value: string; peo
                 onClick={() => { onChange(person.employee_id); setOpen(false); setQuery("") }}
                 className="flex w-full items-center gap-3 rounded-md px-3 py-2.5 text-left transition hover:bg-muted focus-visible:bg-muted focus-visible:outline-none"
               >
-                <span className="flex size-8 shrink-0 items-center justify-center rounded-md bg-secondary text-meta font-semibold text-secondary-foreground">{person.initials}</span>
+                <span className="flex size-8 shrink-0 items-center justify-center rounded-md bg-secondary text-meta font-semibold text-secondary-foreground">{person.initials || person.display_name.split(/\s+/).slice(0, 2).map((part) => part[0]).join("").toUpperCase()}</span>
                 <span className="min-w-0 flex-1">
                   <span className="truncate text-sm font-semibold">{person.display_name}</span>
                   <span className="block truncate text-meta text-muted-foreground">{person.employee_id} · {person.job_title} · {person.department}</span>

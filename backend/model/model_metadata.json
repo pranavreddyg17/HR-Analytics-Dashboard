@@ -1,27 +1,197 @@
 {
-  "model_name": "Regularized Logistic Regression",
-  "model_version": "1.0.0",
-  "trained_at": "2026-07-27T02:48:21.687915+00:00",
-  "evaluation": "5-fold stratified out-of-fold evaluation",
-  "threshold": 0.20999999999999996,
+  "model_name": "Compact Gradient Boosting",
+  "model_version": "2.0.0",
+  "model_family": "gradient_boosting",
+  "trained_at": "2026-08-04T22:40:03.424099+00:00",
+  "evaluation": "Five-fold stratified out-of-fold evaluation with a 10x repeated stability check",
+  "threshold": 0.19999999999999996,
+  "threshold_policy": "Maximise out-of-fold F1 for a human-review queue; recalibrate to local review capacity before operational use.",
   "metrics": {
-    "roc_auc": 0.7097949839333929,
-    "average_precision": 0.3518937083360157,
-    "precision": 0.3054892601431981,
-    "recall": 0.540084388185654,
-    "f1": 0.3902439024390244,
-    "accuracy": 0.7278911564625851,
-    "brier_score": 0.1232391745465977,
+    "roc_auc": 0.7274237648902714,
+    "average_precision": 0.364070629565281,
+    "precision": 0.3698224852071006,
+    "recall": 0.5274261603375527,
+    "f1": 0.43478260869565216,
+    "accuracy": 0.7789115646258503,
+    "brier_score": 0.121552039991317,
+    "log_loss": 0.39603767972405296,
+    "expected_calibration_error": 0.022177787765889585,
     "confusion_matrix": [
       [
-        942,
-        291
+        1020,
+        213
       ],
       [
-        109,
-        128
+        112,
+        125
       ]
     ]
+  },
+  "confidence_intervals_95": {
+    "roc_auc": [
+      0.6932077092337647,
+      0.762776588609306
+    ],
+    "average_precision": [
+      0.3159382202621217,
+      0.42359122620701267
+    ],
+    "brier_score": [
+      0.11695751062625079,
+      0.12629230547888984
+    ]
+  },
+  "stability": {
+    "roc_auc": {
+      "mean": 0.7202605986419285,
+      "standard_deviation": 0.04460828907078771,
+      "p2_5": 0.6409143767766389,
+      "p97_5": 0.794752993367215
+    },
+    "average_precision": {
+      "mean": 0.3761987223657944,
+      "standard_deviation": 0.06204836754728128,
+      "p2_5": 0.25457548853287015,
+      "p97_5": 0.4941763661677323
+    },
+    "brier_score": {
+      "mean": 0.12213780966226045,
+      "standard_deviation": 0.005240648380906504,
+      "p2_5": 0.11460337979298396,
+      "p97_5": 0.1330338351424823
+    }
+  },
+  "candidate_comparison": {
+    "Regularized Logistic Regression": {
+      "threshold": 0.21099999999999997,
+      "metrics": {
+        "roc_auc": 0.7097949839333929,
+        "average_precision": 0.3518937083360157,
+        "precision": 0.3062200956937799,
+        "recall": 0.540084388185654,
+        "f1": 0.39083969465648855,
+        "accuracy": 0.7285714285714285,
+        "brier_score": 0.12323917454659777,
+        "log_loss": 0.40428203364100584,
+        "expected_calibration_error": 0.023600503760678022,
+        "confusion_matrix": [
+          [
+            943,
+            290
+          ],
+          [
+            109,
+            128
+          ]
+        ]
+      },
+      "folds": [
+        {
+          "roc_auc": 0.6874999999999999,
+          "average_precision": 0.3602683304805437,
+          "brier_score": 0.12538890575153394,
+          "log_loss": 0.4115846453719773
+        },
+        {
+          "roc_auc": 0.7174796747967481,
+          "average_precision": 0.390716894737506,
+          "brier_score": 0.12348174456184112,
+          "log_loss": 0.4104639929838115
+        },
+        {
+          "roc_auc": 0.7227151348091997,
+          "average_precision": 0.381822800608137,
+          "brier_score": 0.12126738318875636,
+          "log_loss": 0.39578889869806616
+        },
+        {
+          "roc_auc": 0.7545869583943493,
+          "average_precision": 0.3776731712505038,
+          "brier_score": 0.11975616165874821,
+          "log_loss": 0.3884616662551097
+        },
+        {
+          "roc_auc": 0.6769747609613231,
+          "average_precision": 0.32418798107307917,
+          "brier_score": 0.12630167757210925,
+          "log_loss": 0.41511096489606436
+        }
+      ]
+    },
+    "Compact Gradient Boosting": {
+      "threshold": 0.19999999999999996,
+      "metrics": {
+        "roc_auc": 0.7274237648902714,
+        "average_precision": 0.364070629565281,
+        "precision": 0.3698224852071006,
+        "recall": 0.5274261603375527,
+        "f1": 0.43478260869565216,
+        "accuracy": 0.7789115646258503,
+        "brier_score": 0.121552039991317,
+        "log_loss": 0.39603767972405296,
+        "expected_calibration_error": 0.022177787765889585,
+        "confusion_matrix": [
+          [
+            1020,
+            213
+          ],
+          [
+            112,
+            125
+          ]
+        ]
+      },
+      "folds": [
+        {
+          "roc_auc": 0.7151930894308943,
+          "average_precision": 0.4048222727347415,
+          "brier_score": 0.12153190832065731,
+          "log_loss": 0.3987264142017312
+        },
+        {
+          "roc_auc": 0.7341632791327912,
+          "average_precision": 0.3663047538015281,
+          "brier_score": 0.12402495394819982,
+          "log_loss": 0.3997078937669178
+        },
+        {
+          "roc_auc": 0.7973985700749419,
+          "average_precision": 0.4522021360423863,
+          "brier_score": 0.1147589594172867,
+          "log_loss": 0.37426479872684093
+        },
+        {
+          "roc_auc": 0.7314583512791799,
+          "average_precision": 0.41184634127587894,
+          "brier_score": 0.11837527529383668,
+          "log_loss": 0.3893822783717486
+        },
+        {
+          "roc_auc": 0.67335687828409,
+          "average_precision": 0.30016454777527274,
+          "brier_score": 0.12906910297660457,
+          "log_loss": 0.4181070135530264
+        }
+      ]
+    }
+  },
+  "selection_policy": {
+    "selected": "Compact Gradient Boosting",
+    "challenger_gate": "ROC-AUC improvement >= 0.01, average precision not lower, and Brier score no more than 0.002 worse than logistic baseline.",
+    "passed": true
+  },
+  "explanation_method": "Reference-profile sensitivity",
+  "reference_profile": {
+    "DistanceFromHome": 7.0,
+    "Education": 3.0,
+    "EnvironmentSatisfaction": 3.0,
+    "JobSatisfaction": 3.0,
+    "MonthlyIncome": 4919.0,
+    "NumCompaniesWorked": 2.0,
+    "WorkLifeBalance": 3.0,
+    "YearsAtCompany": 5.0,
+    "Department": "Research & Development",
+    "EducationField": "Life Sciences"
   },
   "dataset": {
     "rows": 1470,
@@ -51,62 +221,98 @@
   ],
   "feature_importance": [
     {
-      "feature": "EducationField",
-      "importance": 0.3237762140243136
-    },
-    {
       "feature": "MonthlyIncome",
-      "importance": 0.15240360278891588
-    },
-    {
-      "feature": "Department",
-      "importance": 0.14995635183694814
-    },
-    {
-      "feature": "EnvironmentSatisfaction",
-      "importance": 0.07536897253381618
-    },
-    {
-      "feature": "JobSatisfaction",
-      "importance": 0.074956201054911
+      "importance": 0.4081728743960487,
+      "mean_ap_decrease": 0.1151842077570581,
+      "standard_deviation": 0.05121635893426785
     },
     {
       "feature": "YearsAtCompany",
-      "importance": 0.0580951769897741
+      "importance": 0.22325580235941087,
+      "mean_ap_decrease": 0.06300159646812635,
+      "standard_deviation": 0.03750462645646911
+    },
+    {
+      "feature": "EnvironmentSatisfaction",
+      "importance": 0.09687825274580968,
+      "mean_ap_decrease": 0.027338526127992372,
+      "standard_deviation": 0.02115078048957928
+    },
+    {
+      "feature": "JobSatisfaction",
+      "importance": 0.09385008862739697,
+      "mean_ap_decrease": 0.026483994367512663,
+      "standard_deviation": 0.018192612394164417
     },
     {
       "feature": "DistanceFromHome",
-      "importance": 0.055247970236310374
+      "importance": 0.058878034143588255,
+      "mean_ap_decrease": 0.01661506715054723,
+      "standard_deviation": 0.02217300125150761
+    },
+    {
+      "feature": "Department",
+      "importance": 0.04188189069076976,
+      "mean_ap_decrease": 0.011818846134060302,
+      "standard_deviation": 0.02468098444925027
     },
     {
       "feature": "NumCompaniesWorked",
-      "importance": 0.04721733821049598
+      "importance": 0.04052856424788789,
+      "mean_ap_decrease": 0.011436944631196653,
+      "standard_deviation": 0.014654989044660702
     },
     {
       "feature": "WorkLifeBalance",
-      "importance": 0.04477613119174039
+      "importance": 0.036554492789087956,
+      "mean_ap_decrease": 0.010315482865200776,
+      "standard_deviation": 0.013229069637282535
     },
     {
       "feature": "Education",
-      "importance": 0.018202041132774356
+      "importance": 0.0,
+      "mean_ap_decrease": -0.0004108399988950984,
+      "standard_deviation": 0.0038030285736834887
+    },
+    {
+      "feature": "EducationField",
+      "importance": 0.0,
+      "mean_ap_decrease": -0.002404505320388296,
+      "standard_deviation": 0.011829204023507794
     }
   ],
   "positive_drivers": [
     {
-      "feature": "EducationField",
-      "share": 0.4769481456622334
+      "feature": "MonthlyIncome",
+      "share": 0.4081728743960487
     },
     {
-      "feature": "Department",
-      "share": 0.21936068550658747
+      "feature": "YearsAtCompany",
+      "share": 0.22325580235941087
+    },
+    {
+      "feature": "EnvironmentSatisfaction",
+      "share": 0.09687825274580968
+    },
+    {
+      "feature": "JobSatisfaction",
+      "share": 0.09385008862739697
     },
     {
       "feature": "DistanceFromHome",
-      "share": 0.16374635387278963
+      "share": 0.058878034143588255
+    },
+    {
+      "feature": "Department",
+      "share": 0.04188189069076976
     },
     {
       "feature": "NumCompaniesWorked",
-      "share": 0.1399448149583895
+      "share": 0.04052856424788789
+    },
+    {
+      "feature": "WorkLifeBalance",
+      "share": 0.036554492789087956
     }
   ],
   "categorical_options": {
@@ -168,8 +374,9 @@
   },
   "notes": [
     "Age and MaritalStatus are excluded from model training to reduce employment fairness and discrimination risk.",
-    "The uploaded dataset is historical and contains no employee names, job titles, managers, locations, dates, hiring events, leave records, training records, or promotion records.",
-    "Risk scores are model estimates, not facts or employment decisions. Human review is required.",
-    "The model is intended for demonstration and analytics validation, not automated HR action."
+    "The dataset is small and historical; confidence intervals and repeated folds show material uncertainty.",
+    "Local explanations compare one field at a time with a reference profile and do not establish cause.",
+    "Risk scores support qualified human review only and must not automate an employment decision.",
+    "Validate calibration, fairness, drift, and review capacity on current company data before operational use."
   ]
 }

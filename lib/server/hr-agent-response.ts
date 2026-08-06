@@ -20,18 +20,6 @@ function sourceLine(data: Record<string, unknown>): string {
   return `Current source: ${mode(data)}.`
 }
 
-function reviewForSignal(label: string): string {
-  if (/income|compensation/i.test(label)) return "Run a role- and location-adjusted compensation review."
-  if (/environment|manager|department/i.test(label)) return "Review team environment, manager support, workload and workplace concerns."
-  if (/job satisfaction|role fit/i.test(label)) return "Use a stay interview to review role fit, recognition and growth expectations."
-  if (/work-life|workload/i.test(label)) return "Review workload, schedule flexibility, PTO access and sustainable staffing."
-  if (/commute|distance/i.test(label)) return "Discuss hybrid or flexible-work options where the role permits."
-  if (/tenure|promotion|career/i.test(label)) return "Review career path, internal mobility and development options."
-  if (/education/i.test(label)) return "Review role alignment and relevant internal development opportunities."
-  if (/prior compan/i.test(label)) return "Use a stay interview to understand career expectations and likely next-step goals."
-  return "Validate the signal with current employee and manager evidence before selecting an intervention."
-}
-
 function renderWorkforce(plan: ToolPlan, data: Record<string, unknown>): string {
   const signals = object(data.operatingSignals)
   if (plan.purpose === "manager_concentration") {
@@ -112,22 +100,26 @@ function renderAttrition(plan: ToolPlan, data: Record<string, unknown>): string 
   }
 
   if (plan.purpose === "attrition_retention_strategy") {
-    const exitReasons = records(observed.byExitReason).slice(0, 3)
-    const drivers = records(model.topRiskDrivers).slice(0, 3)
-    const departments = records(model.riskByDepartment).slice(0, 2)
+    const retention = object(data.retentionIntelligence)
+    const cohorts = records(retention.cohortAlerts).slice(0, 3)
+    const priorities = records(retention.priorities).slice(0, 3)
+    const continuity = records(retention.continuity).slice(0, 3)
+    const impact = records(retention.impact360)
     return [
       sourceLine(data),
-      "Workforce retention plan",
-      "Evidence to prioritize",
-      ...(exitReasons.length ? exitReasons.map((row) => `- Recorded exits: ${String(row.label)} — ${Number(row.value)}.`) : ["- Recorded exit reasons are incomplete; improve exit-data capture before targeting a programme."]),
-      ...(drivers.length ? drivers.map((row) => `- Model review signal: ${String(row.label)} — ${Number(row.value)} active high-risk synthetic profiles. ${reviewForSignal(String(row.label))}`) : []),
-      ...(departments.length ? departments.map((row) => `- Department review: ${String(row.department)} — ${Number(row.highRiskCount)} high-risk profiles and ${Number(row.averageRisk).toFixed(1)}% average model risk.`) : []),
-      "30-day operating plan",
-      "1. Validate the priority cohorts and assign an accountable HR partner and manager for each review.",
-      "2. Run structured stay interviews using the leading topic, while keeping model scores out of the conversation.",
-      "3. Route confirmed issues to the appropriate process: manager support, workload, compensation benchmarking, mobility or flexible work.",
-      "4. Record the action, owner and review date; compare updated signals and voluntary exits in the next monthly review.",
-      "Start with one department and a small review cohort. Do not claim an intervention caused retention without a controlled evaluation.",
+      "Retention operating plan",
+      `Reporting control: model cohorts below ${Number(retention.minimumCohortSize)} people are suppressed.`,
+      "Priority cohorts",
+      ...(cohorts.length ? cohorts.map((row) => `- ${String(row.department)}: ${Number(row.recordedAttritionRate)}% recorded attrition; ${Number(row.aboveThreshold)} of ${Number(row.population)} profiles above the review threshold; ${String(row.replacementStatus).toLowerCase()} replacement coverage.`) : ["- No cohort meets the reporting threshold."]),
+      "Actions",
+      ...priorities.map((row, index) => `${index + 1}. ${String(row.cohort)} — ${String(row.action)} Owner: ${String(row.owner)}. Measure: ${String(row.measure)}.`),
+      ...(continuity.some((row) => Number(row.incompleteDevelopment) > 0) ? [
+        "Skills and continuity",
+        ...continuity.filter((row) => Number(row.incompleteDevelopment) > 0).map((row) => `- ${String(row.department)}: ${Number(row.incompleteDevelopment)} incomplete development assignments; exposed role ${String(row.leadingRole)}; ${Number(row.openRequisitions)} open roles. ${String(row.action)}`),
+      ] : []),
+      "360-degree checks",
+      ...impact.map((row) => `- ${String(row.perspective)}: ${String(row.finding)} (${String(row.value)}). ${String(row.response)}`),
+      "Use a 30/60/90-day follow-up and quarterly aggregate model review. Completion and employee feedback are measurable; retained employment is not proof that an intervention caused the outcome.",
     ].join("\n")
   }
 

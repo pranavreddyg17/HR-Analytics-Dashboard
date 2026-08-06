@@ -38,7 +38,7 @@ function candidateDefaults(stage: HiringCandidateStage): { nextStep: string; due
   if (stage === "Screening") return { nextStep: "Complete recruiter screen", dueDate: dateAfterToday(3) }
   if (stage === "Interview") return { nextStep: "Schedule or record interview outcome", dueDate: dateAfterToday(4) }
   if (stage === "Offer") return { nextStep: "Record offer response", dueDate: dateAfterToday(5) }
-  if (stage === "Hired") return { nextStep: "Complete onboarding handoff", dueDate: dateAfterToday(3) }
+  if (stage === "Hired") return { nextStep: "No further action", dueDate: "" }
   return { nextStep: "No further action", dueDate: "" }
 }
 
@@ -172,6 +172,7 @@ function CandidateUpdateDialog({ candidate, activity, onClose, onSaved }: { cand
   const [nextStepDueAt, setNextStepDueAt] = useState(candidate.nextStepDueAt ?? "")
   const [notes, setNotes] = useState(candidate.notes || "")
   const [rejectedReason, setRejectedReason] = useState(candidate.rejectedReason || "")
+  const [startDate, setStartDate] = useState(dateAfterToday(14))
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState("")
 
@@ -191,7 +192,7 @@ function CandidateUpdateDialog({ candidate, activity, onClose, onSaved }: { cand
       const response = await fetch(`/api/v1/hr/hiring/candidates/${encodeURIComponent(candidate.id)}`, {
         method: "PATCH",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ stage, nextStep, nextStepDueAt: nextStepDueAt || null, notes, rejectedReason: rejectedReason || undefined }),
+        body: JSON.stringify({ stage, nextStep, nextStepDueAt: nextStepDueAt || null, startDate: stage === "Hired" ? startDate : undefined, notes, rejectedReason: rejectedReason || undefined }),
       })
       const result = await response.json() as { error?: string; message?: string }
       if (!response.ok) throw new Error(result.error || "Candidate could not be updated.")
@@ -215,14 +216,16 @@ function CandidateUpdateDialog({ candidate, activity, onClose, onSaved }: { cand
             {candidateStageOptions(candidate.stage).map((item) => <option key={item}>{item}</option>)}
           </select>
         </Field>
-        <Field label="Follow-up date">
+        {stage === "Hired" ? <Field label="Planned start date">
+          <input required type="date" min={new Date().toISOString().slice(0, 10)} value={startDate} onChange={(event) => setStartDate(event.target.value)} className={fieldClass} />
+        </Field> : <Field label="Follow-up date">
           <input type="date" value={nextStepDueAt} onChange={(event) => setNextStepDueAt(event.target.value)} className={fieldClass} disabled={stage === "Rejected"} />
-        </Field>
-        <div className="sm:col-span-2">
+        </Field>}
+        {stage !== "Hired" && <div className="sm:col-span-2">
           <Field label="Next action">
             <input required value={nextStep} onChange={(event) => setNextStep(event.target.value)} className={fieldClass} />
           </Field>
-        </div>
+        </div>}
         {stage === "Rejected" && (
           <div className="sm:col-span-2">
             <Field label="Rejection reason">
@@ -237,7 +240,7 @@ function CandidateUpdateDialog({ candidate, activity, onClose, onSaved }: { cand
         </div>
         {stage === "Hired" && (
           <p className="rounded-md border border-border bg-muted/25 px-3 py-2 text-meta sm:col-span-2">
-            Saving this outcome fills the requisition and closes the remaining active candidate records as position filled.
+            Saving creates a preboarding employee profile, fills the requisition, and closes the remaining candidates as position filled.
           </p>
         )}
         {error && <p role="alert" className="text-meta text-destructive sm:col-span-2">{error}</p>}
@@ -257,13 +260,15 @@ function CandidateUpdateDialog({ candidate, activity, onClose, onSaved }: { cand
   )
 }
 
-function RequisitionDialog({ requisition, activity, busy, onClose, onDecision, onAddCandidate, onSaved }: { requisition: HiringRequisition; activity: HiringActivity[]; busy: boolean; onClose: () => void; onDecision: (action: "approve" | "reject") => Promise<void>; onAddCandidate: () => void; onSaved: (message: string, close: boolean) => Promise<void> }) {
+function RequisitionDialog({ requisition, activity, busy, onClose, onDecision, onAddCandidate, onSaved }: { requisition: HiringRequisition; activity: HiringActivity[]; busy: boolean; onClose: () => void; onDecision: (action: "approve" | "reject", note?: string) => Promise<void>; onAddCandidate: () => void; onSaved: (message: string, close: boolean) => Promise<void> }) {
   const [nextAction, setNextAction] = useState(requisition.nextAction)
   const [dueDate, setDueDate] = useState(requisition.dueDate ?? dateAfterToday(7))
   const [note, setNote] = useState("")
   const [closing, setClosing] = useState(false)
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState("")
+  const [declining, setDeclining] = useState(false)
+  const [declineReason, setDeclineReason] = useState("")
 
   async function update(action: "follow_up" | "close") {
     setSaving(true)
@@ -309,13 +314,25 @@ function RequisitionDialog({ requisition, activity, busy, onClose, onDecision, o
         <div className="border-t border-border px-5 py-4">
           <p className="text-card-title font-semibold">Headcount decision</p>
           <p className="mt-1 text-meta text-muted-foreground">Approve to open recruiting, or decline to close the request.</p>
-          <div className="mt-4 flex gap-2">
-            <Button variant="outline" disabled={busy} onClick={() => void onDecision("reject")}>Decline request</Button>
-            <Button disabled={busy} onClick={() => void onDecision("approve")}>
-              {busy && <LoaderCircle className="size-4 animate-spin" />}
-              Approve and open
-            </Button>
-          </div>
+          {declining ? (
+            <form className="mt-4 space-y-3" onSubmit={(event) => { event.preventDefault(); void onDecision("reject", declineReason) }}>
+              <Field label="Reason for declining">
+                <textarea required minLength={10} value={declineReason} onChange={(event) => setDeclineReason(event.target.value)} className={textareaClass} placeholder="Record the reason for the requester and audit history" />
+              </Field>
+              <div className="flex justify-end gap-2">
+                <Button type="button" variant="ghost" disabled={busy} onClick={() => { setDeclining(false); setDeclineReason("") }}>Cancel</Button>
+                <Button type="submit" variant="destructive" disabled={busy || declineReason.trim().length < 10}>{busy && <LoaderCircle className="size-4 animate-spin" />}Decline request</Button>
+              </div>
+            </form>
+          ) : (
+            <div className="mt-4 flex gap-2">
+              <Button variant="outline" disabled={busy} onClick={() => setDeclining(true)}>Decline request</Button>
+              <Button disabled={busy} onClick={() => void onDecision("approve")}>
+                {busy && <LoaderCircle className="size-4 animate-spin" />}
+                Approve and open
+              </Button>
+            </div>
+          )}
         </div>
       )}
 
@@ -518,14 +535,14 @@ export function HiringWorkspace({ canRequestHiring }: { canRequestHiring: boolea
     router.replace(listHref, { scroll: false })
   }
 
-  async function decideRequisition(requisition: HiringRequisition, action: "approve" | "reject") {
+  async function decideRequisition(requisition: HiringRequisition, action: "approve" | "reject", note = "") {
     setBusyId(requisition.id)
     setError("")
     try {
       const response = await fetch("/api/v1/hr/workflows/action", {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ id: requisition.id, type: "hiring", action }),
+        body: JSON.stringify({ id: requisition.id, type: "hiring", action, note }),
       })
       const result = await response.json() as { error?: string; message?: string }
       if (!response.ok) throw new Error(result.error || "The requisition could not be updated.")
@@ -663,7 +680,7 @@ export function HiringWorkspace({ canRequestHiring }: { canRequestHiring: boolea
           activity={requisitionActivity}
           busy={busyId === selectedRequisition.id}
           onClose={closeRequisition}
-          onDecision={(action) => decideRequisition(selectedRequisition, action)}
+          onDecision={(action, note) => decideRequisition(selectedRequisition, action, note)}
           onAddCandidate={() => openCandidateForm(selectedRequisition.id)}
           onSaved={async (message, close) => { if (close) closeRequisition(); await loadOperations(message) }}
         />

@@ -5,6 +5,7 @@ import type { DomainStatus, HrFilters, WorkforceAnalytics } from "@/lib/hr-types
 import type { PredictionInput } from "@/lib/types"
 import { getWorkforceAnalytics } from "@/lib/server/hr-analytics"
 import { ensureHrDatabase } from "@/lib/server/hr-database"
+import { getRetentionIntelligence } from "@/lib/server/retention-intelligence"
 import { predict } from "@/lib/server/runtime"
 
 const filtersShape = {
@@ -110,7 +111,7 @@ async function employeePromotionContext(employeeIds: string[]) {
   const placeholders = employeeIds.map(() => "?").join(", ")
   const rows = await database.prepare(`
     SELECT employee_id, COUNT(*) AS promotion_count, MAX(promotion_date) AS last_promotion_date
-    FROM promotion_records
+    FROM promotion_events_view
     WHERE employee_id IN (${placeholders})
     GROUP BY employee_id
   `).bind(...employeeIds).all<{ employee_id: string; promotion_count: number; last_promotion_date: string | null }>()
@@ -228,6 +229,7 @@ export function createHrMcpServer(): McpServer {
     annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false },
   }, async ({ recordScope = "summary", query = "", employeeIds = [], includeExplanations = false, limit = 10, ...filters }: FilterArgs & { recordScope?: "summary" | "exited" | "high_risk" | "all"; query?: string; employeeIds?: string[]; includeExplanations?: boolean; limit?: number }) => {
     const analytics = await getWorkforceAnalytics(filters)
+    const retention = await getRetentionIntelligence(analytics)
     const activeModelRecords = analytics.attrition.employeeRecords.filter((record) => !/terminated/i.test(record.employmentStatus))
     const activeHighRiskRecords = activeModelRecords.filter((record) => record.riskLevel === "high")
     const riskDistribution = {
@@ -280,6 +282,18 @@ export function createHrMcpServer(): McpServer {
         topRiskDrivers: countLabels(activeHighRiskRecords.map((record) => normalizedRiskDriver(record.topDriver))),
         riskByDepartment,
         scope: "The IBM validation rows are joined only to clearly labelled synthetic demo employee profiles with the same stable IDs. Imported operational employees are not assigned IBM model scores.",
+      },
+      retentionIntelligence: {
+        apiVersion: retention.apiVersion,
+        generatedAt: retention.generatedAt,
+        minimumCohortSize: retention.minimumCohortSize,
+        reviewThreshold: retention.reviewThreshold,
+        cohortAlerts: retention.cohortAlerts,
+        continuity: retention.continuity,
+        priorities: retention.priorities,
+        impact360: retention.impact360,
+        operatingCycle: retention.operatingCycle,
+        governance: retention.governance,
       },
       recordScope,
       matchCount: scopedRecords.length,

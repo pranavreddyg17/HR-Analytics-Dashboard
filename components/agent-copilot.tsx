@@ -51,6 +51,7 @@ export function AgentCopilot({ dataMode }: { dataMode: string }) {
   const [conversationId, setConversationId] = useState("")
   const [input, setInput] = useState("")
   const [thinking, setThinking] = useState(false)
+  const [streamStatus, setStreamStatus] = useState("Reviewing workspace data")
   const [loadingHistory, setLoadingHistory] = useState(true)
   const [deleteOpen, setDeleteOpen] = useState(false)
   const [deleting, setDeleting] = useState(false)
@@ -88,11 +89,13 @@ export function AgentCopilot({ dataMode }: { dataMode: string }) {
 
   useEffect(() => {
     let active = true
-    refreshConversations()
-      .then((latestId) => active && latestId ? loadConversation(latestId) : undefined)
-      .catch(() => undefined)
-      .finally(() => { if (active) setLoadingHistory(false) })
-    return () => { active = false }
+    const timer = window.setTimeout(() => {
+      void refreshConversations()
+        .then((latestId) => active && latestId ? loadConversation(latestId) : undefined)
+        .catch(() => undefined)
+        .finally(() => { if (active) setLoadingHistory(false) })
+    }, 0)
+    return () => { active = false; window.clearTimeout(timer) }
     // The data mode is fixed for the page lifetime.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
@@ -136,38 +139,73 @@ export function AgentCopilot({ dataMode }: { dataMode: string }) {
     setMessages((current) => [...current, { role: "user", content: trimmed }])
     setInput("")
     setThinking(true)
+    setStreamStatus("Reviewing workspace records")
     const activeConversationId = conversationIdRef.current
+    const streamMessageId = `stream-${crypto.randomUUID()}`
     try {
       const response = await fetch("/api/v1/chat", {
         method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({ message: trimmed, conversationId: activeConversationId || undefined }),
+        headers: { "content-type": "application/json", accept: "text/event-stream" },
+        body: JSON.stringify({ message: trimmed, conversationId: activeConversationId || undefined, stream: true }),
       })
-      const body = await response.json() as {
-        answer?: string
-        detail?: string
-        tools?: ChatMessage["tools"]
-        context?: ChatMessage["context"]
-        dataMode?: string
-        conversationId?: string
+      if (!response.ok || !response.body) {
+        const body = await response.json().catch(() => ({})) as { detail?: string }
+        throw new Error(body.detail ?? "The assistant is unavailable.")
       }
-      if (!response.ok) throw new Error(body.detail ?? "The assistant is unavailable.")
-      const nextConversationId = body.conversationId ?? activeConversationId
-      conversationIdRef.current = nextConversationId
-      setConversationId(nextConversationId)
-      setMessages((current) => [...current, {
-        role: "assistant",
-        content: body.answer ?? "No answer was returned.",
-        tools: body.tools,
-        context: body.context,
-        dataMode: body.dataMode,
-      }])
-      await refreshConversations(nextConversationId)
+
+      setMessages((current) => [...current, { id: streamMessageId, role: "assistant", content: "" }])
+      const reader = response.body.getReader()
+      const decoder = new TextDecoder()
+      let buffer = ""
+      let nextConversationId = activeConversationId
+      let streamError = ""
+
+      while (true) {
+        const { done, value } = await reader.read()
+        buffer += decoder.decode(value, { stream: !done })
+        const events = buffer.split("\n\n")
+        buffer = events.pop() ?? ""
+        for (const block of events) {
+          const lines = block.split("\n")
+          const eventName = lines.find((line) => line.startsWith("event:"))?.slice(6).trim()
+          const dataLine = lines.find((line) => line.startsWith("data:"))?.slice(5).trim()
+          if (!eventName || !dataLine) continue
+          const payload = JSON.parse(dataLine) as {
+            text?: string
+            message?: string
+            detail?: string
+            conversationId?: string
+            tools?: ChatMessage["tools"]
+            context?: ChatMessage["context"]
+            dataMode?: string
+          }
+          if (eventName === "conversation" && payload.conversationId) {
+            nextConversationId = payload.conversationId
+            conversationIdRef.current = payload.conversationId
+            setConversationId(payload.conversationId)
+          }
+          if (eventName === "status" && payload.message) setStreamStatus(payload.message)
+          if (eventName === "delta" && payload.text) {
+            setMessages((current) => current.map((message) => message.id === streamMessageId
+              ? { ...message, content: message.content + payload.text }
+              : message))
+          }
+          if (eventName === "metadata") {
+            setMessages((current) => current.map((message) => message.id === streamMessageId
+              ? { ...message, tools: payload.tools, context: payload.context, dataMode: payload.dataMode }
+              : message))
+          }
+          if (eventName === "error") streamError = payload.detail ?? "The assistant is unavailable."
+        }
+        if (done) break
+      }
+      if (streamError) throw new Error(streamError)
+      if (nextConversationId) await refreshConversations(nextConversationId)
     } catch (error) {
-      setMessages((current) => [...current, {
-        role: "assistant",
-        content: error instanceof Error ? error.message : "The assistant is unavailable.",
-      }])
+      const content = error instanceof Error ? error.message : "The assistant is unavailable."
+      setMessages((current) => current.some((message) => message.id === streamMessageId)
+        ? current.map((message) => message.id === streamMessageId ? { ...message, content } : message)
+        : [...current, { role: "assistant", content }])
     } finally {
       setThinking(false)
       requestAnimationFrame(() => scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight, behavior: "smooth" }))
@@ -221,7 +259,7 @@ export function AgentCopilot({ dataMode }: { dataMode: string }) {
         {thinking && (
           <div className="flex items-center gap-3 text-sm text-muted-foreground">
             <LoaderCircle className="size-4 animate-spin" />
-            Reviewing workspace data
+            {streamStatus}
           </div>
         )}
       </div>

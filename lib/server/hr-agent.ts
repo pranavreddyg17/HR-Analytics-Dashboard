@@ -10,8 +10,6 @@ import { renderHrEvidence } from "@/lib/server/hr-agent-response"
 import { getWorkforceAnalytics } from "@/lib/server/hr-analytics"
 import { createHrMcpServer } from "@/lib/server/hr-mcp"
 
-export type { AgentHistoryMessage } from "@/lib/server/hr-agent-intent"
-
 type ToolTrace = {
   tool: string
   input: Record<string, unknown>

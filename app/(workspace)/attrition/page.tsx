@@ -1,138 +1,121 @@
 import Link from "next/link"
 
 import { AttritionPredictor } from "@/components/attrition-predictor"
+import { RetentionReviewButton } from "@/components/retention-review-button"
+import { MetricStrip, WorkspaceHeader, WorkspacePage, WorkspaceSectionHeader } from "@/components/workspace-ui"
+import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
-import { getWorkforceAnalytics } from "@/lib/server/hr-analytics"
-import { getDashboard, getPredictionSchema } from "@/lib/server/runtime"
-import { MetricStrip, WorkspaceHeader, WorkspacePage } from "@/components/workspace-ui"
+import { Card, CardContent } from "@/components/ui/card"
 import { withReturnTo } from "@/lib/navigation"
+import { getWorkforceAnalytics } from "@/lib/server/hr-analytics"
+import { getRetentionIntelligence } from "@/lib/server/retention-intelligence"
+import { getDashboard, getPredictionSchema } from "@/lib/server/runtime"
 
 export const dynamic = "force-dynamic"
 
-const percentage = new Intl.NumberFormat("en", { maximumFractionDigits: 1 })
+const number = new Intl.NumberFormat("en", { maximumFractionDigits: 1 })
 
-function share(value: number, total: number): number {
-  return total ? (value / total) * 100 : 0
-}
-
-function DistributionList({ rows, total }: { rows: Array<{ label: string; value: number }>; total: number }) {
-  const maximum = Math.max(1, ...rows.map((row) => row.value))
-  return (
-    <div className="divide-y divide-border/70">
-      {rows.length ? rows.slice(0, 6).map((row) => (
-        <div key={row.label} className="grid grid-cols-[minmax(0,1fr)_96px_72px] items-center gap-3 py-2.5">
-          <span className="truncate text-body font-normal">{row.label}</span>
-          <span className="h-1.5 overflow-hidden rounded-full bg-muted" aria-hidden="true">
-            <span className="block h-full rounded-full bg-primary" style={{ width: `${Math.max(4, (row.value / maximum) * 100)}%` }} />
-          </span>
-          <span className="text-right text-meta tabular-nums text-muted-foreground">
-            {row.value} · {percentage.format(share(row.value, total))}%
-          </span>
-        </div>
-      )) : <p className="py-8 text-center text-body text-muted-foreground">No attrition records are available.</p>}
-    </div>
-  )
-}
-
-function ReviewItem({ finding, evidence, action }: { finding: string; evidence: string; action: string }) {
-  return (
-    <div className="py-4 first:pt-0 last:pb-0">
-      <p className="text-card-title font-semibold">{finding}</p>
-      <p className="mt-1 text-meta tabular-nums text-muted-foreground">{evidence}</p>
-      <p className="mt-2 text-body">{action}</p>
-    </div>
-  )
+function statusVariant(status: "Priority" | "Watch" | "Stable") {
+  return status === "Priority" ? "destructive" as const : status === "Watch" ? "secondary" as const : "outline" as const
 }
 
 export default async function AttritionPage() {
-  const [workforce, dashboard] = await Promise.all([
-    getWorkforceAnalytics(),
+  const workforce = await getWorkforceAnalytics()
+  const [retention, dashboard] = await Promise.all([
+    getRetentionIntelligence(workforce),
     Promise.resolve(getDashboard()),
   ])
   const schema = getPredictionSchema()
-  const historicalRows = dashboard.riskDistribution.reduce((sum, bucket) => sum + bucket.count, 0)
-  const reviewShare = share(dashboard.highRiskCount, historicalRows)
-  const voluntaryShare = share(workforce.attrition.voluntary, workforce.attrition.totalExits)
-  const topDepartment = workforce.attrition.byDepartment[0]
-  const topTenure = workforce.attrition.byTenure[0]
-  const reasonCounts = Object.entries(
-    workforce.attrition.rows.reduce<Record<string, number>>((counts, row) => {
-      counts[row.exit_reason] = (counts[row.exit_reason] ?? 0) + 1
-      return counts
-    }, {}),
-  ).sort((left, right) => right[1] - left[1])
-  const topReason = reasonCounts[0]
+  const priorityCohorts = retention.cohortAlerts.filter((cohort) => cohort.priority === "Priority").length
+  const replacementGaps = retention.continuity.filter((row) => row.replacementStatus === "Gap").length
+  const openReviews = retention.cohortAlerts.filter((cohort) => ["pending", "in_progress"].includes(cohort.reviewStatus)).length
+  const priorities = new Map(retention.priorities.map((priority) => [priority.cohort, priority]))
+  const continuity = new Map(retention.continuity.map((row) => [row.department, row]))
+  const voluntaryShare = workforce.attrition.totalExits
+    ? (workforce.attrition.voluntary / workforce.attrition.totalExits) * 100
+    : 0
 
   return (
     <WorkspacePage>
-      <WorkspaceHeader title="Attrition risk" description="Recorded exits, retention priorities, and model scenarios." actions={<Button nativeButton={false} render={<Link href={withReturnTo("/risk-review", "/attrition")} />}>
-          Review employee risk
-        </Button>}/>
+      <WorkspaceHeader
+        title="Attrition and retention"
+        description="Review department retention signals and assign follow-up."
+        actions={(
+          <Button nativeButton={false} render={<Link href={withReturnTo("/risk-review", "/attrition")} />}>
+            Review model records
+          </Button>
+        )}
+      />
 
       <MetricStrip metrics={[
-        { label: "Attrition rate", value: `${percentage.format(workforce.attrition.rate)}%`, detail: "Recorded workforce outcomes" },
-        { label: "Recorded exits", value: workforce.attrition.totalExits.toLocaleString(), detail: `${percentage.format(voluntaryShare)}% voluntary · ${workforce.attrition.involuntary} involuntary` },
-        { label: "Risk review queue", value: dashboard.highRiskCount.toLocaleString(), detail: `${percentage.format(reviewShare)}% above the ${(dashboard.threshold * 100).toFixed(0)}% review threshold` },
-      ]}/>
+        { label: "Recorded attrition", value: `${number.format(workforce.attrition.rate)}%`, detail: `${workforce.attrition.totalExits} exits · ${number.format(voluntaryShare)}% voluntary` },
+        { label: "Priority departments", value: priorityCohorts, detail: `${retention.cohortAlerts.length} departments reviewed` },
+        { label: "Open reviews", value: openReviews, detail: "Pending or in progress" },
+        { label: "Coverage gaps", value: replacementGaps, detail: "Hiring and succession coverage" },
+      ]} />
 
-      <section className="grid gap-4 xl:grid-cols-[minmax(0,1.55fr)_minmax(320px,0.75fr)]" aria-label="Attrition review workspace">
-        <Card className="gap-0 py-0 shadow-none">
-          <CardHeader className="border-b border-border px-5 py-4">
-            <CardTitle>Current attrition</CardTitle>
-            <CardDescription>Recorded exits, separate from predicted risk.</CardDescription>
-          </CardHeader>
-          <CardContent className="grid gap-6 px-5 py-4 lg:grid-cols-2 lg:divide-x lg:divide-border">
-            <div className="lg:pr-6">
-              <h2 className="text-subsection font-semibold">By department</h2>
-              <DistributionList rows={workforce.attrition.byDepartment} total={workforce.attrition.totalExits} />
+      <section aria-labelledby="department-review-heading">
+        <WorkspaceSectionHeader
+          title="Department review queue"
+          description="Current evidence, operational exposure, and accountable follow-up."
+        />
+        <Card className="mt-3 gap-0 overflow-hidden py-0 shadow-none">
+          <CardContent className="p-0">
+            <div className="hidden grid-cols-[1fr_1fr_1fr_1.45fr_0.85fr] gap-4 border-b bg-muted/35 px-5 py-2.5 text-label text-muted-foreground lg:grid">
+              <span>Department</span>
+              <span>Evidence</span>
+              <span>Exposure</span>
+              <span>Recommended check</span>
+              <span>Review</span>
             </div>
-            <div className="lg:pl-6">
-              <h2 className="text-subsection font-semibold">By tenure</h2>
-              <DistributionList rows={workforce.attrition.byTenure} total={workforce.attrition.totalExits} />
-            </div>
-          </CardContent>
-        </Card>
-
-        <Card className="gap-0 py-0 shadow-none">
-          <CardHeader className="border-b border-border px-5 py-4">
-            <CardTitle>Review next</CardTitle>
-            <CardDescription>Recommended HR checks.</CardDescription>
-          </CardHeader>
-          <CardContent className="divide-y divide-border/70 px-5 py-4">
-            <ReviewItem
-              finding={topDepartment ? `${topDepartment.label} exit concentration` : "Department concentration"}
-              evidence={topDepartment ? `${topDepartment.value} exits · ${percentage.format(share(topDepartment.value, workforce.attrition.totalExits))}% of recorded exits` : "No department evidence available"}
-              action="Compare roles, managers, tenure, and exit reasons before choosing an intervention."
-            />
-            <ReviewItem
-              finding={topReason ? `${topReason[0]} exit reasons` : "Exit-reason quality"}
-              evidence={topReason ? `${topReason[1]} of ${workforce.attrition.totalExits} recorded exits` : "No exit reasons available"}
-              action="Check coding consistency and the supporting exit-interview evidence."
-            />
-            <ReviewItem
-              finding={topTenure ? `${topTenure.label} tenure cohort` : "Tenure concentration"}
-              evidence={topTenure ? `${topTenure.value} exits · ${percentage.format(share(topTenure.value, workforce.attrition.totalExits))}% of recorded exits` : "No tenure evidence available"}
-              action="Review career stage, manager check-ins, mobility, and role clarity for this cohort."
-            />
+            {retention.cohortAlerts.map((cohort) => {
+              const priority = priorities.get(cohort.department)
+              const impact = continuity.get(cohort.department)
+              return (
+                <div key={cohort.department} className="grid gap-3 border-b px-5 py-4 last:border-b-0 lg:grid-cols-[1fr_1fr_1fr_1.45fr_0.85fr] lg:items-start lg:gap-4">
+                  <div>
+                    <p className="text-card-title font-semibold">{cohort.department}</p>
+                    <Badge className="mt-1.5" variant={statusVariant(cohort.priority)}>{cohort.priority}</Badge>
+                  </div>
+                  <div>
+                    <p className="text-body tabular-nums">{cohort.recordedAttritionRate}% · {cohort.recordedExits} exits</p>
+                    <p className="mt-1 text-meta text-muted-foreground">{cohort.aboveThreshold} in model review · {cohort.leadingExitReason}</p>
+                  </div>
+                  <div>
+                    <p className="text-body">{cohort.replacementStatus} coverage · {cohort.openRequisitions} open roles</p>
+                    {impact && <p className="mt-1 text-meta text-muted-foreground">{impact.leadingRole} · {impact.leadingRoleCount} exposed</p>}
+                  </div>
+                  <div>
+                    <p className="text-body">{priority?.action ?? "Continue quarterly monitoring."}</p>
+                    {priority && <p className="mt-1 text-meta text-muted-foreground">Owner: {priority.owner}</p>}
+                  </div>
+                  <div>
+                    {priority ? (
+                      <RetentionReviewButton department={priority.cohort} reviewId={priority.reviewId} reviewStatus={priority.reviewStatus} />
+                    ) : <span className="text-meta text-muted-foreground">No action due</span>}
+                  </div>
+                </div>
+              )
+            })}
+            {!retention.cohortAlerts.length && <p className="px-5 py-8 text-center text-body text-muted-foreground">No cohorts meet the minimum reporting population.</p>}
           </CardContent>
         </Card>
       </section>
 
-      <section aria-labelledby="predictor-heading">
-        <div className="mb-3">
-          <h2 id="predictor-heading" className="text-section font-semibold">Risk predictor</h2>
-          <p className="mt-0.5 text-description text-muted-foreground">Test a profile and review the model signals behind the estimate.</p>
+      <section aria-labelledby="scenario-test-heading" className="rounded-lg border border-border bg-card">
+        <WorkspaceSectionHeader
+          title="Scenario test"
+          description="Test the model without creating an employee record or HR action."
+        />
+        <div className="px-5 py-4">
+          <AttritionPredictor schema={schema} />
         </div>
-        <AttritionPredictor schema={schema} />
       </section>
 
       <details className="rounded-lg border border-border bg-card">
-        <summary className="cursor-pointer px-5 py-4 text-card-title font-semibold marker:text-muted-foreground">
-          Model reference
-        </summary>
-        <div className="border-t border-border px-5 py-4">
-          <div className="grid gap-px overflow-hidden rounded-md border border-border bg-border sm:grid-cols-3 lg:grid-cols-6">
+        <summary className="cursor-pointer px-5 py-4 text-card-title font-semibold marker:text-muted-foreground">Model details</summary>
+        <div className="space-y-4 border-t border-border px-5 py-4">
+          <div className="grid gap-px overflow-hidden rounded-md border bg-border sm:grid-cols-3 lg:grid-cols-6">
             {dashboard.modelMetrics.map((metric) => (
               <div key={metric.label} className="bg-card px-3 py-3">
                 <p className="text-meta text-muted-foreground">{metric.label}</p>
@@ -141,9 +124,6 @@ export default async function AttritionPage() {
               </div>
             ))}
           </div>
-          <p className="mt-3 text-meta text-muted-foreground">
-            The score is a review signal, not a decision. Confirm current evidence with the employee and an appropriate HR reviewer.
-          </p>
         </div>
       </details>
     </WorkspacePage>

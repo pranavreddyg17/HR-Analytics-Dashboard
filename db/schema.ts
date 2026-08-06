@@ -1,6 +1,9 @@
 import { sql } from "drizzle-orm"
-import { index, integer, real, sqliteTable, text, uniqueIndex } from "drizzle-orm/sqlite-core"
+import { index, integer, primaryKey, real, sqliteTable, text, uniqueIndex } from "drizzle-orm/sqlite-core"
 
+// Legacy import/write contracts. Canonical reads use the normalized tables and
+// views below; these tables remain temporarily so existing CSV/API clients can
+// migrate without a destructive cutover.
 export const employees = sqliteTable("employees", {
   employeeId: text("employee_id").primaryKey(),
   firstName: text("first_name").notNull().default(""),
@@ -197,10 +200,30 @@ export const dataImports = sqliteTable("data_imports", {
   id: text("id").primaryKey(),
   domain: text("domain").notNull(),
   filename: text("filename").notNull(),
+  mode: text("mode").notNull().default("merge"),
+  totalRows: integer("total_rows").notNull().default(0),
   rowCount: integer("row_count").notNull(),
+  insertedRows: integer("inserted_rows").notNull().default(0),
+  updatedRows: integer("updated_rows").notNull().default(0),
+  deletedRows: integer("deleted_rows").notNull().default(0),
+  errorCount: integer("error_count").notNull().default(0),
+  errorSummary: text("error_summary"),
+  importedByEmail: text("imported_by_email"),
   status: text("status").notNull(),
+  completedAt: text("completed_at"),
   importedAt: text("imported_at").notNull().default(sql`CURRENT_TIMESTAMP`),
-}, (table) => [index("data_imports_domain_idx").on(table.domain)])
+}, (table) => [
+  index("data_imports_domain_date_idx").on(table.domain, table.importedAt),
+  index("data_imports_status_date_idx").on(table.status, table.importedAt),
+])
+
+export const dataImportRows = sqliteTable("data_import_rows", {
+  jobId: text("job_id").notNull(),
+  rowKey: text("row_key").notNull(),
+  payloadJson: text("payload_json").notNull(),
+}, (table) => [
+  primaryKey({ columns: [table.jobId, table.rowKey] }),
+])
 
 export const workflowRequests = sqliteTable("workflow_requests", {
   id: text("id").primaryKey(),
@@ -246,7 +269,6 @@ export const aiWorkflowDrafts = sqliteTable("ai_workflow_drafts", {
   updatedAt: text("updated_at").notNull().default(sql`CURRENT_TIMESTAMP`),
 }, (table) => [
   index("ai_workflow_creator_idx").on(table.createdByEmail),
-  index("ai_workflow_status_idx").on(table.status),
 ])
 
 export const aiConversations = sqliteTable("ai_conversations", {
@@ -271,7 +293,6 @@ export const aiConversationMessages = sqliteTable("ai_conversation_messages", {
   provider: text("provider"),
   createdAt: text("created_at").notNull().default(sql`CURRENT_TIMESTAMP`),
 }, (table) => [
-  index("ai_conversation_messages_conversation_created_idx").on(table.conversationId, table.createdAt),
   index("ai_conversation_messages_conversation_position_idx").on(table.conversationId, table.position),
 ])
 
@@ -296,4 +317,241 @@ export const accessAudit = sqliteTable("access_audit", {
 }, (table) => [
   index("access_audit_created_idx").on(table.createdAt),
   index("access_audit_target_idx").on(table.targetEmail),
+])
+
+// Canonical HR master data. The original domain tables remain as a staged
+// compatibility layer so existing D1 records can be migrated without downtime.
+export const departments = sqliteTable("departments", {
+  id: text("id").primaryKey(),
+  name: text("name").notNull(),
+  code: text("code"),
+  parentDepartmentId: text("parent_department_id"),
+  status: text("status").notNull().default("active"),
+  createdAt: text("created_at").notNull().default(sql`CURRENT_TIMESTAMP`),
+  updatedAt: text("updated_at").notNull().default(sql`CURRENT_TIMESTAMP`),
+}, (table) => [
+  uniqueIndex("departments_name_uq").on(table.name),
+  uniqueIndex("departments_code_uq").on(table.code),
+  index("departments_parent_idx").on(table.parentDepartmentId),
+])
+
+export const locations = sqliteTable("locations", {
+  id: text("id").primaryKey(),
+  name: text("name").notNull(),
+  city: text("city"),
+  countryCode: text("country_code"),
+  timezone: text("timezone"),
+  status: text("status").notNull().default("active"),
+  createdAt: text("created_at").notNull().default(sql`CURRENT_TIMESTAMP`),
+  updatedAt: text("updated_at").notNull().default(sql`CURRENT_TIMESTAMP`),
+}, (table) => [uniqueIndex("locations_name_uq").on(table.name)])
+
+export const jobProfiles = sqliteTable("job_profiles", {
+  id: text("id").primaryKey(),
+  title: text("title").notNull(),
+  jobFamily: text("job_family"),
+  jobLevel: text("job_level"),
+  status: text("status").notNull().default("active"),
+  createdAt: text("created_at").notNull().default(sql`CURRENT_TIMESTAMP`),
+  updatedAt: text("updated_at").notNull().default(sql`CURRENT_TIMESTAMP`),
+}, (table) => [uniqueIndex("job_profiles_title_uq").on(table.title)])
+
+export const employmentAssignments = sqliteTable("employment_assignments", {
+  id: text("id").primaryKey(),
+  employeeId: text("employee_id").notNull().references(() => employees.employeeId, { onDelete: "cascade" }),
+  departmentId: text("department_id").notNull().references(() => departments.id),
+  jobProfileId: text("job_profile_id").notNull().references(() => jobProfiles.id),
+  locationId: text("location_id").notNull().references(() => locations.id),
+  managerEmployeeId: text("manager_employee_id").references(() => employees.employeeId),
+  employmentType: text("employment_type").notNull(),
+  employmentStatus: text("employment_status").notNull(),
+  effectiveStart: text("effective_start").notNull(),
+  effectiveEnd: text("effective_end"),
+  isPrimary: integer("is_primary", { mode: "boolean" }).notNull().default(true),
+  createdAt: text("created_at").notNull().default(sql`CURRENT_TIMESTAMP`),
+  updatedAt: text("updated_at").notNull().default(sql`CURRENT_TIMESTAMP`),
+}, (table) => [
+  index("employment_assignments_employee_dates_idx").on(table.employeeId, table.effectiveStart, table.effectiveEnd),
+  index("employment_assignments_department_status_idx").on(table.departmentId, table.employmentStatus),
+  index("employment_assignments_manager_idx").on(table.managerEmployeeId),
+])
+
+export const leaveTypes = sqliteTable("leave_types", {
+  id: text("id").primaryKey(),
+  name: text("name").notNull(),
+  isPaid: integer("is_paid", { mode: "boolean" }).notNull().default(true),
+  status: text("status").notNull().default("active"),
+  createdAt: text("created_at").notNull().default(sql`CURRENT_TIMESTAMP`),
+}, (table) => [uniqueIndex("leave_types_name_uq").on(table.name)])
+
+export const leaveRequests = sqliteTable("leave_requests", {
+  id: text("id").primaryKey(),
+  employeeId: text("employee_id").notNull().references(() => employees.employeeId),
+  leaveTypeId: text("leave_type_id").notNull().references(() => leaveTypes.id),
+  startDate: text("start_date").notNull(),
+  endDate: text("end_date").notNull(),
+  leaveDays: real("leave_days").notNull(),
+  status: text("status").notNull(),
+  requestedAt: text("requested_at").notNull().default(sql`CURRENT_TIMESTAMP`),
+  decidedAt: text("decided_at"),
+  decidedByEmail: text("decided_by_email"),
+  dataSource: text("data_source").notNull().default("imported"),
+  updatedAt: text("updated_at").notNull().default(sql`CURRENT_TIMESTAMP`),
+}, (table) => [
+  index("leave_requests_employee_dates_idx").on(table.employeeId, table.startDate, table.endDate),
+  index("leave_requests_status_start_idx").on(table.status, table.startDate),
+  index("leave_requests_type_idx").on(table.leaveTypeId),
+])
+
+export const learningCourses = sqliteTable("learning_courses", {
+  id: text("id").primaryKey(),
+  code: text("code"),
+  title: text("title").notNull(),
+  defaultDurationHours: real("default_duration_hours").notNull().default(0),
+  isMandatory: integer("is_mandatory", { mode: "boolean" }).notNull().default(false),
+  status: text("status").notNull().default("active"),
+  createdAt: text("created_at").notNull().default(sql`CURRENT_TIMESTAMP`),
+  updatedAt: text("updated_at").notNull().default(sql`CURRENT_TIMESTAMP`),
+}, (table) => [
+  uniqueIndex("learning_courses_title_uq").on(table.title),
+  uniqueIndex("learning_courses_code_uq").on(table.code),
+])
+
+export const courseAssignments = sqliteTable("course_assignments", {
+  id: text("id").primaryKey(),
+  courseId: text("course_id").notNull().references(() => learningCourses.id),
+  employeeId: text("employee_id").notNull().references(() => employees.employeeId),
+  assignedAt: text("assigned_at").notNull().default(sql`CURRENT_TIMESTAMP`),
+  dueDate: text("due_date"),
+  status: text("status").notNull(),
+  completedAt: text("completed_at"),
+  assessmentScore: real("assessment_score"),
+  assignedHours: real("assigned_hours").notNull().default(0),
+  dataSource: text("data_source").notNull().default("imported"),
+  updatedAt: text("updated_at").notNull().default(sql`CURRENT_TIMESTAMP`),
+}, (table) => [
+  index("course_assignments_employee_status_idx").on(table.employeeId, table.status),
+  index("course_assignments_due_status_idx").on(table.dueDate, table.status),
+  index("course_assignments_course_idx").on(table.courseId),
+])
+
+export const jobRequisitions = sqliteTable("job_requisitions", {
+  id: text("id").primaryKey(),
+  jobProfileId: text("job_profile_id").notNull().references(() => jobProfiles.id),
+  departmentId: text("department_id").notNull().references(() => departments.id),
+  locationId: text("location_id").notNull().references(() => locations.id),
+  openedAt: text("opened_at").notNull(),
+  hiredAt: text("hired_at"),
+  source: text("source").notNull(),
+  status: text("status").notNull(),
+  dataSource: text("data_source").notNull().default("imported"),
+  updatedAt: text("updated_at").notNull().default(sql`CURRENT_TIMESTAMP`),
+}, (table) => [
+  index("job_requisitions_department_status_idx").on(table.departmentId, table.status),
+  index("job_requisitions_opened_idx").on(table.openedAt),
+])
+
+export const talentCandidates = sqliteTable("talent_candidates", {
+  id: text("id").primaryKey(),
+  fullName: text("full_name").notNull(),
+  email: text("email").notNull(),
+  createdAt: text("created_at").notNull().default(sql`CURRENT_TIMESTAMP`),
+  updatedAt: text("updated_at").notNull().default(sql`CURRENT_TIMESTAMP`),
+}, (table) => [uniqueIndex("talent_candidates_email_uq").on(table.email)])
+
+export const candidateApplications = sqliteTable("candidate_applications", {
+  id: text("id").primaryKey(),
+  candidateId: text("candidate_id").notNull().references(() => talentCandidates.id),
+  requisitionId: text("requisition_id").notNull().references(() => jobRequisitions.id),
+  stage: text("stage").notNull(),
+  source: text("source").notNull(),
+  appliedAt: text("applied_at").notNull(),
+  ownerEmail: text("owner_email").notNull(),
+  nextStep: text("next_step").notNull(),
+  nextStepDueAt: text("next_step_due_at"),
+  notes: text("notes"),
+  rejectedReason: text("rejected_reason"),
+  createdAt: text("created_at").notNull().default(sql`CURRENT_TIMESTAMP`),
+  updatedAt: text("updated_at").notNull().default(sql`CURRENT_TIMESTAMP`),
+}, (table) => [
+  index("candidate_applications_requisition_stage_idx").on(table.requisitionId, table.stage),
+  index("candidate_applications_candidate_idx").on(table.candidateId),
+  index("candidate_applications_due_stage_idx").on(table.nextStepDueAt, table.stage),
+  uniqueIndex("candidate_applications_requisition_candidate_uq").on(table.requisitionId, table.candidateId),
+])
+
+export const exitReasons = sqliteTable("exit_reasons", {
+  id: text("id").primaryKey(),
+  name: text("name").notNull(),
+  status: text("status").notNull().default("active"),
+  createdAt: text("created_at").notNull().default(sql`CURRENT_TIMESTAMP`),
+}, (table) => [uniqueIndex("exit_reasons_name_uq").on(table.name)])
+
+export const employeeExits = sqliteTable("employee_exits", {
+  id: text("id").primaryKey(),
+  employeeId: text("employee_id").notNull().references(() => employees.employeeId),
+  exitDate: text("exit_date").notNull(),
+  exitReasonId: text("exit_reason_id").notNull().references(() => exitReasons.id),
+  exitType: text("exit_type").notNull(),
+  // Department is an event-time snapshot. It must not drift when an employee
+  // later changes assignment or when the current org structure is renamed.
+  departmentId: text("department_id").references(() => departments.id),
+  dataSource: text("data_source").notNull().default("imported"),
+  updatedAt: text("updated_at").notNull().default(sql`CURRENT_TIMESTAMP`),
+}, (table) => [
+  index("employee_exits_employee_date_idx").on(table.employeeId, table.exitDate),
+  index("employee_exits_department_date_idx").on(table.departmentId, table.exitDate),
+  index("employee_exits_reason_idx").on(table.exitReasonId),
+])
+
+export const employeePromotions = sqliteTable("employee_promotions", {
+  id: text("id").primaryKey(),
+  employeeId: text("employee_id").notNull().references(() => employees.employeeId),
+  previousJobProfileId: text("previous_job_profile_id").notNull().references(() => jobProfiles.id),
+  newJobProfileId: text("new_job_profile_id").notNull().references(() => jobProfiles.id),
+  departmentId: text("department_id").references(() => departments.id),
+  promotionDate: text("promotion_date").notNull(),
+  dataSource: text("data_source").notNull().default("imported"),
+  updatedAt: text("updated_at").notNull().default(sql`CURRENT_TIMESTAMP`),
+}, (table) => [
+  index("employee_promotions_employee_date_idx").on(table.employeeId, table.promotionDate),
+  index("employee_promotions_department_date_idx").on(table.departmentId, table.promotionDate),
+])
+
+export const modelVersions = sqliteTable("model_versions", {
+  id: text("id").primaryKey(),
+  modelName: text("model_name").notNull(),
+  algorithm: text("algorithm"),
+  reviewThreshold: real("review_threshold"),
+  evaluationWindowDays: integer("evaluation_window_days"),
+  metricsJson: text("metrics_json"),
+  intendedUse: text("intended_use"),
+  prohibitedUse: text("prohibited_use"),
+  trainedAt: text("trained_at"),
+  status: text("status").notNull().default("active"),
+  createdAt: text("created_at").notNull().default(sql`CURRENT_TIMESTAMP`),
+})
+
+export const attritionAssessments = sqliteTable("attrition_assessments", {
+  id: text("id").primaryKey(),
+  employeeId: text("employee_id").notNull().references(() => employees.employeeId),
+  modelVersionId: text("model_version_id").notNull().references(() => modelVersions.id),
+  riskScore: real("risk_score").notNull(),
+  dataSource: text("data_source").notNull().default("demo"),
+  assessedAt: text("assessed_at").notNull().default(sql`CURRENT_TIMESTAMP`),
+}, (table) => [
+  uniqueIndex("attrition_assessments_employee_model_uq").on(table.employeeId, table.modelVersionId),
+  index("attrition_assessments_risk_idx").on(table.modelVersionId, table.riskScore),
+])
+
+export const attritionAssessmentFeatures = sqliteTable("attrition_assessment_features", {
+  assessmentId: text("assessment_id").notNull().references(() => attritionAssessments.id, { onDelete: "cascade" }),
+  featureKey: text("feature_key").notNull(),
+  featureValue: text("feature_value").notNull(),
+  contribution: real("contribution"),
+  contributionRank: integer("contribution_rank"),
+  explanation: text("explanation"),
+}, (table) => [
+  primaryKey({ columns: [table.assessmentId, table.featureKey] }),
+  index("attrition_assessment_features_key_idx").on(table.featureKey),
 ])

@@ -1,11 +1,12 @@
 "use client"
 
-import { useEffect, useState } from "react"
-import { Check, Clipboard, Download, RefreshCw, Upload } from "lucide-react"
+import { useEffect, useRef, useState } from "react"
+import { useSearchParams } from "next/navigation"
 
-import { hrDomains, importFields, type DomainStatus, type HrDomain } from "@/lib/hr-types"
+import type { DataStatusResponse, ImportMode, ImportPreview } from "@/lib/data-import-types"
+import { hrDomains, importFields, type HrDomain } from "@/lib/hr-types"
 import { Button } from "@/components/ui/button"
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { cn } from "@/lib/utils"
 import { formatWorkspaceDateTime } from "@/lib/date-format"
 import { WorkspaceHeader, WorkspacePage } from "@/components/workspace-ui"
@@ -33,20 +34,14 @@ function parseCsv(text: string): Array<Record<string, string>> {
   if (quoted) throw new Error("CSV contains an unclosed quoted field.")
   if (matrix.length < 2) throw new Error("CSV must contain a header and at least one data row.")
   const headers = matrix[0].map((header) => header.replace(/^\uFEFF/, "").trim().toLowerCase().replace(/[^a-z0-9]+/g, "_").replace(/^_|_$/g, ""))
+  if (new Set(headers).size !== headers.length) throw new Error("CSV contains duplicate column names.")
   return matrix.slice(1).map((values) => Object.fromEntries(headers.map((header, index) => [header, values[index]?.trim() ?? ""])))
 }
 
 async function copyToClipboard(value: string): Promise<void> {
   if (navigator.clipboard?.writeText) {
-    try {
-      await navigator.clipboard.writeText(value)
-      return
-    } catch {
-      // Some managed browsers block the async clipboard API. Use the
-      // selection-based fallback below for the same user-initiated click.
-    }
+    try { await navigator.clipboard.writeText(value); return } catch { /* use fallback */ }
   }
-
   const textArea = document.createElement("textarea")
   textArea.value = value
   textArea.setAttribute("readonly", "")
@@ -59,152 +54,218 @@ async function copyToClipboard(value: string): Promise<void> {
   if (!copied) throw new Error("Copy was blocked by the browser.")
 }
 
+const emptyStatus: DataStatusResponse = {
+  generatedAt: "",
+  status: [],
+  imports: [],
+  summary: { totalRecords: 0, completedImports: 0, failedImports: 0, lastCompletedAt: null },
+}
+
+function domainLabel(domain: HrDomain): string {
+  return domain === "leave" ? "Leave" : domain[0].toUpperCase() + domain.slice(1)
+}
+
+function modeLabel(mode: ImportMode): string {
+  return mode === "merge" ? "Merge" : "Replace imported"
+}
+
 export function DataManager() {
+  const searchParams = useSearchParams()
+  const view = searchParams.get("view") === "feeds" ? "feeds" : "imports"
+  const fileInput = useRef<HTMLInputElement>(null)
   const [domain, setDomain] = useState<HrDomain>("employees")
+  const [mode, setMode] = useState<ImportMode>("merge")
   const [rows, setRows] = useState<Array<Record<string, string>>>([])
   const [filename, setFilename] = useState("")
-  const [replace, setReplace] = useState(true)
-  const [status, setStatus] = useState<DomainStatus[]>([])
-  const [busy, setBusy] = useState(false)
-  const [statusBusy, setStatusBusy] = useState(false)
+  const [preview, setPreview] = useState<ImportPreview | null>(null)
+  const [replaceConfirmed, setReplaceConfirmed] = useState(false)
+  const [dataStatus, setDataStatus] = useState<DataStatusResponse>(emptyStatus)
+  const [busy, setBusy] = useState<"status" | "validate" | "apply" | null>(null)
   const [message, setMessage] = useState("")
   const [error, setError] = useState("")
   const [copiedFeed, setCopiedFeed] = useState<HrDomain | null>(null)
-  const [copyError, setCopyError] = useState("")
 
   async function refreshStatus() {
-    setStatusBusy(true)
+    setBusy("status")
     try {
       const response = await fetch("/api/v1/data/status", { cache: "no-store" })
-      if (!response.ok) throw new Error("Data status could not be refreshed.")
-      setStatus((await response.json() as { status: DomainStatus[] }).status)
+      const body = await response.json() as DataStatusResponse & { error?: string }
+      if (!response.ok) throw new Error(body.error ?? "Data status could not be refreshed.")
+      setDataStatus(body)
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : "Data status could not be refreshed.")
     } finally {
-      setStatusBusy(false)
+      setBusy(null)
     }
   }
 
   useEffect(() => {
     const controller = new AbortController()
     fetch("/api/v1/data/status", { cache: "no-store", signal: controller.signal })
-      .then((response) => response.ok ? response.json() as Promise<{ status: DomainStatus[] }> : null)
-      .then((body) => { if (body) setStatus(body.status) })
+      .then(async (response) => response.ok ? response.json() as Promise<DataStatusResponse> : null)
+      .then((body) => { if (body) setDataStatus(body) })
       .catch(() => undefined)
     return () => controller.abort()
   }, [])
 
+  function resetFile() {
+    setRows([])
+    setFilename("")
+    setPreview(null)
+    setReplaceConfirmed(false)
+    if (fileInput.current) fileInput.current.value = ""
+  }
+
   async function loadFile(file: File | undefined) {
+    resetFile()
+    setError("")
+    setMessage("")
     if (!file) return
-    setError(""); setMessage("")
     try {
       const parsed = parseCsv(await file.text())
-      setRows(parsed); setFilename(file.name)
-      const missing = importFields[domain].filter((field) => field !== "id" && !Object.hasOwn(parsed[0], field))
-      if (missing.length) setError(`Missing columns for ${domain}: ${missing.join(", ")}`)
-    } catch (reason) { setRows([]); setError(reason instanceof Error ? reason.message : "Unable to read CSV.") }
-  }
-
-  async function importRows() {
-    if (!rows.length || error) return
-    setBusy(true); setMessage(""); setError("")
-    try {
-      const response = await fetch("/api/v1/data/import", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ domain, rows, filename, replace }) })
-      const body = await response.json() as { imported?: number; error?: string }
-      if (!response.ok) throw new Error(body.error ?? `Import failed (${response.status})`)
-      setMessage(`Imported ${body.imported} ${domain} rows. Dashboards and reports now use the updated records.`)
-      setRows([]); setFilename("")
-      await refreshStatus()
-    } catch (reason) { setError(reason instanceof Error ? reason.message : "Import failed.") }
-    finally { setBusy(false) }
-  }
-
-  async function copyPowerBiFeed(item: HrDomain) {
-    const url = `${window.location.origin}/api/v1/power-bi/${item}`
-    setCopyError("")
-    try {
-      await copyToClipboard(url)
-      setCopiedFeed(item)
-      window.setTimeout(() => setCopiedFeed((current) => current === item ? null : current), 2200)
+      if (parsed.length > 5000) throw new Error("CSV files are limited to 5,000 data rows.")
+      setRows(parsed)
+      setFilename(file.name)
     } catch (reason) {
-      setCopiedFeed(null)
-      setCopyError(reason instanceof Error ? reason.message : "The endpoint could not be copied.")
+      setError(reason instanceof Error ? reason.message : "Unable to read CSV.")
     }
   }
 
-  const totalRows = status.reduce((sum, item) => sum + item.count, 0)
+  async function submit(action: "validate" | "apply") {
+    if (!rows.length) return
+    setBusy(action)
+    setError("")
+    setMessage("")
+    try {
+      const response = await fetch("/api/v1/data/import", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action, domain, rows, filename, mode }),
+      })
+      const body = await response.json() as { imported?: number; preview?: ImportPreview; error?: string }
+      if (body.preview) setPreview(body.preview)
+      if (!response.ok) throw new Error(body.error ?? `Import request failed (${response.status}).`)
+      if (action === "validate") return
+      setMessage(`${body.imported?.toLocaleString() ?? rows.length.toLocaleString()} ${domainLabel(domain).toLowerCase()} records imported.`)
+      resetFile()
+      await refreshStatus()
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : "Import request failed.")
+    } finally {
+      setBusy(null)
+    }
+  }
+
+  async function copyFeed(item: HrDomain) {
+    setError("")
+    try {
+      await copyToClipboard(`${window.location.origin}/api/v1/power-bi/${item}`)
+      setCopiedFeed(item)
+      window.setTimeout(() => setCopiedFeed((current) => current === item ? null : current), 2000)
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : "The endpoint could not be copied.")
+    }
+  }
+
+  const canApply = Boolean(preview?.canApply) && (mode === "merge" || replaceConfirmed)
   return <WorkspacePage>
-    <WorkspaceHeader title="Import / export data" description="Import HR records, download templates, and connect reporting feeds." meta={<>{totalRows.toLocaleString()} records across {hrDomains.length} domains</>} actions={<Button type="button" variant="outline" onClick={() => void refreshStatus()} disabled={statusBusy}>
-        <RefreshCw className={cn("size-4", statusBusy && "animate-spin")} />
-        Refresh status
-      </Button>}/>
+    <WorkspaceHeader
+      title="Import / export data"
+      description="Data ingestion and reporting feeds."
+      meta={<>{dataStatus.summary.totalRecords.toLocaleString()} records</>}
+      actions={<Button type="button" variant="outline" onClick={() => void refreshStatus()} disabled={busy !== null}>Refresh</Button>}
+    />
 
-    <details id="data-coverage" className="scroll-mt-24 overflow-hidden rounded-lg border border-border bg-card">
-      <summary className="flex min-h-12 items-center justify-between gap-3 px-4 font-semibold"><span>Data coverage</span><span className="text-meta font-normal text-muted-foreground">View record counts and last import dates</span></summary>
-      <div className="overflow-x-auto border-t border-border">
-        <table className="w-full min-w-[680px] text-left text-sm">
-          <thead className="bg-muted/45 text-xs text-muted-foreground"><tr><th className="px-5 py-3 font-semibold">Domain</th><th className="px-5 py-3 font-semibold">Records</th><th className="px-5 py-3 font-semibold">Last import</th></tr></thead>
-          <tbody>{status.map((item) => <tr key={item.domain} className="border-t border-border/70">
-            <td className="px-5 py-3 font-semibold capitalize">{item.domain}</td>
-            <td className="px-5 py-3 tabular-nums">{item.count.toLocaleString()}</td>
-            <td className="px-5 py-3 text-xs text-muted-foreground">{item.lastImport ? formatWorkspaceDateTime(item.lastImport) : "—"}</td>
-          </tr>)}</tbody>
-        </table>
+    <nav aria-label="Data workspace" className="flex gap-5 border-b border-border">
+      <a href="/imports" className={cn("border-b-2 px-1 pb-2 text-body", view === "imports" ? "border-primary font-semibold text-foreground" : "border-transparent text-muted-foreground hover:text-foreground")}>Imports</a>
+      <a href="/imports?view=feeds" className={cn("border-b-2 px-1 pb-2 text-body", view === "feeds" ? "border-primary font-semibold text-foreground" : "border-transparent text-muted-foreground hover:text-foreground")}>Reporting feeds</a>
+    </nav>
+
+    {view === "imports" ? <>
+      <section className="grid gap-3 sm:grid-cols-3" aria-label="Import summary">
+        <div className="rounded-md border border-border bg-card px-4 py-3"><p className="text-meta text-muted-foreground">Records</p><p className="mt-1 text-kpi tabular-nums">{dataStatus.summary.totalRecords.toLocaleString()}</p></div>
+        <div className="rounded-md border border-border bg-card px-4 py-3"><p className="text-meta text-muted-foreground">Last completed import</p><p className="mt-1 text-card-title">{dataStatus.summary.lastCompletedAt ? formatWorkspaceDateTime(dataStatus.summary.lastCompletedAt) : "None"}</p></div>
+        <div className="rounded-md border border-border bg-card px-4 py-3"><p className="text-meta text-muted-foreground">Failed imports</p><p className="mt-1 text-kpi tabular-nums">{dataStatus.summary.failedImports.toLocaleString()}</p></div>
+      </section>
+
+      <div className="grid gap-5 xl:grid-cols-[minmax(0,1.15fr)_minmax(360px,0.85fr)]">
+        <Card className="shadow-none">
+          <CardHeader className="border-b border-border"><CardTitle>New import</CardTitle></CardHeader>
+          <CardContent className="space-y-5">
+            <div className="grid gap-4 sm:grid-cols-2">
+              <label className="text-label">Domain
+                <select value={domain} onChange={(event) => { setDomain(event.target.value as HrDomain); resetFile(); setError(""); setMessage("") }} className="mt-1 h-9 w-full rounded-md border border-input bg-background px-3 text-body text-foreground">
+                  {hrDomains.map((item) => <option key={item} value={item}>{domainLabel(item)}</option>)}
+                </select>
+              </label>
+              <label className="text-label">Import method
+                <select value={mode} onChange={(event) => { setMode(event.target.value as ImportMode); setPreview(null); setReplaceConfirmed(false) }} className="mt-1 h-9 w-full rounded-md border border-input bg-background px-3 text-body text-foreground">
+                  <option value="merge">Merge by ID</option>
+                  <option value="replace_imported">Replace imported records</option>
+                </select>
+              </label>
+            </div>
+            <div className="flex flex-wrap items-center gap-3">
+              <label className="inline-flex h-9 cursor-pointer items-center rounded-md border border-input bg-background px-3 text-button hover:bg-muted">
+                Choose CSV
+                <input ref={fileInput} type="file" accept=".csv,text/csv" className="sr-only" onChange={(event) => void loadFile(event.target.files?.[0])} />
+              </label>
+              <a className="inline-flex h-9 items-center rounded-md px-3 text-button text-primary hover:bg-muted" href={`/api/v1/data/template?domain=${domain}`}>Download template</a>
+              <span className="text-meta text-muted-foreground">Up to 5,000 rows</span>
+            </div>
+            {filename ? <div className="rounded-md border border-border px-3 py-2 text-body"><span className="font-semibold">{filename}</span><span className="ml-2 text-muted-foreground">{rows.length.toLocaleString()} rows</span></div> : null}
+
+            {rows.length > 0 ? <div className="flex gap-2">
+              <Button type="button" onClick={() => void submit("validate")} disabled={busy !== null}>{busy === "validate" ? "Validating…" : "Validate file"}</Button>
+              <Button type="button" variant="ghost" onClick={resetFile} disabled={busy !== null}>Remove</Button>
+            </div> : null}
+
+            {preview ? <section className="space-y-3 rounded-md border border-border p-4" aria-label="Validation result">
+              <div className="flex items-start justify-between gap-4"><div><h3 className="text-subsection-heading">Validation result</h3><p className="text-meta text-muted-foreground">{preview.canApply ? "Ready to import" : "Resolve errors and validate again"}</p></div><span className={cn("rounded-sm px-2 py-0.5 text-status", preview.canApply ? "bg-success/10 text-success" : "bg-destructive/10 text-destructive")}>{preview.canApply ? "Passed" : "Failed"}</span></div>
+              <dl className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+                <div><dt className="text-meta text-muted-foreground">Rows</dt><dd className="text-card-title tabular-nums">{preview.totalRows.toLocaleString()}</dd></div>
+                <div><dt className="text-meta text-muted-foreground">New</dt><dd className="text-card-title tabular-nums">{preview.inserts.toLocaleString()}</dd></div>
+                <div><dt className="text-meta text-muted-foreground">Updates</dt><dd className="text-card-title tabular-nums">{preview.updates.toLocaleString()}</dd></div>
+                <div><dt className="text-meta text-muted-foreground">Errors</dt><dd className="text-card-title tabular-nums">{preview.issues.filter((item) => item.severity === "error").length.toLocaleString()}</dd></div>
+              </dl>
+              {preview.issues.length ? <div className="max-h-44 overflow-auto border-t border-border pt-2">{preview.issues.map((issue, index) => <p key={`${issue.code}-${issue.row ?? 0}-${index}`} className={cn("py-1 text-meta", issue.severity === "error" ? "text-destructive" : "text-warning")}><span className="font-semibold">{issue.severity === "error" ? "Error" : "Warning"}{issue.row ? ` · row ${issue.row}` : ""}</span> — {issue.message}</p>)}</div> : null}
+              {mode === "replace_imported" && preview.canApply ? <label className="flex items-start gap-2 border-t border-border pt-3 text-body"><input type="checkbox" checked={replaceConfirmed} onChange={(event) => setReplaceConfirmed(event.target.checked)} className="mt-1 accent-primary" /><span>Replace {preview.replacedRows.toLocaleString()} existing imported {domainLabel(domain).toLowerCase()} records. Manually created and sample records are preserved.</span></label> : null}
+              <Button type="button" onClick={() => void submit("apply")} disabled={!canApply || busy !== null}>{busy === "apply" ? "Importing…" : "Import records"}</Button>
+            </section> : null}
+
+            {error ? <p className="rounded-md bg-destructive/10 px-3 py-2 text-body text-destructive" role="alert">{error}</p> : null}
+            {message ? <p className="rounded-md bg-success/10 px-3 py-2 text-body text-success" role="status">{message}</p> : null}
+            <details className="border-t border-border pt-3"><summary className="cursor-pointer text-card-title">CSV columns</summary><p className="mt-2 break-words text-meta text-muted-foreground">{importFields[domain].join(", ")}</p></details>
+          </CardContent>
+        </Card>
+
+        <Card className="h-fit shadow-none">
+          <CardHeader className="border-b border-border"><CardTitle>Recent imports</CardTitle></CardHeader>
+          <CardContent className="p-0">
+            {dataStatus.imports.length ? <div className="overflow-x-auto"><table className="w-full min-w-[560px] text-left">
+              <thead><tr className="border-b border-border bg-muted/35 text-label text-muted-foreground"><th className="px-4 py-2">File</th><th className="px-4 py-2">Method</th><th className="px-4 py-2">Rows</th><th className="px-4 py-2">Status</th></tr></thead>
+              <tbody>{dataStatus.imports.map((item) => <tr key={item.id} className="border-b border-border/70 last:border-b-0"><td className="px-4 py-2"><span className="block max-w-48 truncate text-body font-semibold">{item.filename}</span><span className="text-meta text-muted-foreground">{domainLabel(item.domain)} · {formatWorkspaceDateTime(item.startedAt)}</span></td><td className="px-4 py-2 text-body">{modeLabel(item.mode)}</td><td className="px-4 py-2 text-body tabular-nums">{item.rowCount.toLocaleString()}</td><td className="px-4 py-2"><span className={cn("rounded-sm px-2 py-0.5 text-status", item.status === "completed" ? "bg-success/10 text-success" : item.status === "failed" ? "bg-destructive/10 text-destructive" : "bg-warning/10 text-warning")}>{item.status}</span></td></tr>)}</tbody>
+            </table></div> : <p className="p-4 text-body text-muted-foreground">No imports recorded.</p>}
+          </CardContent>
+        </Card>
       </div>
-    </details>
 
-    <div className="grid gap-5 xl:grid-cols-[1.15fr_0.85fr]">
-      <Card id="import-records" className="scroll-mt-24 shadow-none">
-        <CardHeader className="border-b border-border"><CardTitle>Import records</CardTitle><CardDescription>Select a domain and upload a CSV using the required template.</CardDescription></CardHeader>
-        <CardContent className="space-y-5">
-          <div className="grid gap-4 sm:grid-cols-2">
-            <label className="text-xs text-muted-foreground">Domain<select value={domain} onChange={(event)=>{setDomain(event.target.value as HrDomain);setRows([]);setFilename("");setError("");setMessage("")}} className="mt-1 h-10 w-full rounded-md border border-input bg-background px-3 text-sm text-foreground">{hrDomains.map((item)=><option key={item} value={item}>{item[0].toUpperCase()+item.slice(1)}</option>)}</select></label>
-            <div className="flex items-end"><a className="inline-flex h-10 items-center gap-2 rounded-md border border-border bg-card px-3 text-sm hover:bg-muted" href={`/api/v1/data/template?domain=${domain}`}><Download className="size-4"/>Download template</a></div>
-          </div>
-          <div className="rounded-md border border-dashed border-input p-6">
-            <label className="flex cursor-pointer flex-col items-center gap-2 text-center"><span className="text-sm font-semibold">Choose a CSV file</span><span className="text-xs text-muted-foreground">Maximum 5,000 rows</span><input type="file" accept=".csv,text/csv" className="sr-only" onChange={(event)=>void loadFile(event.target.files?.[0])}/></label>
-          </div>
-          <div className="rounded-md bg-muted/40 p-3"><p className="text-xs font-semibold">Required columns</p><p className="mt-1 font-mono text-meta text-muted-foreground">{importFields[domain].join(", ")}</p></div>
-          {rows.length > 0 && <div className="rounded-md border border-border p-3"><div className="flex items-center gap-2"><span className="text-sm font-semibold">{filename}</span><span className="ml-auto font-mono text-xs">{rows.length} rows</span></div><div className="mt-3 overflow-x-auto"><table className="min-w-full text-left text-meta"><thead><tr>{Object.keys(rows[0]).slice(0,6).map((key)=><th key={key} className="border-b px-2 py-1.5 text-muted-foreground">{key}</th>)}</tr></thead><tbody>{rows.slice(0,3).map((row,index)=><tr key={index}>{Object.keys(rows[0]).slice(0,6).map((key)=><td key={key} className="max-w-36 truncate border-b border-border/50 px-2 py-1.5">{row[key]}</td>)}</tr>)}</tbody></table></div></div>}
-          <label className="flex items-start gap-2 text-sm"><input type="checkbox" checked={replace} onChange={(event)=>setReplace(event.target.checked)} className="mt-1 accent-primary"/><span><b>Replace this domain</b><span className="block text-xs text-muted-foreground">Recommended for full HRIS refresh files. Turn off to upsert by ID while preserving other imported rows.</span></span></label>
-          {error && <pre className="max-h-40 overflow-auto whitespace-pre-wrap rounded-md bg-destructive/10 p-3 text-xs text-destructive">{error}</pre>}
-          {message && <p className="rounded-md bg-success/10 p-3 text-sm text-success">{message}</p>}
-          <Button onClick={()=>void importRows()} disabled={!rows.length || Boolean(error) || busy}>{busy?<RefreshCw className="size-4 animate-spin"/>:<Upload className="size-4"/>}{busy?"Importing…":`Import ${rows.length || ""} rows`}</Button>
-        </CardContent>
+      <Card className="shadow-none">
+        <CardHeader className="border-b border-border"><CardTitle>Domain records</CardTitle></CardHeader>
+        <CardContent className="p-0"><div className="overflow-x-auto"><table className="w-full min-w-[560px] text-left">
+          <thead><tr className="border-b border-border bg-muted/35 text-label text-muted-foreground"><th className="px-4 py-2">Domain</th><th className="px-4 py-2">Records</th><th className="px-4 py-2">Last import</th></tr></thead>
+          <tbody>{dataStatus.status.map((item) => <tr key={item.domain} className="border-b border-border/70 last:border-b-0"><td className="px-4 py-2 text-body font-semibold">{domainLabel(item.domain)}</td><td className="px-4 py-2 text-body tabular-nums">{item.count.toLocaleString()}</td><td className="px-4 py-2 text-body text-muted-foreground">{item.lastImport ? formatWorkspaceDateTime(item.lastImport) : "—"}</td></tr>)}</tbody>
+        </table></div></CardContent>
       </Card>
-
-      <Card id="power-bi-feeds" className="h-fit scroll-mt-24 shadow-none">
-        <CardHeader className="border-b border-border">
-          <CardTitle>Power BI feeds</CardTitle>
-          <CardDescription>Copy a CSV endpoint for scheduled reporting.</CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-2">
-          {hrDomains.map((item) => {
-            const copied = copiedFeed === item
-            return (
-              <button
-                type="button"
-                key={item}
-                onClick={() => void copyPowerBiFeed(item)}
-                className="group flex w-full items-center gap-3 rounded-md border border-border p-3 text-left hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/30"
-                aria-label={`Copy ${item} Power BI endpoint`}
-              >
-                <span className="min-w-0 flex-1">
-                  <span className="block text-sm font-semibold capitalize">{item}</span>
-                  <span className="mt-0.5 block truncate font-mono text-meta text-muted-foreground">/api/v1/power-bi/{item}</span>
-                </span>
-                <span className={cn("flex items-center gap-1.5 text-xs font-semibold", copied ? "text-success" : "text-muted-foreground group-hover:text-primary")}>
-                  {copied ? <Check className="size-3.5" /> : <Clipboard className="size-3.5" />}
-                  {copied ? "Copied" : "Copy"}
-                </span>
-              </button>
-            )
-          })}
-          <p aria-live="polite" className={cn("pt-2 text-meta", copyError ? "text-destructive" : "text-muted-foreground")}>
-            {copyError || "Use an authenticated Power BI Web connector or gateway for scheduled refreshes."}
-          </p>
-        </CardContent>
-      </Card>
-    </div>
+    </> : <Card className="shadow-none">
+      <CardHeader className="border-b border-border"><CardTitle>Power BI feeds</CardTitle></CardHeader>
+      <CardContent className="p-0">
+        <div className="overflow-x-auto"><table className="w-full min-w-[720px] text-left">
+          <thead><tr className="border-b border-border bg-muted/35 text-label text-muted-foreground"><th className="px-4 py-2">Domain</th><th className="px-4 py-2">Records</th><th className="px-4 py-2">Format</th><th className="px-4 py-2">Endpoint</th><th className="px-4 py-2">Actions</th></tr></thead>
+          <tbody>{hrDomains.map((item) => <tr key={item} className="border-b border-border/70 last:border-b-0"><td className="px-4 py-3 text-body font-semibold">{domainLabel(item)}</td><td className="px-4 py-3 text-body tabular-nums">{(dataStatus.status.find((entry) => entry.domain === item)?.count ?? 0).toLocaleString()}</td><td className="px-4 py-3 text-body">CSV</td><td className="px-4 py-3 font-mono text-meta text-muted-foreground">/api/v1/power-bi/{item}</td><td className="px-4 py-3"><div className="flex gap-3"><button type="button" className="text-button text-primary hover:underline" onClick={() => void copyFeed(item)}>{copiedFeed === item ? "Copied" : "Copy"}</button><a className="text-button text-primary hover:underline" href={`/api/v1/power-bi/${item}`}>Open</a></div></td></tr>)}</tbody>
+        </table></div>
+        <p className="border-t border-border px-4 py-3 text-meta text-muted-foreground">Authenticated CSV endpoints. Scheduled refresh requires an authenticated Power BI connector or gateway.</p>
+      </CardContent>
+    </Card>}
   </WorkspacePage>
 }

@@ -43,14 +43,6 @@ def format_tenure(years: int) -> str:
     return f"{years} year" if years == 1 else f"{years} years"
 
 
-def original_feature_name(encoded_name: str, categorical_columns: list[str]) -> str:
-    raw = encoded_name.split("__", 1)[-1]
-    for column in categorical_columns:
-        if raw == column or raw.startswith(f"{column}_"):
-            return column
-    return raw
-
-
 @dataclass
 class ModelRuntime:
     pipeline: Any
@@ -83,27 +75,36 @@ class ModelRuntime:
             if value not in options:
                 raise ValueError(f"{column} must be one of: {', '.join(options)}")
 
+    def reference_effects(self, frame: pd.DataFrame) -> dict[str, np.ndarray]:
+        """Return probability-point changes versus a one-field reference replacement."""
+        probabilities = self.pipeline.predict_proba(frame[self.model_columns])[:, 1]
+        reference = self.metadata["reference_profile"]
+        effects: dict[str, np.ndarray] = {}
+        for feature in self.model_columns:
+            counterfactual = frame[self.model_columns].copy()
+            counterfactual[feature] = reference[feature]
+            comparison = self.pipeline.predict_proba(counterfactual)[:, 1]
+            effects[feature] = (probabilities - comparison) * 100
+        return effects
+
     def local_drivers(self, frame: pd.DataFrame, raw: dict[str, Any], limit: int = 3) -> list[dict[str, Any]]:
-        preprocessor = self.pipeline.named_steps["preprocessor"]
-        classifier = self.pipeline.named_steps["classifier"]
-        transformed = np.asarray(preprocessor.transform(frame))[0]
-        names = preprocessor.get_feature_names_out().tolist()
-        contributions = transformed * classifier.coef_[0]
-        grouped: dict[str, float] = {}
-        for name, contribution in zip(names, contributions, strict=True):
-            feature = original_feature_name(name, self.metadata["categorical_columns"])
-            grouped[feature] = grouped.get(feature, 0.0) + float(contribution)
-        ranked = sorted(grouped.items(), key=lambda item: item[1], reverse=True)
+        effects = self.reference_effects(frame)
+        ranked = sorted(
+            ((feature, float(values[0])) for feature, values in effects.items()),
+            key=lambda item: item[1],
+            reverse=True,
+        )
         results: list[dict[str, Any]] = []
-        for feature, contribution in ranked:
-            if contribution <= 0:
+        for feature, effect in ranked:
+            if effect <= 0:
                 continue
             results.append(
                 {
                     "feature": feature,
                     "label": human_feature(feature),
                     "value": raw.get(feature),
-                    "contribution": round(contribution, 4),
+                    "contribution": round(effect, 4),
+                    "referenceValue": self.metadata["reference_profile"][feature],
                     "explanation": self.driver_explanation(feature, raw),
                 }
             )
@@ -117,6 +118,7 @@ class ModelRuntime:
                     "label": human_feature(feature),
                     "value": raw.get(feature),
                     "contribution": round(ranked[0][1], 4),
+                    "referenceValue": self.metadata["reference_profile"][feature],
                     "explanation": self.driver_explanation(feature, raw),
                 }
             )
@@ -165,6 +167,8 @@ class ModelRuntime:
         self.validate_categories(record)
         frame = pd.DataFrame([{column: record[column] for column in self.model_columns}])
         probability = float(self.pipeline.predict_proba(frame)[0, 1])
+        reference_frame = pd.DataFrame([self.metadata["reference_profile"]])[self.model_columns]
+        reference_probability = float(self.pipeline.predict_proba(reference_frame)[0, 1])
         drivers = self.local_drivers(frame, record)
         return {
             "probability": round(probability, 6),
@@ -172,6 +176,7 @@ class ModelRuntime:
             "riskLevel": risk_level(probability, self.threshold),
             "decisionThreshold": round(self.threshold, 4),
             "aboveInterventionThreshold": probability >= self.threshold,
+            "referenceProbability": round(reference_probability, 6),
             "topDrivers": drivers,
             "recommendation": self.recommendation(record, drivers[0]["feature"]),
             "disclaimer": "This is a statistical estimate for human review. Do not use it as the sole basis for an employment decision.",
@@ -180,20 +185,14 @@ class ModelRuntime:
     def employees(self) -> list[dict[str, Any]]:
         rows: list[dict[str, Any]] = []
         model_frame = self.scored[self.model_columns]
-        preprocessor = self.pipeline.named_steps["preprocessor"]
-        classifier = self.pipeline.named_steps["classifier"]
-        transformed = np.asarray(preprocessor.transform(model_frame))
-        names = preprocessor.get_feature_names_out().tolist()
-        coefficients = classifier.coef_[0]
-        categorical_columns = self.metadata["categorical_columns"]
+        effects = self.reference_effects(model_frame)
 
         for index, row in self.scored.iterrows():
-            contributions = transformed[index] * coefficients
-            grouped: dict[str, float] = {}
-            for name, contribution in zip(names, contributions, strict=True):
-                feature = original_feature_name(name, categorical_columns)
-                grouped[feature] = grouped.get(feature, 0.0) + float(contribution)
-            ranked = sorted(grouped.items(), key=lambda item: item[1], reverse=True)
+            ranked = sorted(
+                ((feature, float(values[index])) for feature, values in effects.items()),
+                key=lambda item: item[1],
+                reverse=True,
+            )
             top_feature = next((feature for feature, value in ranked if value > 0), ranked[0][0])
             probability = float(row["RiskProbability"])
             rows.append(
@@ -299,10 +298,10 @@ class ModelRuntime:
         model_metrics = [
             {"label": "Model", "value": self.metadata["model_name"], "hint": self.metadata["model_version"]},
             {"label": "ROC-AUC", "value": f"{metrics['roc_auc']:.2f}", "hint": "5-fold out-of-fold"},
-            {"label": "Precision", "value": f"{metrics['precision']:.2f}", "hint": f"At {self.threshold:.2f} threshold"},
-            {"label": "Recall", "value": f"{metrics['recall']:.2f}", "hint": f"At {self.threshold:.2f} threshold"},
+            {"label": "Average precision", "value": f"{metrics['average_precision']:.2f}", "hint": "Class-imbalance aware"},
+            {"label": "Brier score", "value": f"{metrics['brier_score']:.3f}", "hint": "Lower is better"},
+            {"label": "Precision / recall", "value": f"{metrics['precision']:.2f} / {metrics['recall']:.2f}", "hint": f"At {self.threshold:.2f} threshold"},
             {"label": "Rows scored", "value": f"{len(df):,}", "hint": "Uploaded dataset"},
-            {"label": "Features", "value": str(self.metadata['dataset']['features']), "hint": "Age/marital excluded"},
         ]
 
         return {

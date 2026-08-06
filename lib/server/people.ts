@@ -41,9 +41,9 @@ const employeeSelect = `
     TRIM(CASE WHEN COALESCE(e.preferred_name, '') <> '' THEN e.preferred_name ELSE e.first_name END || ' ' || e.last_name) AS display_name,
     UPPER(SUBSTR(COALESCE(NULLIF(e.preferred_name, ''), NULLIF(e.first_name, ''), e.employee_id), 1, 1) || SUBSTR(COALESCE(NULLIF(e.last_name, ''), e.employee_id), 1, 1)) AS initials,
     NULLIF(TRIM(COALESCE(m.preferred_name, m.first_name, '') || ' ' || COALESCE(m.last_name, '')), '') AS manager_name,
-    (SELECT COUNT(*) FROM employees d WHERE d.manager_id = e.employee_id AND d.archived_at IS NULL) AS direct_reports
-  FROM employees e
-  LEFT JOIN employees m ON m.employee_id = e.manager_id`
+    (SELECT COUNT(*) FROM employee_directory_view d WHERE d.manager_id = e.employee_id AND d.archived_at IS NULL) AS direct_reports
+  FROM employee_directory_view e
+  LEFT JOIN employee_directory_view m ON m.employee_id = e.manager_id`
 
 async function databaseOrThrow(): Promise<Database> {
   const database = await ensureHrDatabase()
@@ -65,14 +65,14 @@ function cleanNullable(value: string | null | undefined): string | null {
 
 async function assertUniqueAndManager(database: Database, input: EmployeeInput, currentId?: string): Promise<{ managerName: string }> {
   if (input.work_email) {
-    const duplicate = await database.prepare("SELECT employee_id FROM employees WHERE LOWER(work_email) = LOWER(?) AND employee_id <> ? AND archived_at IS NULL")
+    const duplicate = await database.prepare("SELECT employee_id FROM employee_directory_view WHERE LOWER(work_email) = LOWER(?) AND employee_id <> ? AND archived_at IS NULL")
       .bind(input.work_email, currentId ?? "")
       .first<{ employee_id: string }>()
     if (duplicate) throw new PeopleError("That work email is already assigned to another employee.", 409)
   }
   if (!input.manager_id) return { managerName: "Not assigned" }
   if (input.manager_id === currentId) throw new PeopleError("An employee cannot be their own manager.")
-  const manager = await database.prepare("SELECT employee_id, first_name, last_name, preferred_name, manager_id FROM employees WHERE employee_id = ? AND archived_at IS NULL")
+  const manager = await database.prepare("SELECT employee_id, first_name, last_name, preferred_name, manager_id FROM employee_directory_view WHERE employee_id = ? AND archived_at IS NULL")
     .bind(input.manager_id)
     .first<{ employee_id: string; first_name: string; last_name: string; preferred_name: string | null; manager_id: string | null }>()
   if (!manager) throw new PeopleError("The selected manager could not be found.")
@@ -80,7 +80,7 @@ async function assertUniqueAndManager(database: Database, input: EmployeeInput, 
     let next = manager.manager_id
     for (let depth = 0; next && depth < 30; depth += 1) {
       if (next === currentId) throw new PeopleError("That manager assignment would create a reporting cycle.")
-      const parent = await database.prepare("SELECT manager_id FROM employees WHERE employee_id = ?").bind(next).first<{ manager_id: string | null }>()
+      const parent = await database.prepare("SELECT manager_id FROM employee_directory_view WHERE employee_id = ?").bind(next).first<{ manager_id: string | null }>()
       next = parent?.manager_id ?? null
     }
   }
@@ -124,20 +124,25 @@ export async function listPeople({
   if (tenure === "1to2") where.push("e.tenure_years >= 1 AND e.tenure_years < 3")
   if (tenure === "3to4") where.push("e.tenure_years >= 3 AND e.tenure_years < 5")
   if (tenure === "5plus") where.push("e.tenure_years >= 5")
-  if (tenure === "mobility") where.push("e.tenure_years >= 3 AND LOWER(e.employment_status) != 'terminated' AND NOT EXISTS (SELECT 1 FROM promotion_records p WHERE p.employee_id = e.employee_id)")
+  if (tenure === "mobility") where.push("e.tenure_years >= 3 AND LOWER(e.employment_status) != 'terminated' AND NOT EXISTS (SELECT 1 FROM promotion_events_view p WHERE p.employee_id = e.employee_id)")
   const clause = where.length ? ` WHERE ${where.join(" AND ")}` : ""
   const safeLimit = Math.max(1, Math.min(250, limit))
   const safeOffset = Math.max(0, offset)
-  const [itemsResult, countResult, dimensionResult] = await Promise.all([
+  const [itemsResult, countResult, dimensionResult, compositionResult] = await Promise.all([
     database.prepare(`${employeeSelect}${clause} ORDER BY CASE e.employment_status WHEN 'Preboarding' THEN 0 WHEN 'Active' THEN 1 WHEN 'On leave' THEN 2 ELSE 3 END, display_name LIMIT ? OFFSET ?`)
       .bind(...bindings, safeLimit, safeOffset).all<ManagedEmployee>(),
-    database.prepare(`SELECT COUNT(*) AS count FROM employees e${clause}`).bind(...bindings).first<{ count: number }>(),
-    database.prepare("SELECT department, location, employment_status, employment_type FROM employees WHERE archived_at IS NULL").all<{ department: string; location: string; employment_status: string; employment_type: string }>(),
+    database.prepare(`SELECT COUNT(*) AS count FROM employee_directory_view e${clause}`).bind(...bindings).first<{ count: number }>(),
+    database.prepare("SELECT department, location, employment_status, employment_type FROM employee_directory_view WHERE archived_at IS NULL").all<{ department: string; location: string; employment_status: string; employment_type: string }>(),
+    database.prepare("SELECT department AS name, COUNT(*) AS count FROM employee_directory_view WHERE archived_at IS NULL GROUP BY department ORDER BY count DESC, department LIMIT 12")
+      .all<{ name: string; count: number }>(),
   ])
   const dimensions = dimensionResult.results ?? []
   return {
     total: Number(countResult?.count ?? 0),
     items: itemsResult.results ?? [],
+    composition: {
+      departments: (compositionResult.results ?? []).map((row) => ({ name: row.name, count: Number(row.count) })),
+    },
     dimensions: {
       departments: [...new Set(dimensions.map((row) => row.department))].sort(),
       locations: [...new Set(dimensions.map((row) => row.location))].sort(),
@@ -154,11 +159,11 @@ export async function getPerson(employeeId: string): Promise<EmployeeProfileResp
   const [manager, directReports, leave, training, promotions, attrition, attritionModel, activity] = await Promise.all([
     employee.manager_id ? database.prepare(`${employeeSelect} WHERE e.employee_id = ?`).bind(employee.manager_id).first<ManagedEmployee>() : Promise.resolve(null),
     database.prepare(`${employeeSelect} WHERE e.manager_id = ? AND e.archived_at IS NULL ORDER BY display_name`).bind(employeeId).all<ManagedEmployee>(),
-    database.prepare("SELECT * FROM leave_records WHERE employee_id = ? ORDER BY start_date DESC LIMIT 100").bind(employeeId).all<LeaveRecord>(),
-    database.prepare("SELECT * FROM training_records WHERE employee_id = ? ORDER BY COALESCE(completion_date, '9999-12-31') DESC LIMIT 100").bind(employeeId).all<TrainingRecord>(),
-    database.prepare("SELECT * FROM promotion_records WHERE employee_id = ? ORDER BY promotion_date DESC LIMIT 100").bind(employeeId).all<PromotionRecord>(),
-    database.prepare("SELECT * FROM attrition_events WHERE employee_id = ? ORDER BY exit_date DESC LIMIT 20").bind(employeeId).all<AttritionRecord>(),
-    database.prepare("SELECT * FROM attrition_model_profiles WHERE employee_id = ?").bind(employeeId).first<AttritionModelProfile>(),
+    database.prepare("SELECT * FROM leave_requests_view WHERE employee_id = ? ORDER BY start_date DESC LIMIT 100").bind(employeeId).all<LeaveRecord>(),
+    database.prepare("SELECT * FROM learning_assignments_view WHERE employee_id = ? ORDER BY COALESCE(completion_date, '9999-12-31') DESC LIMIT 100").bind(employeeId).all<TrainingRecord>(),
+    database.prepare("SELECT * FROM promotion_events_view WHERE employee_id = ? ORDER BY promotion_date DESC LIMIT 100").bind(employeeId).all<PromotionRecord>(),
+    database.prepare("SELECT * FROM attrition_events_view WHERE employee_id = ? ORDER BY exit_date DESC LIMIT 20").bind(employeeId).all<AttritionRecord>(),
+    database.prepare("SELECT * FROM attrition_model_profiles_view WHERE employee_id = ?").bind(employeeId).first<AttritionModelProfile>(),
     database.prepare("SELECT * FROM employee_activity WHERE employee_id = ? ORDER BY created_at DESC LIMIT 100").bind(employeeId).all<EmployeeActivity>(),
   ])
   return {
@@ -178,7 +183,7 @@ export async function createPerson(value: unknown, actor: RequestActor): Promise
   const parsed = employeeSchema.parse(value)
   const database = await databaseOrThrow()
   const employeeId = parsed.employee_id ?? `EMP-${crypto.randomUUID().slice(0, 8).toUpperCase()}`
-  const exists = await database.prepare("SELECT employee_id FROM employees WHERE employee_id = ?").bind(employeeId).first<{ employee_id: string }>()
+  const exists = await database.prepare("SELECT employee_id FROM employee_directory_view WHERE employee_id = ?").bind(employeeId).first<{ employee_id: string }>()
   if (exists) throw new PeopleError("That employee ID already exists.", 409)
   const input: EmployeeInput = { ...parsed, employee_id: employeeId, preferred_name: cleanNullable(parsed.preferred_name), work_email: cleanNullable(parsed.work_email), phone: cleanNullable(parsed.phone), manager_id: cleanNullable(parsed.manager_id) }
   const { managerName } = await assertUniqueAndManager(database, input)
@@ -195,7 +200,7 @@ export async function createPerson(value: unknown, actor: RequestActor): Promise
 export async function updatePerson(employeeId: string, value: unknown, actor: RequestActor): Promise<ManagedEmployee> {
   const parsed = employeeSchema.parse(value)
   const database = await databaseOrThrow()
-  const current = await database.prepare("SELECT * FROM employees WHERE employee_id = ?").bind(employeeId).first<Record<string, unknown>>()
+  const current = await database.prepare("SELECT * FROM employee_directory_view WHERE employee_id = ?").bind(employeeId).first<Record<string, unknown>>()
   if (!current) throw new PeopleError("Employee not found.", 404)
   if (!parsed.version || parsed.version !== Number(current.version)) throw new PeopleError("This profile changed since you opened it. Refresh and try again.", 409)
   const input: EmployeeInput = { ...parsed, employee_id: employeeId, preferred_name: cleanNullable(parsed.preferred_name), work_email: cleanNullable(parsed.work_email), phone: cleanNullable(parsed.phone), manager_id: cleanNullable(parsed.manager_id) }
@@ -214,7 +219,7 @@ export async function updatePerson(employeeId: string, value: unknown, actor: Re
 
 export async function setPersonArchived(employeeId: string, archived: boolean, actor: RequestActor): Promise<ManagedEmployee> {
   const database = await databaseOrThrow()
-  const current = await database.prepare("SELECT first_name, last_name FROM employees WHERE employee_id = ?").bind(employeeId).first<{ first_name: string; last_name: string }>()
+  const current = await database.prepare("SELECT first_name, last_name FROM employee_directory_view WHERE employee_id = ?").bind(employeeId).first<{ first_name: string; last_name: string }>()
   if (!current) throw new PeopleError("Employee not found.", 404)
   const action = archived ? "archived" : "restored"
   await database.batch([
@@ -252,6 +257,7 @@ export async function listInboxItems(actor?: RequestActor): Promise<InboxItem[]>
     workflow_updated_at?: string | null
     updated_at?: string
   }
+  type InsightWorkflow = WorkflowPerson & { id: string; title: string; source_entity_id: string | null }
   const workflowColumns = `
     w.requested_by_email,
     w.details_json,
@@ -267,33 +273,39 @@ export async function listInboxItems(actor?: RequestActor): Promise<InboxItem[]>
     w.created_at AS workflow_created_at,
     w.updated_at AS workflow_updated_at,
     COALESCE(NULLIF(au.display_name, ''), NULLIF(TRIM(COALESCE(oe.preferred_name, oe.first_name, '') || ' ' || COALESCE(oe.last_name, '')), '')) AS owner_name`
-  const [leave, hiring, training, actorEmployee] = await Promise.all([
+  const [leave, hiring, training, insight, actorEmployee] = await Promise.all([
     database.prepare(`SELECT l.*, e.first_name, e.last_name, e.preferred_name, e.work_email, e.manager_id, m.work_email AS manager_email, ${workflowColumns}
-      FROM leave_records l
+      FROM leave_requests_view l
       JOIN workflow_requests w ON w.id=l.id AND w.type='leave'
-      LEFT JOIN employees e ON e.employee_id=l.employee_id
-      LEFT JOIN employees m ON m.employee_id=e.manager_id
+      LEFT JOIN employee_directory_view e ON e.employee_id=l.employee_id
+      LEFT JOIN employee_directory_view m ON m.employee_id=e.manager_id
       LEFT JOIN app_users au ON LOWER(au.email)=LOWER(w.owner_email)
-      LEFT JOIN employees oe ON LOWER(oe.work_email)=LOWER(w.owner_email) AND oe.archived_at IS NULL
+      LEFT JOIN employee_directory_view oe ON LOWER(oe.work_email)=LOWER(w.owner_email) AND oe.archived_at IS NULL
       WHERE LOWER(l.data_source) <> 'demo'
       ORDER BY COALESCE(w.completed_at, w.updated_at) DESC LIMIT 160`).all<LeaveRecord & WorkflowPerson>(),
     database.prepare(`SELECT h.*, ${workflowColumns}
-      FROM hiring_records h
+      FROM hiring_requisitions_view h
       JOIN workflow_requests w ON w.id=h.id AND w.type='hiring'
       LEFT JOIN app_users au ON LOWER(au.email)=LOWER(w.owner_email)
-      LEFT JOIN employees oe ON LOWER(oe.work_email)=LOWER(w.owner_email) AND oe.archived_at IS NULL
+      LEFT JOIN employee_directory_view oe ON LOWER(oe.work_email)=LOWER(w.owner_email) AND oe.archived_at IS NULL
       WHERE LOWER(h.data_source) <> 'demo'
       ORDER BY COALESCE(w.completed_at, w.updated_at) DESC LIMIT 160`).all<Record<string, unknown> & WorkflowPerson>(),
     database.prepare(`SELECT t.*, e.first_name, e.last_name, e.preferred_name, e.work_email, e.manager_id, m.work_email AS manager_email, ${workflowColumns}
-      FROM training_records t
+      FROM learning_assignments_view t
       JOIN workflow_requests w ON w.id=t.id AND w.type='training'
-      LEFT JOIN employees e ON e.employee_id=t.employee_id
-      LEFT JOIN employees m ON m.employee_id=e.manager_id
+      LEFT JOIN employee_directory_view e ON e.employee_id=t.employee_id
+      LEFT JOIN employee_directory_view m ON m.employee_id=e.manager_id
       LEFT JOIN app_users au ON LOWER(au.email)=LOWER(w.owner_email)
-      LEFT JOIN employees oe ON LOWER(oe.work_email)=LOWER(w.owner_email) AND oe.archived_at IS NULL
+      LEFT JOIN employee_directory_view oe ON LOWER(oe.work_email)=LOWER(w.owner_email) AND oe.archived_at IS NULL
       WHERE LOWER(t.data_source) <> 'demo'
       ORDER BY COALESCE(w.completed_at, w.updated_at) DESC LIMIT 160`).all<TrainingRecord & WorkflowPerson>(),
-    actor ? database.prepare("SELECT employee_id FROM employees WHERE LOWER(work_email)=LOWER(?) AND archived_at IS NULL").bind(actor.email).first<{ employee_id: string }>() : Promise.resolve(null),
+    database.prepare(`SELECT w.id, w.title, w.source_entity_id, ${workflowColumns}
+      FROM workflow_requests w
+      LEFT JOIN app_users au ON LOWER(au.email)=LOWER(w.owner_email)
+      LEFT JOIN employee_directory_view oe ON LOWER(oe.work_email)=LOWER(w.owner_email) AND oe.archived_at IS NULL
+      WHERE w.type='insight'
+      ORDER BY COALESCE(w.completed_at, w.updated_at) DESC LIMIT 160`).all<InsightWorkflow>(),
+    actor ? database.prepare("SELECT employee_id FROM employee_directory_view WHERE LOWER(work_email)=LOWER(?) AND archived_at IS NULL").bind(actor.email).first<{ employee_id: string }>() : Promise.resolve(null),
   ])
   const personName = (row: { first_name?: string; last_name?: string; preferred_name?: string | null; employee_id: string }) => `${row.preferred_name || row.first_name || row.employee_id} ${row.last_name || ""}`.trim()
   const isPeopleTeam = !actor || actor.role === "admin" || actor.role === "hr"
@@ -302,6 +314,7 @@ export async function listInboxItems(actor?: RequestActor): Promise<InboxItem[]>
   const visibleLeave = (leave.results ?? []).filter((row) => isPeopleTeam || row.work_email?.toLowerCase() === ownEmail || actor?.role === "manager" && row.manager_id === employeeId)
   const visibleHiring = (hiring.results ?? []).filter((row) => isPeopleTeam || actor?.role === "manager" && String(row.requested_by_email ?? "").toLowerCase() === ownEmail)
   const visibleTraining = (training.results ?? []).filter((row) => isPeopleTeam || row.work_email?.toLowerCase() === ownEmail || actor?.role === "manager" && row.manager_id === employeeId)
+  const visibleInsight = (insight.results ?? []).filter((row) => isPeopleTeam || row.owner_email?.toLowerCase() === ownEmail || row.requested_by_email?.toLowerCase() === ownEmail)
   const detailValue = (row: WorkflowPerson, field: string): string | null => {
     try { return String((JSON.parse(row.details_json ?? "{}") as Record<string, unknown>)[field] ?? "") || null } catch { return null }
   }
@@ -360,7 +373,7 @@ export async function listInboxItems(actor?: RequestActor): Promise<InboxItem[]>
         createdAt: row.workflow_created_at || row.updated_at || nowIso, completedAt: row.completed_at ?? null, completionNotes: row.completion_notes ?? null, blockedReason: row.blocked_reason ?? null,
         actionable: canDecide, actions: canDecide ? ["reject", "approve"] : [],
         reviewHref: reviewHref("leave", row.id, isCompleted ? "completed" : "decisions"),
-        recordHref: `/people/${encodeURIComponent(row.employee_id)}`,
+        recordHref: `/leaves?request=${encodeURIComponent(row.id)}`,
       }
     }),
     ...visibleHiring.map((row): InboxItem => {
@@ -397,7 +410,7 @@ export async function listInboxItems(actor?: RequestActor): Promise<InboxItem[]>
       const isCompleted = Boolean(row.completed_at) || row.completion_status.toLowerCase() === "completed"
       const dueDate = row.due_at?.slice(0, 10) || detailValue(row, "dueDate") || row.completion_date
       const sla = slaStatus(dueDate, isCompleted)
-      const canComplete = Boolean(!isCompleted && row.requested_by_email && actor && (isPeopleTeam || row.work_email?.toLowerCase() === ownEmail))
+      const canComplete = Boolean(!isCompleted && row.requested_by_email && actor && row.work_email?.toLowerCase() === ownEmail)
       const attentionReason = row.blocked_reason || (sla === "overdue" ? "The assignment is past its recorded due date." : "The assignment remains incomplete.")
       return {
         id: row.id, type: "training", title: row.training_program, detail: `${row.training_hours} hours · assigned training`, person: personName(row), employeeId: row.employee_id,
@@ -413,7 +426,32 @@ export async function listInboxItems(actor?: RequestActor): Promise<InboxItem[]>
         createdAt: row.workflow_created_at || row.updated_at || nowIso, completedAt: row.completed_at ?? null, completionNotes: row.completion_notes ?? null, blockedReason: row.blocked_reason ?? null,
         actionable: canComplete, actions: canComplete ? ["complete"] : [],
         reviewHref: reviewHref("training", row.id, isCompleted ? "completed" : "employees"),
-        recordHref: `/people/${encodeURIComponent(row.employee_id)}`,
+        recordHref: `/courses?assignment=${encodeURIComponent(row.id)}`,
+      }
+    }),
+    ...visibleInsight.map((row): InboxItem => {
+      const isCompleted = Boolean(row.completed_at) || row.workflow_status?.toLowerCase() === "completed"
+      const dueDate = row.due_at?.slice(0, 10) ?? null
+      const sla = slaStatus(dueDate, isCompleted)
+      const department = detailValue(row, "department") || "Workforce"
+      const evidence = detailValue(row, "evidence") || "Evidence snapshot unavailable"
+      const recommendedAction = detailValue(row, "recommendedAction") || row.next_action || "Review the evidence and record an accountable action."
+      return {
+        id: row.id, type: "insight", title: row.title, detail: `${department} · calculated workforce exception`, person: null, employeeId: null,
+        dueDate, status: row.workflow_status || "Pending", priority: priority(row, sla), owner: ownerLabel(row, "People Operations"), ownerEmail: row.owner_email ?? null,
+        nextAction: row.next_action || recommendedAction, attentionReason: row.blocked_reason || (sla === "overdue" ? "The follow-up deadline has passed." : "A calculated workforce exception has an assigned follow-up."),
+        completionEffect: "The work plan, owner, outcome, and evidence snapshot remain in the workflow audit record.", assignedTo: "hr", requiresDecision: false,
+        requestContext: [
+          { label: "Department", value: department },
+          { label: "Evidence", value: evidence },
+          { label: "Recommended action", value: recommendedAction },
+          ...(detailValue(row, "reportingScope") ? [{ label: "Reporting scope", value: detailValue(row, "reportingScope") as string }] : []),
+        ],
+        isCompleted, slaStatus: sla, timeInStatusDays: daysSince(row.assigned_at || row.workflow_updated_at || row.workflow_created_at),
+        createdAt: row.workflow_created_at || row.updated_at || nowIso, completedAt: row.completed_at ?? null, completionNotes: row.completion_notes ?? null, blockedReason: row.blocked_reason ?? null,
+        actionable: false, actions: [],
+        reviewHref: reviewHref("insight", row.id, isCompleted ? "completed" : "my_work"),
+        recordHref: `/insights?item=${encodeURIComponent(row.id)}`,
       }
     }),
   ].sort((left, right) => Number(left.isCompleted) - Number(right.isCompleted)
@@ -422,24 +460,27 @@ export async function listInboxItems(actor?: RequestActor): Promise<InboxItem[]>
     || right.createdAt.localeCompare(left.createdAt))
 }
 
-export async function decideLeave(leaveId: string, decision: "Approved" | "Rejected", actor: RequestActor): Promise<void> {
+export async function decideLeave(leaveId: string, decision: "Approved" | "Rejected", actor: RequestActor, note = ""): Promise<void> {
   const database = await databaseOrThrow()
-  const leave = await database.prepare("SELECT l.*, e.work_email, e.manager_id FROM leave_records l LEFT JOIN employees e ON e.employee_id=l.employee_id WHERE l.id = ?")
+  const leave = await database.prepare("SELECT l.*, e.work_email, e.manager_id FROM leave_requests_view l LEFT JOIN employee_directory_view e ON e.employee_id=l.employee_id WHERE l.id = ?")
     .bind(leaveId).first<LeaveRecord & { work_email: string | null; manager_id: string | null }>()
   if (!leave) throw new PeopleError("Leave request not found.", 404)
   if (leave.data_source === "demo") throw new PeopleError("Presentation sample records are read-only.", 403)
   if (leave.approval_status.toLowerCase() !== "pending") throw new PeopleError("This leave request has already been decided.", 409)
   if (leave.work_email?.toLowerCase() === actor.email.toLowerCase()) throw new PeopleError("You cannot decide your own leave request.", 403)
   if (actor.role === "manager") {
-    const manager = await database.prepare("SELECT employee_id FROM employees WHERE LOWER(work_email)=LOWER(?) AND archived_at IS NULL")
+    const manager = await database.prepare("SELECT employee_id FROM employee_directory_view WHERE LOWER(work_email)=LOWER(?) AND archived_at IS NULL")
       .bind(actor.email).first<{ employee_id: string }>()
     if (!manager || leave.manager_id !== manager.employee_id) throw new PeopleError("Managers can only decide leave for their direct reports.", 403)
   }
+  const decisionNote = note.trim()
+  if (decision === "Rejected" && decisionNote.length < 10) throw new PeopleError("Record a clear reason for declining the request.", 422)
+  const completionNote = decisionNote || `${actor.displayName} approved the leave request.`
   await database.batch([
     database.prepare("UPDATE leave_records SET approval_status=?, updated_at=CURRENT_TIMESTAMP WHERE id=?").bind(decision, leaveId),
     database.prepare("UPDATE workflow_requests SET status=?, next_action='No further action.', assigned_at=CURRENT_TIMESTAMP, resolved_by_email=?, resolved_at=CURRENT_TIMESTAMP, completed_at=CURRENT_TIMESTAMP, completion_notes=?, updated_at=CURRENT_TIMESTAMP WHERE id=? AND type='leave'")
-      .bind(decision, actor.email, `${actor.displayName} ${decision.toLowerCase()} the leave request.`, leaveId),
+      .bind(decision, actor.email, completionNote, leaveId),
     database.prepare("INSERT INTO employee_activity(id, employee_id, event_type, summary, changes_json, actor_email, created_at) VALUES (?, ?, 'leave_decision', ?, ?, ?, CURRENT_TIMESTAMP)")
-      .bind(crypto.randomUUID(), leave.employee_id, `${actor.displayName} ${decision.toLowerCase()} a ${leave.leave_type} leave request`, JSON.stringify({ leaveId, from: leave.approval_status, to: decision }), actor.email),
+      .bind(crypto.randomUUID(), leave.employee_id, `${actor.displayName} ${decision.toLowerCase()} a ${leave.leave_type} leave request`, JSON.stringify({ leaveId, from: leave.approval_status, to: decision, note: decisionNote || null }), actor.email),
   ])
 }
