@@ -1,0 +1,17 @@
+.git
+.github
+.next
+.openai
+.terraform
+.wrangler
+backend/.pytest_cache
+backend/.venv
+node_modules
+dist
+infra
+output
+outputs
+*.log
+*.tfplan
+*.tfstate*
+.env*

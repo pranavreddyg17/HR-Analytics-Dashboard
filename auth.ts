@@ -1,12 +1,12 @@
 import NextAuth from "next-auth"
 import Credentials from "next-auth/providers/credentials"
 import Google from "next-auth/providers/google"
-import { env } from "cloudflare:workers"
 
 import { findAccessUser, recordLogin } from "@/lib/server/access"
 import { verifyGoogleIdToken } from "@/lib/server/google-id-token"
+import { runtimeEnv } from "@/lib/server/runtime-env"
 
-const runtime = env as unknown as { GOOGLE_CLIENT_ID?: string; GOOGLE_CLIENT_SECRET?: string; AUTH_SECRET?: string }
+const runtime = runtimeEnv as { GOOGLE_CLIENT_ID?: string; GOOGLE_CLIENT_SECRET?: string; AUTH_SECRET?: string }
 
 const googleScopes = [
   "openid",

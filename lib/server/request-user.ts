@@ -1,7 +1,7 @@
 import { auth } from "@/auth"
 import { headers } from "next/headers"
-import { env } from "cloudflare:workers"
 import type { AppRole } from "@/lib/server/access"
+import { runtimeEnv } from "@/lib/server/runtime-env"
 
 export type RequestActor = {
   email: string
@@ -23,7 +23,7 @@ function isLocalHost(value: string): boolean {
 }
 
 async function getLocalPreviewActor(request?: Request): Promise<RequestActor | null> {
-  const previewEnabled = (env as unknown as { LOCAL_UI_PREVIEW?: string }).LOCAL_UI_PREVIEW === "true"
+  const previewEnabled = runtimeEnv.LOCAL_UI_PREVIEW === "true"
   if (!previewEnabled) return null
 
   if (request) return isLocalHost(new URL(request.url).hostname) ? localPreviewActor : null

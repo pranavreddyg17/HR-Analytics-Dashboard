@@ -1,7 +1,7 @@
-import { env } from "cloudflare:workers"
 import { getToken } from "next-auth/jwt"
+import { runtimeEnv } from "@/lib/server/runtime-env"
 
-const runtime = env as unknown as {
+const runtime = runtimeEnv as {
   AUTH_SECRET?: string
   GOOGLE_CLIENT_ID?: string
   GOOGLE_CLIENT_SECRET?: string

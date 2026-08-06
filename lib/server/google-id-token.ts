@@ -1,6 +1,6 @@
-import { env } from "cloudflare:workers"
+import { runtimeEnv } from "@/lib/server/runtime-env"
 
-const runtime = env as unknown as { GOOGLE_CLIENT_ID?: string }
+const runtime = runtimeEnv as { GOOGLE_CLIENT_ID?: string }
 
 type GoogleTokenHeader = { alg?: string; kid?: string }
 type GoogleTokenPayload = {

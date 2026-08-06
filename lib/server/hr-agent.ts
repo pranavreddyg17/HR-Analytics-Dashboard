@@ -1,4 +1,3 @@
-import { env } from "cloudflare:workers"
 import { loadMcpTools } from "@langchain/mcp-adapters"
 import { ChatOpenAI } from "@langchain/openai"
 import { Client } from "@modelcontextprotocol/sdk/client/index.js"
@@ -9,6 +8,7 @@ import { resolveHrIntent, type AgentHistoryMessage, type ToolPlan } from "@/lib/
 import { renderHrEvidence } from "@/lib/server/hr-agent-response"
 import { getWorkforceAnalytics } from "@/lib/server/hr-analytics"
 import { createHrMcpServer } from "@/lib/server/hr-mcp"
+import { runtimeEnv } from "@/lib/server/runtime-env"
 
 type ToolTrace = {
   tool: string
@@ -55,7 +55,7 @@ function contentToJson(value: unknown): Record<string, unknown> {
 }
 
 function getWorkerSecret(name: "OPENAI_API_KEY" | "OPENAI_MODEL"): string | undefined {
-  const value = (env as unknown as Record<string, unknown>)[name]
+  const value = runtimeEnv[name]
   return typeof value === "string" && value ? value : undefined
 }
 

@@ -1,11 +1,11 @@
 import { redirect } from "next/navigation"
-import { env } from "cloudflare:workers"
 
 import { BrandLogo } from "@/components/brand-logo"
 import { GoogleSignInButton } from "@/components/google-sign-in-button"
 import { getRequestActor } from "@/lib/server/request-user"
+import { runtimeEnv } from "@/lib/server/runtime-env"
 
-const runtime = env as unknown as { GOOGLE_CLIENT_ID?: string }
+const runtime = runtimeEnv as { GOOGLE_CLIENT_ID?: string }
 
 export default async function LoginPage({ searchParams }: { searchParams: Promise<{ error?: string }> }) {
   const actor = await getRequestActor()

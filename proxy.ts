@@ -1,5 +1,5 @@
 import { auth } from "@/auth"
-import { env } from "cloudflare:workers"
+import { runtimeEnv } from "@/lib/server/runtime-env"
 
 const legacyRoutes: Record<string, string> = {
   "/time-off": "/leaves",
@@ -16,7 +16,7 @@ export default auth((request) => {
     destination.pathname = canonicalPath
     return Response.redirect(destination, 308)
   }
-  const localPreview = (env as unknown as { LOCAL_UI_PREVIEW?: string }).LOCAL_UI_PREVIEW === "true"
+  const localPreview = runtimeEnv.LOCAL_UI_PREVIEW === "true"
     && ["localhost", "127.0.0.1"].includes(request.nextUrl.hostname)
   if (localPreview) return
   if (!request.auth?.user?.email || !request.auth.user.role) {

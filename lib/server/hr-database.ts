@@ -1,12 +1,11 @@
-import { env } from "cloudflare:workers"
-
 import normalizedHrMigration from "@/drizzle/0011_cold_blindfold.sql?raw"
 import { generateCorrelatedDemoData, type CorrelatedDemoData } from "@/lib/server/correlated-demo"
 import { getEmployees, getModelMetadata } from "@/lib/server/runtime"
 import { hrDomains, importFields, type HrDomain } from "@/lib/hr-types"
 import type { ImportIssue, ImportJob, ImportMode, ImportPreview } from "@/lib/data-import-types"
+import { runtimeEnv } from "@/lib/server/runtime-env"
 
-type Statement = {
+export type Statement = {
   bind(...values: unknown[]): Statement
   run(): Promise<{ success?: boolean }>
   all<T>(): Promise<{ results?: T[] }>
@@ -14,6 +13,7 @@ type Statement = {
 }
 
 export type Database = {
+  dialect?: "d1" | "postgres"
   prepare(sql: string): Statement
   batch(statements: Statement[]): Promise<unknown>
 }
@@ -118,7 +118,15 @@ let readyDatabase: Database | null = null
 let setupPromise: Promise<void> | null = null
 
 export function getHrDatabase(): Database | null {
-  return (env as unknown as { DB?: Database }).DB ?? null
+  return (runtimeEnv as unknown as { DB?: Database }).DB ?? null
+}
+
+async function configuredDatabase(): Promise<Database | null> {
+  const boundDatabase = getHrDatabase()
+  if (boundDatabase) return boundDatabase
+  if (!runtimeEnv.DATABASE_URL) return null
+  const { getPostgresDatabase } = await import("@/lib/server/postgres-database")
+  return getPostgresDatabase()
 }
 
 let cachedDemo: CorrelatedDemoData | null = null
@@ -548,6 +556,47 @@ async function syncOpenOperationalWork(database: Database): Promise<void> {
   await database.batch(operationalWorkStatements(database))
 }
 
+async function syncPostgresLearningCatalog(database: Database): Promise<void> {
+  await database.prepare(`
+    INSERT INTO learning_courses(id, title, default_duration_hours, is_mandatory, status, created_at, updated_at)
+    SELECT 'course:' || LOWER(TRIM(training_program)), training_program, MAX(training_hours),
+      CASE WHEN LOWER(training_program) LIKE '%security%'
+        OR LOWER(training_program) LIKE '%privacy%'
+        OR LOWER(training_program) LIKE '%safety%' THEN 1 ELSE 0 END,
+      'active', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP
+    FROM training_records
+    WHERE TRIM(COALESCE(training_program, '')) <> ''
+    GROUP BY LOWER(TRIM(training_program)), training_program
+    ON CONFLICT(title) DO UPDATE SET
+      default_duration_hours=excluded.default_duration_hours,
+      is_mandatory=excluded.is_mandatory,
+      updated_at=CURRENT_TIMESTAMP
+  `).run()
+  await database.prepare(`
+    INSERT INTO course_assignments(
+      id, course_id, employee_id, assigned_at, due_date, status, completed_at,
+      assessment_score, assigned_hours, data_source, updated_at
+    )
+    SELECT t.id, 'course:' || LOWER(TRIM(t.training_program)), t.employee_id,
+      COALESCE(w.created_at, t.updated_at),
+      COALESCE(json_extract(w.details_json, '$.dueDate'), t.completion_date),
+      t.completion_status, t.completion_date, t.assessment_score,
+      t.training_hours, t.data_source, t.updated_at
+    FROM training_records t
+    LEFT JOIN workflow_requests w ON w.id=t.id AND w.type='training'
+    ON CONFLICT(id) DO UPDATE SET
+      course_id=excluded.course_id,
+      employee_id=excluded.employee_id,
+      due_date=excluded.due_date,
+      status=excluded.status,
+      completed_at=excluded.completed_at,
+      assessment_score=excluded.assessment_score,
+      assigned_hours=excluded.assigned_hours,
+      data_source=excluded.data_source,
+      updated_at=excluded.updated_at
+  `).run()
+}
+
 async function backfillDemoProfiles(database: Database): Promise<void> {
   const blanks = await database.prepare("SELECT employee_id FROM employee_directory_view WHERE data_source = 'demo' AND COALESCE(first_name, '') = ''").all<{ employee_id: string }>()
   if (!(blanks.results ?? []).length) return
@@ -854,7 +903,7 @@ async function seedHiringCandidatePipelineOnce(database: Database): Promise<void
 }
 
 export async function ensureHrDatabase(): Promise<Database | null> {
-  const database = getHrDatabase()
+  const database = await configuredDatabase()
   if (!database) return null
   if (readyDatabase === database && setupPromise) {
     await setupPromise
@@ -862,13 +911,16 @@ export async function ensureHrDatabase(): Promise<Database | null> {
   }
   readyDatabase = database
   setupPromise = (async () => {
-    for (const statement of createStatements) await database.prepare(statement).run()
-    await ensureEmployeeProfileColumns(database)
-    await ensureWorkflowAccountabilityColumns(database)
-    await ensureDataImportColumns(database)
-    await ensureAssessmentFeatureColumns(database)
-    await applyNormalizedHrSchema(database)
-    await ensureModelVersionColumns(database)
+    const postgres = database.dialect === "postgres"
+    if (!postgres) {
+      for (const statement of createStatements) await database.prepare(statement).run()
+      await ensureEmployeeProfileColumns(database)
+      await ensureWorkflowAccountabilityColumns(database)
+      await ensureDataImportColumns(database)
+      await ensureAssessmentFeatureColumns(database)
+      await applyNormalizedHrSchema(database)
+      await ensureModelVersionColumns(database)
+    }
     await seedDemoOnce(database)
     await seedCorrelatedDemoOnce(database)
     await syncModelRuntime(database)
@@ -878,9 +930,10 @@ export async function ensureHrDatabase(): Promise<Database | null> {
     await seedSoftwareCompanyWorkflowsOnce(database)
     await refreshCurrentLeaveExamples(database)
     await seedHiringCandidatePipelineOnce(database)
-    await backfillWorkflowAccountabilityOnce(database)
+    if (postgres) await syncPostgresLearningCatalog(database)
+    else await backfillWorkflowAccountabilityOnce(database)
     await syncOpenOperationalWork(database)
-    await refreshNormalizedReportingLines(database)
+    if (!postgres) await refreshNormalizedReportingLines(database)
     await database.prepare("INSERT OR IGNORE INTO app_users(email, display_name, role, status, invited_by) VALUES ('pranavreddyg17@gmail.com', 'Pranav Reddy', 'admin', 'active', 'system')").run()
   })()
   try {
