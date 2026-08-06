@@ -43,3 +43,31 @@ variable "image_tag" {
   type        = string
   default     = "bootstrap"
 }
+
+variable "deployment_principal_id" {
+  description = "Object ID of the Azure DevOps deployment identity used for stable runtime role assignments."
+  type        = string
+
+  validation {
+    condition     = can(regex("^[0-9a-fA-F-]{36}$", var.deployment_principal_id))
+    error_message = "deployment_principal_id must be an Entra object ID in UUID form."
+  }
+}
+
+variable "tfstate_storage_account_name" {
+  description = "Storage account containing the remote Terraform state."
+  type        = string
+  default     = "laidbackhrtf7981312c"
+}
+
+variable "bootstrap_principal_id" {
+  description = "Object ID of the operator performing the first apply. Remove after bootstrap to revoke temporary Key Vault secret access."
+  type        = string
+  default     = null
+  nullable    = true
+
+  validation {
+    condition     = var.bootstrap_principal_id == null || can(regex("^[0-9a-fA-F-]{36}$", var.bootstrap_principal_id))
+    error_message = "bootstrap_principal_id must be null or an Entra object ID in UUID form."
+  }
+}

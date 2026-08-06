@@ -70,6 +70,10 @@ resource "azurerm_postgresql_flexible_server" "app" {
     active_directory_auth_enabled = false
     password_auth_enabled         = true
   }
+
+  lifecycle {
+    ignore_changes = [zone]
+  }
 }
 
 resource "azurerm_postgresql_flexible_server_database" "app" {
@@ -98,24 +102,57 @@ resource "azurerm_key_vault" "app" {
   tags                       = local.common_tags
 }
 
-resource "azurerm_role_assignment" "terraform_key_vault_secrets" {
+resource "azurerm_role_assignment" "deployment_key_vault_secrets" {
+  scope                            = azurerm_key_vault.app.id
+  role_definition_name             = "Key Vault Secrets Officer"
+  principal_id                     = var.deployment_principal_id
+  principal_type                   = "ServicePrincipal"
+  skip_service_principal_aad_check = true
+}
+
+resource "azurerm_role_assignment" "deployment_acr_push" {
+  scope                            = azurerm_container_registry.app.id
+  role_definition_name             = "AcrPush"
+  principal_id                     = var.deployment_principal_id
+  principal_type                   = "ServicePrincipal"
+  skip_service_principal_aad_check = true
+}
+
+resource "azurerm_role_assignment" "deployment_state_blob" {
+  scope                            = data.azurerm_storage_account.terraform_state.id
+  role_definition_name             = "Storage Blob Data Contributor"
+  principal_id                     = var.deployment_principal_id
+  principal_type                   = "ServicePrincipal"
+  skip_service_principal_aad_check = true
+}
+
+resource "azurerm_role_assignment" "bootstrap_key_vault_secrets" {
+  count = var.bootstrap_principal_id == null ? 0 : 1
+
   scope                = azurerm_key_vault.app.id
   role_definition_name = "Key Vault Secrets Officer"
-  principal_id         = data.azurerm_client_config.current.object_id
+  principal_id         = var.bootstrap_principal_id
+  principal_type       = "User"
 }
 
 resource "azurerm_key_vault_secret" "database_url" {
   name         = "database-url"
   value        = "postgresql://laidbackhradmin:${urlencode(random_password.postgres.result)}@${azurerm_postgresql_flexible_server.app.fqdn}:5432/${azurerm_postgresql_flexible_server_database.app.name}?sslmode=require"
   key_vault_id = azurerm_key_vault.app.id
-  depends_on   = [azurerm_role_assignment.terraform_key_vault_secrets]
+  depends_on = [
+    azurerm_role_assignment.deployment_key_vault_secrets,
+    azurerm_role_assignment.bootstrap_key_vault_secrets,
+  ]
 }
 
 resource "azurerm_key_vault_secret" "auth_secret" {
   name         = "auth-secret"
   value        = random_password.auth_secret.result
   key_vault_id = azurerm_key_vault.app.id
-  depends_on   = [azurerm_role_assignment.terraform_key_vault_secrets]
+  depends_on = [
+    azurerm_role_assignment.deployment_key_vault_secrets,
+    azurerm_role_assignment.bootstrap_key_vault_secrets,
+  ]
 }
 
 locals {
@@ -179,7 +216,7 @@ resource "azurerm_linux_web_app" "model" {
 
   site_config {
     always_on                               = true
-    health_check_path                       = "/health"
+    health_check_path                       = "/api/v1/health"
     health_check_eviction_time_in_min       = 5
     container_registry_use_managed_identity = true
     minimum_tls_version                     = "1.2"
@@ -199,19 +236,25 @@ resource "azurerm_linux_web_app" "model" {
 }
 
 resource "azurerm_role_assignment" "web_acr_pull" {
-  scope                = azurerm_container_registry.app.id
-  role_definition_name = "AcrPull"
-  principal_id         = azurerm_linux_web_app.web.identity[0].principal_id
+  scope                            = azurerm_container_registry.app.id
+  role_definition_name             = "AcrPull"
+  principal_id                     = azurerm_linux_web_app.web.identity[0].principal_id
+  principal_type                   = "ServicePrincipal"
+  skip_service_principal_aad_check = true
 }
 
 resource "azurerm_role_assignment" "model_acr_pull" {
-  scope                = azurerm_container_registry.app.id
-  role_definition_name = "AcrPull"
-  principal_id         = azurerm_linux_web_app.model.identity[0].principal_id
+  scope                            = azurerm_container_registry.app.id
+  role_definition_name             = "AcrPull"
+  principal_id                     = azurerm_linux_web_app.model.identity[0].principal_id
+  principal_type                   = "ServicePrincipal"
+  skip_service_principal_aad_check = true
 }
 
 resource "azurerm_role_assignment" "web_key_vault_secrets" {
-  scope                = azurerm_key_vault.app.id
-  role_definition_name = "Key Vault Secrets User"
-  principal_id         = azurerm_linux_web_app.web.identity[0].principal_id
+  scope                            = azurerm_key_vault.app.id
+  role_definition_name             = "Key Vault Secrets User"
+  principal_id                     = azurerm_linux_web_app.web.identity[0].principal_id
+  principal_type                   = "ServicePrincipal"
+  skip_service_principal_aad_check = true
 }
