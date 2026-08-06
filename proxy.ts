@@ -10,6 +10,8 @@ const legacyRoutes: Record<string, string> = {
 }
 
 export default auth((request) => {
+  if (["/api/v1/health", "/api/v1/ready"].includes(request.nextUrl.pathname)) return
+
   const canonicalPath = legacyRoutes[request.nextUrl.pathname]
   if (canonicalPath) {
     const destination = request.nextUrl.clone()

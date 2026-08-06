@@ -178,7 +178,7 @@ resource "azurerm_linux_web_app" "web" {
 
   site_config {
     always_on                               = true
-    health_check_path                       = "/api/v1/health"
+    health_check_path                       = "/api/v1/ready"
     health_check_eviction_time_in_min       = 5
     container_registry_use_managed_identity = true
     minimum_tls_version                     = "1.2"

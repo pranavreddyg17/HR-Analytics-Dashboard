@@ -138,5 +138,5 @@ stages:
               }
               wait_for_url "https://$(modelAppName).azurewebsites.net/api/v1/health"
               wait_for_url "https://$(webAppName).azurewebsites.net/api/v1/health"
-              wait_for_url "https://$(webAppName).azurewebsites.net/api/v1/dashboard"
+              wait_for_url "https://$(webAppName).azurewebsites.net/api/v1/ready"
             displayName: Verify deployed services
