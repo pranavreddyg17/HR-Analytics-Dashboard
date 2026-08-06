@@ -1,0 +1,3 @@
+subscription_id    = "7981312c-4577-455a-8bae-10269b74a97b"
+resource_group_name = "Laidback.ai"
+location            = "westus2"
