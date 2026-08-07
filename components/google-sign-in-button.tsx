@@ -51,7 +51,13 @@ export function GoogleSignInButton({ clientId }: { clientId: string }) {
           setError("This Google account is not approved for this workspace, or sign-in could not be verified.")
           return
         }
-        window.location.assign(result.url ?? "/")
+        // Authentication responses may contain an absolute URL derived from a
+        // reverse proxy's internal bind address. Only follow a same-origin
+        // destination; the requested post-login route is the workspace root.
+        const destination = new URL(result.url ?? "/", window.location.origin)
+        window.location.assign(destination.origin === window.location.origin
+          ? `${destination.pathname}${destination.search}${destination.hash}`
+          : "/")
       } catch {
         if (!active) return
         setLoading(false)

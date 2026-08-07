@@ -158,6 +158,7 @@ resource "azurerm_key_vault_secret" "auth_secret" {
 locals {
   web_name                          = "laidbackhr-${random_string.suffix.result}-web"
   model_name                        = "laidbackhr-${random_string.suffix.result}-model"
+  web_public_url                    = "https://laidbackhr-${random_string.suffix.result}-web.azurewebsites.net"
   key_vault_database_reference      = "@Microsoft.KeyVault(SecretUri=${azurerm_key_vault_secret.database_url.versionless_id})"
   key_vault_auth_reference          = "@Microsoft.KeyVault(SecretUri=${azurerm_key_vault_secret.auth_secret.versionless_id})"
   key_vault_google_id_reference     = "@Microsoft.KeyVault(VaultName=${azurerm_key_vault.app.name};SecretName=google-client-id)"
@@ -198,7 +199,9 @@ resource "azurerm_linux_web_app" "web" {
     AUTH_SECRET                           = local.key_vault_auth_reference
     GOOGLE_CLIENT_ID                      = local.key_vault_google_id_reference
     GOOGLE_CLIENT_SECRET                  = local.key_vault_google_secret_reference
+    AUTH_URL                              = local.web_public_url
     AUTH_TRUST_HOST                       = "true"
+    NEXTAUTH_URL                          = local.web_public_url
     DATABASE_POOL_MAX                     = "10"
     APPLICATIONINSIGHTS_CONNECTION_STRING = azurerm_application_insights.app.connection_string
     MODEL_API_URL                         = "https://${local.model_name}.azurewebsites.net"
