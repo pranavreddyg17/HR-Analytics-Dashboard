@@ -439,7 +439,7 @@ export async function getWorkforceAnalytics(filters: HrFilters = {}, options: { 
         SELECT id, source_entity_id, status, owner_email, due_at, created_at, completed_at
         FROM workflow_requests
         WHERE type='insight'
-        ORDER BY created_at DESC, rowid DESC
+        ORDER BY created_at DESC, id DESC
       `).all<Record<string, string | null>>()
     : { results: [] }
   const latestInsightWorkflow = new Map<string, Record<string, string | null>>()

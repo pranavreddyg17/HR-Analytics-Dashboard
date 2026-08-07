@@ -159,7 +159,7 @@ async function retentionWorkflows(): Promise<RetentionWorkflow[]> {
     SELECT id, source_entity_id AS department, status, owner_email, due_at, created_at, completed_at
     FROM workflow_requests
     WHERE type='retention'
-    ORDER BY created_at DESC, rowid DESC
+    ORDER BY created_at DESC, id DESC
   `).all<Record<string, string | null>>()
   return (result.results ?? []).map((row) => ({
     id: String(row.id),

@@ -79,7 +79,7 @@ export async function createInsightWorkItem(
   const stored = await database.prepare(`
     SELECT id, status FROM workflow_requests
     WHERE type='insight' AND source_entity_id=? AND completed_at IS NULL
-    ORDER BY created_at DESC, rowid DESC LIMIT 1
+    ORDER BY created_at DESC, id DESC LIMIT 1
   `).bind(signal.id).first<{ id: string; status: string }>()
   if (!stored) throw new InsightActionError("The work item could not be created.", 500)
   return { id: stored.id, status: normalizedStatus(stored.status) }

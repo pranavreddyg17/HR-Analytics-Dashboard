@@ -1,6 +1,7 @@
 import { Pool, types, type PoolClient, type QueryResultRow } from "pg"
 
 import postgresSchema from "@/db/postgres/0001_runtime.sql?raw"
+import learningAssignmentDatesMigration from "@/db/postgres/0002_learning_assignment_dates.sql?raw"
 import type { Database, Statement } from "@/lib/server/hr-database"
 import { runtimeEnv } from "@/lib/server/runtime-env"
 
@@ -116,13 +117,18 @@ async function initialize(pool: Pool): Promise<void> {
   try {
     await client.query("SELECT pg_advisory_lock(hashtext('laidbackhr-schema'))")
     await client.query("CREATE TABLE IF NOT EXISTS schema_migrations (id TEXT PRIMARY KEY, applied_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP)")
-    const applied = await client.query<QueryResultRow>("SELECT id FROM schema_migrations WHERE id=$1", ["0001_runtime"])
-    if (!applied.rowCount) {
+    const migrations = [
+      { id: "0001_runtime", sql: postgresSchema },
+      { id: "0002_learning_assignment_dates", sql: learningAssignmentDatesMigration },
+    ]
+    for (const migration of migrations) {
+      const applied = await client.query<QueryResultRow>("SELECT id FROM schema_migrations WHERE id=$1", [migration.id])
+      if (applied.rowCount) continue
       await client.query("BEGIN")
-      for (const statement of postgresSchema.split("--> statement-breakpoint").map((item) => item.trim()).filter(Boolean)) {
+      for (const statement of migration.sql.split("--> statement-breakpoint").map((item) => item.trim()).filter(Boolean)) {
         await client.query(statement)
       }
-      await client.query("INSERT INTO schema_migrations(id) VALUES ($1)", ["0001_runtime"])
+      await client.query("INSERT INTO schema_migrations(id) VALUES ($1)", [migration.id])
       await client.query("COMMIT")
     }
   } catch (error) {
