@@ -304,11 +304,10 @@ resource "azurerm_role_assignment" "model_acr_pull" {
 }
 
 resource "azurerm_role_assignment" "web_employee_documents" {
-  scope                            = azurerm_storage_account.employee_documents.id
-  role_definition_name             = "Storage Blob Data Contributor"
-  principal_id                     = azurerm_linux_web_app.web.identity[0].principal_id
-  principal_type                   = "ServicePrincipal"
-  skip_service_principal_aad_check = true
+  scope                = azurerm_storage_account.employee_documents.id
+  role_definition_name = "Storage Blob Data Contributor"
+  principal_id         = azurerm_linux_web_app.web.identity[0].principal_id
+  principal_type       = "ServicePrincipal"
 }
 
 resource "azurerm_app_service_custom_hostname_binding" "employee" {
