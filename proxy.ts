@@ -29,10 +29,17 @@ export default auth((request) => {
     destination.pathname = canonicalPath
     return Response.redirect(destination, 308)
   }
+  if (request.nextUrl.pathname === "/login") return
   const localPreview = runtimeEnv.LOCAL_UI_PREVIEW === "true"
     && ["localhost", "127.0.0.1"].includes(request.nextUrl.hostname)
   if (localPreview) return
   if (!request.auth?.user?.email || !request.auth.user.role) {
+    if (request.nextUrl.pathname === "/") {
+      const destination = request.nextUrl.clone()
+      destination.pathname = "/login"
+      destination.search = ""
+      return Response.redirect(destination, 307)
+    }
     return Response.json({ error: "Sign in is required." }, { status: 401 })
   }
 })
