@@ -21,7 +21,7 @@ The next GitHub Actions deployment will create the App Service hostname binding 
 
 ## Azure OpenAI deployment
 
-Set `azure_openai_model` to the deployment name—not the base model name—assigned to the approved Azure OpenAI resource. Search and embeddings can be configured independently. If the chat deployment is blank, the application uses its evidence-only deterministic response path rather than inventing a deployment.
+Production uses the verified `gpt-5.2` deployment exposed by the approved shared Foundry endpoint. `azure_openai_model` is the deployment name, not a guessed base-model alias. Search and embeddings remain independently available; if generation is unavailable, the application falls back to its evidence-only deterministic response path.
 
 ## Database
 
