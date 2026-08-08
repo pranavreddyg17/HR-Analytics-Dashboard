@@ -11,13 +11,14 @@ export async function GET() {
     const model = getModelMetadata()
     return Response.json({
       status: "ready",
+      version: process.env.APP_VERSION ?? "development",
       database: { status: "ready", engine: database.dialect === "postgres" ? "postgresql" : "sqlite" },
       model: { status: "ready", runtime: "embedded", version: model.model_version },
       azureAi: azureAiConfiguration(),
     })
   } catch {
     return Response.json(
-      { status: "unavailable", database: { status: "unavailable" }, model: { status: "ready", runtime: "embedded" } },
+      { status: "unavailable", version: process.env.APP_VERSION ?? "development", database: { status: "unavailable" }, model: { status: "ready", runtime: "embedded" } },
       { status: 503 },
     )
   }

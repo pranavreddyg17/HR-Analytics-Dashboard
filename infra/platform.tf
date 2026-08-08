@@ -262,6 +262,7 @@ resource "azurerm_linux_web_app" "web" {
 
   app_settings = {
     WEBSITES_PORT                         = "8080"
+    APP_VERSION                           = var.image_tag
     DATABASE_URL                          = local.key_vault_database_reference
     AUTH_SECRET                           = local.key_vault_auth_reference
     GOOGLE_CLIENT_ID                      = local.key_vault_google_id_reference
