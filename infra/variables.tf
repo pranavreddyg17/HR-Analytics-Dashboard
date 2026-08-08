@@ -39,9 +39,39 @@ variable "postgres_sku" {
 }
 
 variable "image_tag" {
-  description = "Immutable container image tag produced by Azure Pipelines."
+  description = "Immutable container image tag produced by GitHub Actions."
   type        = string
   default     = "bootstrap"
+}
+
+variable "application_base_url" {
+  description = "Canonical public origin used by Auth.js and Google OAuth."
+  type        = string
+  default     = "https://www.laidbackhr.cloud"
+}
+
+variable "employee_portal_url" {
+  description = "Public employee self-service origin."
+  type        = string
+  default     = "https://employee.laidbackhr.cloud"
+}
+
+variable "enable_employee_custom_domain" {
+  description = "Create the employee.laidbackhr.cloud App Service binding after its DNS CNAME and asuid TXT records exist."
+  type        = bool
+  default     = false
+}
+
+variable "azure_ai_search_index" {
+  description = "Azure AI Search index used by grounded HR retrieval."
+  type        = string
+  default     = "laidbackhr-knowledge-v1"
+}
+
+variable "azure_openai_model" {
+  description = "Existing Azure OpenAI chat deployment name. Leave blank until a deployment is assigned."
+  type        = string
+  default     = ""
 }
 
 variable "deployment_principal_id" {

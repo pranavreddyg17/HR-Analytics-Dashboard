@@ -30,6 +30,7 @@ type PlanPurpose =
   | "attrition_retention_strategy"
   | "attrition_drivers"
   | "retention_mobility_context"
+  | "retention_learning_context"
   | "people_operations"
   | "employee_lookup"
 

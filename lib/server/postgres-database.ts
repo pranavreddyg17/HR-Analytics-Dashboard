@@ -2,6 +2,8 @@ import { Pool, types, type PoolClient, type QueryResultRow } from "pg"
 
 import postgresSchema from "@/db/postgres/0001_runtime.sql?raw"
 import learningAssignmentDatesMigration from "@/db/postgres/0002_learning_assignment_dates.sql?raw"
+import employeeExperienceMigration from "@/db/postgres/0003_employee_experience.sql?raw"
+import correlatedEmployeeExperienceMigration from "@/db/postgres/0004_correlated_employee_experience.sql?raw"
 import type { Database, Statement } from "@/lib/server/hr-database"
 import { runtimeEnv } from "@/lib/server/runtime-env"
 
@@ -12,7 +14,35 @@ type Executor = Pick<Pool, "query"> | Pick<PoolClient, "query">
 
 function placeholders(sql: string): string {
   let position = 0
-  return sql.replace(/\?/g, () => `$${++position}`)
+  let inSingleQuote = false
+  let inDoubleQuote = false
+  let translated = ""
+  for (let index = 0; index < sql.length; index += 1) {
+    const character = sql[index]
+    const next = sql[index + 1]
+    if (character === "'" && !inDoubleQuote) {
+      translated += character
+      if (inSingleQuote && next === "'") {
+        translated += next
+        index += 1
+      } else {
+        inSingleQuote = !inSingleQuote
+      }
+      continue
+    }
+    if (character === '"' && !inSingleQuote) {
+      translated += character
+      if (inDoubleQuote && next === '"') {
+        translated += next
+        index += 1
+      } else {
+        inDoubleQuote = !inDoubleQuote
+      }
+      continue
+    }
+    translated += character === "?" && !inSingleQuote && !inDoubleQuote ? `$${++position}` : character
+  }
+  return translated
 }
 
 function dateWithModifier(expression: string, modifier: string): string {
@@ -41,6 +71,8 @@ export function postgresSql(input: string): string {
       (_match, expression: string, modifier: string) => dateWithModifier(expression, `(${modifier})`))
     .replace(/date\(\s*'now'\s*,\s*('(?:[+-]?\d+\s+(?:day|days|month|months|year|years))'|\$\d+)\s*\)/gi,
       (_match, modifier: string) => dateWithModifier("CURRENT_DATE", modifier))
+    .replace(/date\(\s*(\$\d+)\s*,\s*('(?:[+-]?\d+\s+(?:day|days|month|months|year|years))'|\$\d+)\s*\)/gi,
+      (_match, expression: string, modifier: string) => dateWithModifier(expression, modifier))
     .replace(/date\(\s*([A-Za-z_][A-Za-z0-9_.]*)\s*,\s*('(?:[+-]?\d+\s+(?:day|days|month|months|year|years))'|\$\d+)\s*\)/gi,
       (_match, expression: string, modifier: string) => dateWithModifier(expression, modifier))
     .replace(/date\(\s*'now'\s*\)/gi, "CURRENT_DATE::text")
@@ -120,6 +152,8 @@ async function initialize(pool: Pool): Promise<void> {
     const migrations = [
       { id: "0001_runtime", sql: postgresSchema },
       { id: "0002_learning_assignment_dates", sql: learningAssignmentDatesMigration },
+      { id: "0003_employee_experience", sql: employeeExperienceMigration },
+      { id: "0004_correlated_employee_experience", sql: correlatedEmployeeExperienceMigration },
     ]
     for (const migration of migrations) {
       const applied = await client.query<QueryResultRow>("SELECT id FROM schema_migrations WHERE id=$1", [migration.id])

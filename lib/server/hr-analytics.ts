@@ -562,7 +562,7 @@ export async function getWorkforceAnalytics(filters: HrFilters = {}, options: { 
       byRole: groupBy(attrition, (record) => employeeMap.get(record.employee_id)?.job_title ?? "Unknown"),
       byTenure: groupBy(attrition, (record) => record.tenure_years < 1 ? "< 1 year" : record.tenure_years < 3 ? "1–2 years" : record.tenure_years < 5 ? "3–4 years" : "5+ years"),
       highRiskEmployees,
-      employeeRecords: joinedModelRecords,
+      employeeRecords: outputRows(joinedModelRecords, 350),
       rows: outputRows(attrition, 250),
     },
     leave: {
@@ -616,6 +616,29 @@ export async function getWorkforceAnalytics(filters: HrFilters = {}, options: { 
     employees: outputRows(employees, 500),
     directoryEmployees: outputRows(directoryEmployees, 500),
     executiveInsights: insights.slice(0, 5),
+  }
+}
+
+/**
+ * Dashboard projection of the workforce model.
+ *
+ * The full analytics object intentionally remains available to exports, model
+ * review and server-side agents. Interactive dashboards only need aggregates
+ * and their bounded worklists, so raw domain rows are removed before the
+ * response crosses the network.
+ */
+export async function getWorkforceDashboardAnalytics(filters: HrFilters = {}): Promise<WorkforceAnalytics> {
+  const analytics = await getWorkforceAnalytics(filters, { rowLimit: 0 })
+  return {
+    ...analytics,
+    employeeAnalytics: { ...analytics.employeeAnalytics, rows: [] },
+    hiring: { ...analytics.hiring, rows: [] },
+    attrition: { ...analytics.attrition, employeeRecords: [], rows: [] },
+    leave: { ...analytics.leave, currentlyAway: [], upcoming: [], rows: [] },
+    training: { ...analytics.training, rows: [] },
+    promotions: { ...analytics.promotions, mobilityReview: [], rows: [] },
+    employees: [],
+    directoryEmployees: [],
   }
 }
 

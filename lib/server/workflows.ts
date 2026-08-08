@@ -36,7 +36,7 @@ const workflowSchema = z.discriminatedUnion("type", [
 
 const actionSchema = z.object({
   id: z.string().trim().min(2).max(100),
-  type: z.enum(["leave", "hiring", "training"]),
+  type: z.enum(["leave", "hiring", "training", "reimbursement", "case"]),
   action: z.enum(["approve", "reject", "complete"]),
   note: z.string().trim().max(600).optional().default(""),
 })
@@ -176,7 +176,8 @@ export async function createWorkflow(value: unknown, actor: RequestActor) {
 export async function actOnWorkflow(value: unknown, actor: RequestActor) {
   const input = actionSchema.parse(value)
   const db = await database()
-  const workflow = await db.prepare("SELECT * FROM workflow_requests WHERE id=? AND type=?").bind(input.id, input.type).first<Record<string, string | null>>()
+  const persistedType = input.type === "case" ? "employee_case" : input.type
+  const workflow = await db.prepare("SELECT * FROM workflow_requests WHERE id=? AND type=?").bind(input.id, persistedType).first<Record<string, string | null>>()
   if (!workflow) throw new PeopleError("Workflow request not found.", 404)
 
   if (input.type === "leave") {
@@ -223,6 +224,38 @@ export async function actOnWorkflow(value: unknown, actor: RequestActor) {
         .bind(crypto.randomUUID(), input.id, input.id, `${actor.displayName} rejected the hiring requisition: ${input.note}`, actor.email),
     ])
     return { id: input.id, status: "Rejected", message: "Hiring requisition rejected." }
+  }
+
+  if (input.type === "reimbursement") {
+    if (!(["admin", "hr"] as string[]).includes(actor.role)) throw new PeopleError("Only HR can decide reimbursement claims.", 403)
+    if (!["approve", "reject"].includes(input.action)) throw new PeopleError("Choose approve or reject.", 422)
+    if (input.action === "reject" && input.note.length < 10) throw new PeopleError("Add a brief reason before rejecting the claim.", 422)
+    const status = input.action === "approve" ? "approved" : "rejected"
+    await db.batch([
+      db.prepare("UPDATE expense_claims SET status=?, reviewed_by_email=?, reviewed_at=CURRENT_TIMESTAMP, decision_note=?, updated_at=CURRENT_TIMESTAMP WHERE id=?")
+        .bind(status, actor.email, input.note || null, input.id),
+      db.prepare("UPDATE workflow_requests SET status=?, next_action='No further action.', resolved_by_email=?, resolved_at=CURRENT_TIMESTAMP, completed_at=CURRENT_TIMESTAMP, completion_notes=?, updated_at=CURRENT_TIMESTAMP WHERE id=?")
+        .bind(status, actor.email, input.note || `${actor.displayName} ${status} the reimbursement.`, input.id),
+      ...(workflow.employee_id ? [db.prepare("INSERT INTO employee_activity(id, employee_id, event_type, summary, changes_json, actor_email) VALUES (?, ?, 'reimbursement_decision', ?, ?, ?)")
+        .bind(crypto.randomUUID(), workflow.employee_id, `${actor.displayName} ${status} the reimbursement claim`, JSON.stringify({ workflowId: input.id, status }), actor.email)] : []),
+    ])
+    return { id: input.id, status, message: `Reimbursement ${status}.` }
+  }
+
+  if (input.type === "case") {
+    if (input.action !== "complete") throw new PeopleError("Employee cases are closed after a resolution is recorded.", 422)
+    const confidentiality = await db.prepare("SELECT confidentiality FROM employee_cases WHERE id=?").bind(input.id).first<{ confidentiality: string }>()
+    const isOwner = workflow.owner_email?.toLowerCase() === actor.email.toLowerCase()
+    if (!(["admin", "hr"] as string[]).includes(actor.role) && (!isOwner || confidentiality?.confidentiality === "restricted")) throw new PeopleError("Your role cannot resolve this employee case.", 403)
+    if (input.note.length < 10) throw new PeopleError("Record a clear resolution before closing the case.", 422)
+    await db.batch([
+      db.prepare("UPDATE employee_cases SET status='resolved', resolved_at=CURRENT_TIMESTAMP, updated_at=CURRENT_TIMESTAMP WHERE id=?").bind(input.id),
+      db.prepare("UPDATE workflow_requests SET status='Resolved', next_action='No further action.', resolved_by_email=?, resolved_at=CURRENT_TIMESTAMP, completed_at=CURRENT_TIMESTAMP, completion_notes=?, updated_at=CURRENT_TIMESTAMP WHERE id=?")
+        .bind(actor.email, input.note, input.id),
+      ...(workflow.employee_id ? [db.prepare("INSERT INTO employee_activity(id, employee_id, event_type, summary, changes_json, actor_email) VALUES (?, ?, 'employee_case_resolved', 'Employee service request resolved', ?, ?)")
+        .bind(crypto.randomUUID(), workflow.employee_id, JSON.stringify({ workflowId: input.id }), actor.email)] : []),
+    ])
+    return { id: input.id, status: "Resolved", message: "Employee request resolved." }
   }
 
   if (input.action !== "complete") throw new PeopleError("Training assignments can only be completed.", 422)

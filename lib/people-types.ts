@@ -32,6 +32,10 @@ export type EmployeeDirectoryResponse = {
 }
 
 export type EmployeeProfileResponse = {
+  permissions: {
+    canManageEmployment: boolean
+    canManageMeetings: boolean
+  }
   employee: ManagedEmployee
   manager: ManagedEmployee | null
   directReports: ManagedEmployee[]
@@ -41,6 +45,13 @@ export type EmployeeProfileResponse = {
   attrition: AttritionRecord[]
   attritionModel: AttritionModelProfile | null
   activity: EmployeeActivity[]
+  projects: Array<Record<string, unknown>>
+  compensation: Record<string, unknown> | null
+  documents: Array<Record<string, unknown>>
+  reimbursements: Array<Record<string, unknown>>
+  cases: Array<Record<string, unknown>>
+  reviews: Array<Record<string, unknown>>
+  meetings: Array<Record<string, unknown>>
 }
 
 export type EmployeeInput = {
@@ -62,7 +73,7 @@ export type EmployeeInput = {
 
 export type InboxItem = {
   id: string
-  type: "leave" | "hiring" | "training" | "insight"
+  type: "leave" | "hiring" | "training" | "insight" | "reimbursement" | "case"
   title: string
   detail: string
   person: string | null
@@ -92,7 +103,7 @@ export type InboxItem = {
 }
 
 export type WorkflowActorContext = {
-  role: "admin" | "hr" | "manager" | "viewer"
+  role: "admin" | "hr" | "manager" | "viewer" | "employee"
   email: string
   employeeId: string | null
   employeeName: string | null

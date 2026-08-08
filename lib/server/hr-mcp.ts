@@ -360,6 +360,11 @@ export function createHrMcpServer(): McpServer {
     }
 
     if (domain === "training") {
+      const selectedIds = new Set(employeeIds)
+      const selectedEmployeeLearningContext = analytics.training.rows
+        .filter((row) => selectedIds.has(row.employee_id))
+        .slice(0, 40)
+        .map((row) => ({ employeeId: row.employee_id, program: row.training_program, status: row.completion_status, dueDate: row.due_date ?? null }))
       const mandatory = analytics.training.rows
         .filter((row) => /incomplete/i.test(row.completion_status) && /security|privacy|safety|compliance|phishing|mandatory/i.test(row.training_program))
         .slice(0, 25)
@@ -376,6 +381,7 @@ export function createHrMcpServer(): McpServer {
         byProgram: analytics.training.byProgram,
         byDepartment: analytics.training.byDepartment,
         trend: analytics.training.trend,
+        selectedEmployeeLearningContext,
       })
     }
 

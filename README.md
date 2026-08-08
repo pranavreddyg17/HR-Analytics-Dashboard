@@ -1,152 +1,135 @@
 # LaidbackHR.AI
 
-LaidbackHR.AI is a people-operations workspace for employee records, hiring, time off, training, promotions, workforce analytics, explainable attrition-risk review, and grounded AI assistance.
+LaidbackHR.AI is an Azure-hosted people-operations and workforce-intelligence platform. It combines operational HR workflows, employee self-service, explainable attrition analysis, reporting, and auditable AI agents in one application.
 
-It deliberately distinguishes two kinds of data:
+## Azure production architecture
 
-- Live HR records stored in D1 and managed through People, Inbox, Import / export data, and Insights.
-- A correlated synthetic workforce generated from the supplied 1,470-row IBM sample. Stable demo employee IDs join model profiles to hiring, exits, leave, training, promotions, and reporting lines.
+All runtime resources are provisioned in the existing `Laidback.ai` resource group:
 
-## Production architecture
+- Azure App Service runs the Next.js application. The validated prediction artifact executes in-process, avoiding a second always-on container on the cost-controlled service plan.
+- Azure Database for PostgreSQL Flexible Server is the system of record. Versioned SQL migrations run idempotently at application startup.
+- Azure Blob Storage holds private employee documents. Access uses the web app's managed identity; account keys and public blob access are disabled.
+- Azure Key Vault stores database, authentication, Google OAuth, Azure OpenAI, embedding, and Azure AI Search configuration.
+- Azure AI Search indexes the curated Markdown knowledge base for hybrid/vector retrieval.
+- Azure OpenAI provides grounded synthesis when a chat deployment is configured. The assistant retains a deterministic, evidence-only fallback if generation is unavailable.
+- Azure Container Registry stores immutable web and model images.
+- Application Insights and Log Analytics collect platform telemetry.
+- Terraform owns the Azure resources and GitHub Actions is the only deployment pipeline.
 
-The deployed application is a single Cloudflare-compatible web runtime:
-
-- Next.js-compatible pages are built with Vinext.
-- Google sign-in and the application allowlist provide access control, and the authenticated identity is attached to employee and workflow changes.
-- Employee profiles, reporting lines, soft archival, operational HR domains, approvals, imports, and activity history are stored in D1.
-- The persisted scikit-learn pipeline is exported into an equivalent TypeScript inference runtime.
-- Predictions from the web runtime are parity-tested against the Python model.
-- Five focused MCP tools ground a LangChain agent across workforce summaries, department comparisons, attrition signals, people operations, and employee lookup.
-- A small Markdown knowledge base supplies HR metric definitions and responsible-use guidance through lightweight retrieval.
-- Approval-based Google Calendar and Gmail draft workflows use operational employee email records without sending or scheduling automatically.
-- Reports export to PDF and Excel, while domain feeds support Power BI refreshes.
-- The original FastAPI backend remains in `backend/` as the reproducible training and reference implementation.
+Production demo seeding is disabled. Existing PostgreSQL records are preserved; new migrations add structures without replacing operational rows.
 
 ## Product surfaces
 
-- `/` — personalized My Day home with priorities and workforce pulse
-- `/people` — searchable employee directory and add-employee workflow
-- `/people/{id}` — profile, reporting line, time off, growth, and attributable activity
-- `/inbox` — leave approvals plus hiring, training, and human-review follow-ups
-- `/hiring` — requisition approvals, accountable recruiting work, and a persisted candidate pipeline
-- `/leaves` — leave decisions, upcoming absences, and department coverage
-- `/courses` — training assignment, completion tracking, and compliance follow-up
-- `/insights` — employee, hiring, attrition, leave, training, promotion, and executive analytics
-- `/attrition` and `/risk-review` — governed historical model diagnostics and clearly labelled synthetic employee review rows
-- `/assistant` — grounded LangChain + MCP copilot with a visible tool trace
-- `/imports` — imports, templates, data readiness, and Power BI feeds
+- `/` — HR work requiring attention and upcoming workforce events
+- `/people` — employee directory and employee administration
+- `/inbox` — approvals and assigned work across hiring, leave, learning, reimbursement, employee cases, and insight reviews
+- `/hiring` — requisitions and the candidate pipeline
+- `/leaves` — requests, decisions, absence schedules, and coverage
+- `/courses` — course catalog, assignments, completion, and compliance
+- `/insights` — aggregate workforce movement, coverage, cost, and capability analysis
+- `/attrition` and `/risk-review` — governed model assessment and review worklists
+- `/assistant` — grounded analytics assistant with conversation memory and a visible evidence trace
+- `/imports` — validated imports, exports, and reporting feeds
+- `/access` — workspace membership and roles
+- `/employee` — employee self-service for profile, leave, reimbursements, HR cases, documents, reviews, and one-to-ones
 
-## Data truth
+The employee portal can use the same application at `employee.laidbackhr.cloud`. Authentication cookies are shared only across the `laidbackhr.cloud` domain.
 
-- All 1,470 historical rows are scored by the deployed model.
-- `POST /api/v1/predict` runs the selected compact gradient-boosted model exported from the persisted scikit-learn pipeline.
-- The LangChain agent calls MCP tools and answers from the returned HR analytics evidence.
-- Employee, hiring, leave, and learning mutations are durable and write an attributable activity entry.
-- Imports are validated before writes. Merge mode upserts matching IDs, while replace mode replaces only previously imported rows in the selected domain; managed and seeded records are preserved.
-- Age and marital status are excluded from training.
+## Relational model
 
-The IBM source dataset has no employee names, managers, locations, dates, hiring events, leave records, training records, promotion records, or exit reasons. The initial workspace therefore derives a deterministic, internally consistent synthetic workforce from those rows. Every generated record remains labelled `data_source=demo`; imported and HR-managed records remain separate and are never assigned IBM model scores.
+The PostgreSQL schema separates identities and slowly changing business records:
+
+- employees and application users
+- effective-dated compensation
+- projects and employee project assignments
+- private employee document metadata
+- requisitions, candidates, leave requests, learning assignments, and promotions
+- reimbursement claims and confidential employee cases
+- review cycles, performance reviews, and one-to-one meetings
+- workflow requests, action history, AI conversations, agent runs, and agent steps
+
+Legacy compatibility columns remain in the employee import surface while the normalized tables are adopted. Derived analytics such as tenure, attrition rate, vacancy rate, replacement rate, and cost scenarios are calculated at read time rather than persisted as operational facts.
+
+## AI agents
+
+The agent catalog is available from `GET /api/v1/agents`. Each agent is invoked through `POST /api/v1/agents/{agentId}/invoke`:
+
+- `workforce-intelligence`
+- `retention-planner`
+- `recruiting-operations`
+- `learning-compliance`
+- `people-operations`
+
+Every invocation is authenticated, role-scoped, grounded through HR tools and the current workspace, and stored in `agent_runs` with ordered tool steps. The orchestrator can perform a bounded multi-step loop—for example, connecting attrition evidence to mobility and relevant learning records—without allowing autonomous employment decisions.
+
+The employee assistant and future integrations should use these APIs instead of duplicating agent logic.
+
+## API overview
+
+| Method | Endpoint | Purpose |
+|---|---|---|
+| GET | `/api/v1/health` | Model and dataset health |
+| GET | `/api/v1/ready` | Web, PostgreSQL, model service, and AI configuration readiness |
+| GET/POST | `/api/v1/hr/people` | Search or create employee profiles |
+| GET/PATCH | `/api/v1/hr/people/{id}` | Read or update an employee profile |
+| POST | `/api/v1/hr/people/{id}/management` | Compensation, project, review, and one-to-one operations |
+| GET | `/api/v1/hr/inbox` | Unified role-scoped work queue |
+| GET | `/api/v1/hr/hiring` | Requisitions and candidates |
+| GET | `/api/v1/hr/leave` | Leave register and coverage |
+| GET/POST | `/api/v1/hr/learning` | Learning assignments |
+| GET | `/api/v1/workforce` | Dashboard-safe aggregate workforce projection |
+| GET | `/api/v1/reports` | Decision-focused PDF or Excel export |
+| GET | `/api/v1/employee` | Signed-in employee workspace |
+| POST | `/api/v1/employee` | Leave, reimbursement, case, and self-review requests |
+| POST/GET | `/api/v1/employee/documents` | Private employee document upload/download |
+| GET | `/api/v1/agents` | Agent capability catalog |
+| POST | `/api/v1/agents/{agentId}/invoke` | Audited agent invocation |
+| POST | `/api/v1/chat` | Conversational agent with workspace memory |
+| GET/POST/DELETE | `/api/mcp` | Streamable HTTP MCP tools |
 
 ## Local development
 
+Prerequisites are Node.js 22+, pnpm, Python 3.12, and PostgreSQL 16.
+
 ```bash
-pnpm install
-pnpm dev
+corepack enable
+pnpm install --frozen-lockfile
+pnpm dev:azure
 ```
 
-Open the local URL printed by the development server.
+Use `.env.local.example` as the local configuration reference. Never commit secrets.
 
-Copy `.env.local.example` to `.env.local` for local authentication and optional model-synthesis settings. The web application uses its same-origin API; the FastAPI service is retained only as the model-training and reference implementation.
-
-## Verification
-
-Run lint, strict TypeScript checks, and the production build:
+## Validation
 
 ```bash
 pnpm lint
 pnpm exec tsc --noEmit
-pnpm build
-```
+pnpm build:azure
 
-With the local application running:
-
-```bash
-pnpm test:live
-```
-
-Run the Python reference tests:
-
-```bash
+python -m pip install -r backend/requirements.txt -r backend/requirements-dev.txt
 cd backend
-python3 -m venv .venv
-.venv/bin/pip install -r requirements-dev.txt
-PYTHONPATH=. .venv/bin/python -m pytest -q
+PYTHONPATH=. python -m pytest -q
+
+terraform -chdir=infra init -backend=false
+terraform -chdir=infra fmt -check -recursive
+terraform -chdir=infra validate
 ```
 
-Regenerate the worker model artifact after retraining:
+## Deployment
 
-```bash
-cd backend
-PYTHONPATH=. .venv/bin/python scripts/train_model.py
-PYTHONPATH=. .venv/bin/python scripts/export_worker_runtime.py
-```
+`.github/workflows/production.yml` validates pull requests and deploys `azure/migration` through GitHub OpenID Connect. The deployment:
 
-## API endpoints
+1. validates the web app, Python reference model, and Terraform;
+2. copies approved AI values from protected GitHub environment secrets into the application Key Vault;
+3. builds and pushes immutable images to Azure Container Registry;
+4. applies Terraform using remote state;
+5. synchronizes the Azure AI Search knowledge index; and
+6. verifies both service health endpoints.
 
-| Method | Endpoint | Purpose |
-|---|---|---|
-| GET | `/api/v1/health` | Service, model, dataset, and capability health |
-| GET | `/api/v1/dashboard` | Real dashboard aggregates |
-| GET | `/api/v1/model` | Model metrics and provenance |
-| GET | `/api/v1/schema` | Predictor ranges and categories |
-| POST | `/api/v1/predict` | Score one employee profile |
-| GET | `/api/v1/employees` | Filterable historical model rows with synthetic demo IDs |
-| GET/POST | `/api/v1/hr/people` | Search or create managed employee profiles |
-| GET/PATCH | `/api/v1/hr/people/{id}` | Read or edit one employee profile |
-| POST | `/api/v1/hr/people/{id}/archive` | Soft-archive an employee |
-| POST | `/api/v1/hr/people/{id}/restore` | Restore an archived employee |
-| GET | `/api/v1/hr/inbox` | Unified HR work queue |
-| GET | `/api/v1/hr/hiring` | Operational requisitions and candidate pipeline |
-| POST | `/api/v1/hr/hiring/candidates` | Add a candidate to an approved requisition |
-| PATCH | `/api/v1/hr/hiring/candidates/{id}` | Advance or reject a candidate; hiring creates a preboarding employee profile |
-| PATCH | `/api/v1/hr/hiring/requisitions/{id}` | Update the accountable follow-up or close a requisition |
-| POST | `/api/v1/hr/workflows` | Create leave, hiring, or training work |
-| POST | `/api/v1/hr/workflows/action` | Record an approval, rejection, or completion |
-| GET | `/api/v1/hr/leave` | Role-scoped leave register, schedules, decision counts, and overlap context |
-| POST | `/api/v1/hr/leave/{id}/decision` | Approve or reject leave with an attributable decision note |
-| GET/POST | `/api/v1/hr/learning` | Role-scoped assignment register or create a catalog-backed assignment |
-| POST | `/api/v1/hr/learning/courses` | Add an HR-managed course to the catalog |
-| PATCH | `/api/v1/hr/learning/assignments/{id}` | Record completion, assessment score, and supporting note |
-| GET | `/api/v1/workforce` | Filtered workforce analytics, normalized department measures, and calculated action signals |
-| POST | `/api/v1/insights/actions` | Create an attributable work item from a current calculated exception |
-| PATCH | `/api/v1/insights/actions/{id}` | Start or complete an insight work item with a recorded plan or outcome |
-| GET | `/api/v1/retention/insights` | Versioned cohort, continuity, intervention, and workflow evidence |
-| POST | `/api/v1/retention/reviews` | Create an accountable retention cohort review |
-| PATCH | `/api/v1/retention/reviews/{id}` | Start or complete a retention review with an attributable note |
-| POST | `/api/v1/data/import` | Authenticated domain import |
-| GET | `/api/v1/reports` | PDF or Excel report export |
-| GET | `/api/v1/power-bi/{domain}` | Power BI-ready CSV feed |
-| GET/POST/DELETE | `/api/mcp` | Streamable HTTP MCP endpoint with five focused HR tools |
-| GET/POST | `/api/v1/ai/workflows` | List or prepare Calendar and Gmail employee workflows |
-| POST | `/api/v1/chat` | Grounded analytics agent |
-| GET | `/api/v1/data-dictionary` | Source schema and model-use flags |
+The GitHub `production` environment must contain the Azure OIDC identifiers and the approved Azure AI secret values. The application Key Vault remains the only runtime secret source.
 
-Insights uses transparent calculations rather than a composite workforce score: attrition rate is exits divided by active employees plus exits; replacement rate is completed hires divided by exits; vacancy rate is open requisitions divided by active headcount; and mobility review share is the defined tenure/no-promotion cohort divided by active headcount. Department action signals include their supporting counts and route users to the operational workspace that owns the follow-up.
+To enable `employee.laidbackhr.cloud`, first create the DNS records described in `infra/environments/production/README.md`, add the origin to Google OAuth, then set `enable_employee_custom_domain = true` in the production variables and run the pipeline.
 
-## Model results
+## Responsible use
 
-- Selected model: compact gradient boosting 2.0.0
-- Logistic baseline ROC-AUC: 0.710
-- Selected model ROC-AUC: 0.727 (95% bootstrap interval 0.693–0.763)
-- Average precision: 0.364
-- Precision / recall: 0.370 / 0.527
-- F1: 0.435
-- Brier score: 0.1216
-- Review threshold: 20%
-- Evaluation: five-fold stratified out-of-fold plus ten repeated five-fold stability checks
-
-The limited sample is suitable for demonstrating a working architecture, not for production employment decisions.
-
-## Responsible-use boundary
-
-Risk scores are statistical estimates, not facts or automated employment decisions. The current private workspace adds signed-in identity, mutation authorization, soft archival, audit history, and model/live-data separation. Before a multi-team production rollout, add organization-scoped roles, a verified enterprise identity provider where required, governed retention, fairness and drift monitoring, regional privacy review, and a documented human-review process.
+Attrition scores are review signals, not employment decisions or claims about future behavior. The application separates observed outcomes, model estimates, and human-entered evidence. It never automatically changes pay, promotion, performance, or employment status from a model score. Restricted records remain role-scoped and all material actions are attributable.

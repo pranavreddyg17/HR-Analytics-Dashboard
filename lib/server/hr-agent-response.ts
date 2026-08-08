@@ -226,6 +226,15 @@ function renderPeopleOperations(plan: ToolPlan, data: Record<string, unknown>): 
       "Use this only to prepare a career conversation. Promotion history does not establish readiness or entitlement to promotion.",
     ].join("\n")
   }
+  if (plan.purpose === "retention_learning_context") {
+    const rows = records(data.selectedEmployeeLearningContext).slice(0, plan.limit)
+    if (!rows.length) return "No current learning assignments were found for the selected cohort."
+    return [
+      "Learning context for the selected cohort",
+      ...rows.map((row) => `- ${String(row.employeeId)}: ${String(row.program)} — ${String(row.status)}${row.dueDate ? `, due ${String(row.dueDate)}` : ""}.`),
+      "Use development records to discuss access and employee goals. Do not assign training solely because of a model score.",
+    ].join("\n")
+  }
   if (domain === "hiring") {
     const sources = records(data.sourcePerformance).slice(0, plan.limit)
     return [sourceLine(data), `Hiring: ${number(summary, "completedHires")} completed hires, ${number(summary, "activeRequisitions")} active requisitions, ${number(summary, "offers")} offers and ${number(summary, "averageTimeToHireDays")} average days to hire.`, ...sources.map((row) => `- ${String(row.label)}: ${Number(row.hires)} hires, ${Number(row.averageDays)} average days.`), "Recruiting volume and speed do not measure quality of hire."].join("\n")

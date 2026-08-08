@@ -1,5 +1,6 @@
 import systemPromptMarkdown from "@/knowledge/laidbackhr-system-prompt.md?raw"
 import workspaceContextMarkdown from "@/knowledge/hr-workspace-context.md?raw"
+import { searchAzureKnowledge } from "@/lib/server/azure-ai"
 
 export type KnowledgeMatch = {
   source: string
@@ -70,8 +71,9 @@ function retrieveHrContext(query: string, limit = 3): KnowledgeMatch[] {
   return selected.map(({ chunk }) => ({ source: chunk.source, section: chunk.section, content: chunk.content }))
 }
 
-export function buildHrSystemPrompt(query: string): { prompt: string; context: KnowledgeMatch[] } {
-  const context = retrieveHrContext(query)
+export async function buildHrSystemPrompt(query: string): Promise<{ prompt: string; context: KnowledgeMatch[] }> {
+  const remoteContext = await searchAzureKnowledge(query).catch(() => [])
+  const context = remoteContext.length ? remoteContext : retrieveHrContext(query)
   const retrieved = context.map((item) => `### ${item.section}\n${item.content}`).join("\n\n")
   return {
     prompt: `${systemPromptMarkdown.trim()}\n\n# Retrieved workspace guidance\n${retrieved}`,

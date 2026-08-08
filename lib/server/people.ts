@@ -152,11 +152,16 @@ export async function listPeople({
   }
 }
 
-export async function getPerson(employeeId: string): Promise<EmployeeProfileResponse> {
+export async function getPerson(employeeId: string, actor?: RequestActor): Promise<EmployeeProfileResponse> {
   const database = await databaseOrThrow()
   const employee = await database.prepare(`${employeeSelect} WHERE e.employee_id = ?`).bind(employeeId).first<ManagedEmployee>()
   if (!employee) throw new PeopleError("Employee not found.", 404)
-  const [manager, directReports, leave, training, promotions, attrition, attritionModel, activity] = await Promise.all([
+  const canViewSensitiveHrData = !actor || ["admin", "hr"].includes(actor.role)
+  const actorEmployee = actor?.role === "manager"
+    ? await database.prepare("SELECT employee_id FROM employee_directory_view WHERE LOWER(work_email)=LOWER(?) AND archived_at IS NULL").bind(actor.email).first<{ employee_id: string }>()
+    : null
+  const canManageMeetings = canViewSensitiveHrData || Boolean(actorEmployee?.employee_id && employee.manager_id === actorEmployee.employee_id)
+  const [manager, directReports, leave, training, promotions, attrition, attritionModel, activity, projects, compensation, documents, reimbursements, cases, reviews, meetings] = await Promise.all([
     employee.manager_id ? database.prepare(`${employeeSelect} WHERE e.employee_id = ?`).bind(employee.manager_id).first<ManagedEmployee>() : Promise.resolve(null),
     database.prepare(`${employeeSelect} WHERE e.manager_id = ? AND e.archived_at IS NULL ORDER BY display_name`).bind(employeeId).all<ManagedEmployee>(),
     database.prepare("SELECT * FROM leave_requests_view WHERE employee_id = ? ORDER BY start_date DESC LIMIT 100").bind(employeeId).all<LeaveRecord>(),
@@ -165,8 +170,20 @@ export async function getPerson(employeeId: string): Promise<EmployeeProfileResp
     database.prepare("SELECT * FROM attrition_events_view WHERE employee_id = ? ORDER BY exit_date DESC LIMIT 20").bind(employeeId).all<AttritionRecord>(),
     database.prepare("SELECT * FROM attrition_model_profiles_view WHERE employee_id = ?").bind(employeeId).first<AttritionModelProfile>(),
     database.prepare("SELECT * FROM employee_activity WHERE employee_id = ? ORDER BY created_at DESC LIMIT 100").bind(employeeId).all<EmployeeActivity>(),
+    database.prepare(`SELECT p.id, p.code, p.name, p.client_name, p.status, a.role_title, a.allocation_percent, a.starts_on, a.ends_on, a.is_primary
+      FROM employee_project_assignments a JOIN projects p ON p.id=a.project_id
+      WHERE a.employee_id=? ORDER BY a.is_primary DESC, a.starts_on DESC LIMIT 30`).bind(employeeId).all<Record<string, unknown>>(),
+    canViewSensitiveHrData ? database.prepare("SELECT annual_salary, currency, pay_frequency, effective_from, effective_to FROM employee_compensation WHERE employee_id=? ORDER BY effective_from DESC LIMIT 20").bind(employeeId).all<Record<string, unknown>>() : Promise.resolve({ results: [] as Record<string, unknown>[] }),
+    canViewSensitiveHrData ? database.prepare("SELECT id, document_type, file_name, content_type, size_bytes, visibility, uploaded_by_email, created_at FROM employee_documents WHERE employee_id=? ORDER BY created_at DESC LIMIT 50").bind(employeeId).all<Record<string, unknown>>() : Promise.resolve({ results: [] as Record<string, unknown>[] }),
+    canViewSensitiveHrData ? database.prepare("SELECT id, category, expense_date, amount, currency, status, submitted_at, reviewed_at FROM expense_claims WHERE employee_id=? ORDER BY created_at DESC LIMIT 50").bind(employeeId).all<Record<string, unknown>>() : Promise.resolve({ results: [] as Record<string, unknown>[] }),
+    canViewSensitiveHrData ? database.prepare("SELECT id, category, subject, confidentiality, status, assigned_to_email, submitted_at, resolved_at FROM employee_cases WHERE employee_id=? ORDER BY submitted_at DESC LIMIT 50").bind(employeeId).all<Record<string, unknown>>() : Promise.resolve({ results: [] as Record<string, unknown>[] }),
+    canViewSensitiveHrData ? database.prepare(`SELECT r.id, r.status, r.employee_rating, r.manager_rating, r.submitted_at, r.completed_at, c.name AS cycle_name, c.starts_on, c.ends_on
+      FROM performance_reviews r JOIN review_cycles c ON c.id=r.cycle_id WHERE r.employee_id=? ORDER BY c.ends_on DESC LIMIT 20`).bind(employeeId).all<Record<string, unknown>>()
+      : Promise.resolve({ results: [] as Record<string, unknown>[] }),
+    canManageMeetings ? database.prepare("SELECT id, scheduled_at, held_at, status, employee_notes, manager_notes, ai_summary, summary_approved_at, follow_up_sent_at FROM one_on_one_meetings WHERE employee_id=? ORDER BY scheduled_at DESC LIMIT 30").bind(employeeId).all<Record<string, unknown>>() : Promise.resolve({ results: [] as Record<string, unknown>[] }),
   ])
   return {
+    permissions: { canManageEmployment: canViewSensitiveHrData, canManageMeetings },
     employee,
     manager,
     directReports: directReports.results ?? [],
@@ -176,6 +193,13 @@ export async function getPerson(employeeId: string): Promise<EmployeeProfileResp
     attrition: attrition.results ?? [],
     attritionModel,
     activity: activity.results ?? [],
+    projects: projects.results ?? [],
+    compensation: (compensation.results ?? [])[0] ?? null,
+    documents: documents.results ?? [],
+    reimbursements: reimbursements.results ?? [],
+    cases: cases.results ?? [],
+    reviews: reviews.results ?? [],
+    meetings: meetings.results ?? [],
   }
 }
 
@@ -258,6 +282,7 @@ export async function listInboxItems(actor?: RequestActor): Promise<InboxItem[]>
     updated_at?: string
   }
   type InsightWorkflow = WorkflowPerson & { id: string; title: string; source_entity_id: string | null }
+  type ServiceWorkflow = WorkflowPerson & { id: string; type: "reimbursement" | "employee_case"; title: string; employee_id: string; first_name?: string; last_name?: string; preferred_name?: string | null; work_email?: string | null; manager_id?: string | null; manager_email?: string | null }
   const workflowColumns = `
     w.requested_by_email,
     w.details_json,
@@ -273,7 +298,7 @@ export async function listInboxItems(actor?: RequestActor): Promise<InboxItem[]>
     w.created_at AS workflow_created_at,
     w.updated_at AS workflow_updated_at,
     COALESCE(NULLIF(au.display_name, ''), NULLIF(TRIM(COALESCE(oe.preferred_name, oe.first_name, '') || ' ' || COALESCE(oe.last_name, '')), '')) AS owner_name`
-  const [leave, hiring, training, insight, actorEmployee] = await Promise.all([
+  const [leave, hiring, training, insight, services, actorEmployee] = await Promise.all([
     database.prepare(`SELECT l.*, e.first_name, e.last_name, e.preferred_name, e.work_email, e.manager_id, m.work_email AS manager_email, ${workflowColumns}
       FROM leave_requests_view l
       JOIN workflow_requests w ON w.id=l.id AND w.type='leave'
@@ -305,6 +330,14 @@ export async function listInboxItems(actor?: RequestActor): Promise<InboxItem[]>
       LEFT JOIN employee_directory_view oe ON LOWER(oe.work_email)=LOWER(w.owner_email) AND oe.archived_at IS NULL
       WHERE w.type='insight'
       ORDER BY COALESCE(w.completed_at, w.updated_at) DESC LIMIT 160`).all<InsightWorkflow>(),
+    database.prepare(`SELECT w.id, w.type, w.title, w.employee_id, e.first_name, e.last_name, e.preferred_name, e.work_email, e.manager_id, m.work_email AS manager_email, ${workflowColumns}
+      FROM workflow_requests w
+      JOIN employee_directory_view e ON e.employee_id=w.employee_id
+      LEFT JOIN employee_directory_view m ON m.employee_id=e.manager_id
+      LEFT JOIN app_users au ON LOWER(au.email)=LOWER(w.owner_email)
+      LEFT JOIN employee_directory_view oe ON LOWER(oe.work_email)=LOWER(w.owner_email) AND oe.archived_at IS NULL
+      WHERE w.type IN ('reimbursement', 'employee_case')
+      ORDER BY COALESCE(w.completed_at, w.updated_at) DESC LIMIT 160`).all<ServiceWorkflow>(),
     actor ? database.prepare("SELECT employee_id FROM employee_directory_view WHERE LOWER(work_email)=LOWER(?) AND archived_at IS NULL").bind(actor.email).first<{ employee_id: string }>() : Promise.resolve(null),
   ])
   const personName = (row: { first_name?: string; last_name?: string; preferred_name?: string | null; employee_id: string }) => `${row.preferred_name || row.first_name || row.employee_id} ${row.last_name || ""}`.trim()
@@ -315,6 +348,7 @@ export async function listInboxItems(actor?: RequestActor): Promise<InboxItem[]>
   const visibleHiring = (hiring.results ?? []).filter((row) => isPeopleTeam || actor?.role === "manager" && String(row.requested_by_email ?? "").toLowerCase() === ownEmail)
   const visibleTraining = (training.results ?? []).filter((row) => isPeopleTeam || row.work_email?.toLowerCase() === ownEmail || actor?.role === "manager" && row.manager_id === employeeId)
   const visibleInsight = (insight.results ?? []).filter((row) => isPeopleTeam || row.owner_email?.toLowerCase() === ownEmail || row.requested_by_email?.toLowerCase() === ownEmail)
+  const visibleServices = (services.results ?? []).filter((row) => isPeopleTeam || row.work_email?.toLowerCase() === ownEmail || row.owner_email?.toLowerCase() === ownEmail)
   const detailValue = (row: WorkflowPerson, field: string): string | null => {
     try { return String((JSON.parse(row.details_json ?? "{}") as Record<string, unknown>)[field] ?? "") || null } catch { return null }
   }
@@ -452,6 +486,36 @@ export async function listInboxItems(actor?: RequestActor): Promise<InboxItem[]>
         actionable: false, actions: [],
         reviewHref: reviewHref("insight", row.id, isCompleted ? "completed" : "my_work"),
         recordHref: `/insights?item=${encodeURIComponent(row.id)}`,
+      }
+    }),
+    ...visibleServices.map((row): InboxItem => {
+      const type = row.type === "reimbursement" ? "reimbursement" : "case"
+      const status = row.workflow_status || "Open"
+      const isCompleted = Boolean(row.completed_at) || ["approved", "rejected", "paid", "resolved", "closed"].includes(status.toLowerCase())
+      const dueDate = row.due_at?.slice(0, 10) ?? null
+      const sla = slaStatus(dueDate, isCompleted)
+      const restricted = detailValue(row, "confidentiality") === "restricted"
+      const canAct = Boolean(!isCompleted && actor && (isPeopleTeam || !restricted && row.owner_email?.toLowerCase() === ownEmail))
+      const amount = detailValue(row, "amount")
+      const currency = detailValue(row, "currency")
+      return {
+        id: row.id, type, title: row.title, detail: type === "reimbursement" && amount ? `${currency || "USD"} ${amount} · ${detailValue(row, "category") || "expense"}` : detailValue(row, "category") || "Employee request",
+        person: personName(row), employeeId: row.employee_id, dueDate, status, priority: priority(row, sla), owner: ownerLabel(row, type === "reimbursement" ? "Finance" : "People Operations"), ownerEmail: row.owner_email ?? null,
+        nextAction: row.next_action || (type === "reimbursement" ? "Review the claim and receipt." : "Review the request and record a resolution."),
+        attentionReason: row.blocked_reason || (sla === "overdue" ? "The response target has passed." : "An employee service request is awaiting review."),
+        completionEffect: type === "reimbursement" ? "The claim decision is recorded and returned to the employee." : "The resolution is recorded in the employee's request history.",
+        requestContext: [
+          { label: "Category", value: detailValue(row, "category") || "Other" },
+          ...(amount ? [{ label: "Amount", value: `${currency || "USD"} ${amount}` }] : []),
+          { label: "Submitted by", value: row.requested_by_email || row.work_email || "Employee" },
+        ],
+        assignedTo: row.manager_email && row.owner_email?.toLowerCase() === row.manager_email.toLowerCase() ? "manager" : "hr",
+        requiresDecision: type === "reimbursement" && !isCompleted, isCompleted, slaStatus: sla,
+        timeInStatusDays: daysSince(row.assigned_at || row.workflow_updated_at || row.workflow_created_at), createdAt: row.workflow_created_at || row.updated_at || nowIso,
+        completedAt: row.completed_at ?? null, completionNotes: row.completion_notes ?? null, blockedReason: row.blocked_reason ?? null,
+        actionable: canAct, actions: canAct ? type === "reimbursement" ? ["reject", "approve"] : ["complete"] : [],
+        reviewHref: reviewHref(type, row.id, isCompleted ? "completed" : type === "reimbursement" ? "decisions" : "my_work"),
+        recordHref: reviewHref(type, row.id, isCompleted ? "completed" : type === "reimbursement" ? "decisions" : "my_work"),
       }
     }),
   ].sort((left, right) => Number(left.isCompleted) - Number(right.isCompleted)

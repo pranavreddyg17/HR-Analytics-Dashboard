@@ -12,6 +12,17 @@ const legacyRoutes: Record<string, string> = {
 export default auth((request) => {
   if (["/api/v1/health", "/api/v1/ready"].includes(request.nextUrl.pathname)) return
 
+  const publicHost = (request.headers.get("x-forwarded-host") ?? request.headers.get("host") ?? request.nextUrl.host).split(":")[0].toLowerCase()
+  if (publicHost === "laidbackhr-f61hno-web.azurewebsites.net" && ["/", "/login"].includes(request.nextUrl.pathname)) {
+    const destination = new URL(request.nextUrl.pathname + request.nextUrl.search, "https://www.laidbackhr.cloud")
+    return Response.redirect(destination, 308)
+  }
+  if (publicHost === "employee.laidbackhr.cloud" && request.nextUrl.pathname === "/") {
+    const destination = request.nextUrl.clone()
+    destination.pathname = "/employee"
+    return Response.redirect(destination, 307)
+  }
+
   const canonicalPath = legacyRoutes[request.nextUrl.pathname]
   if (canonicalPath) {
     const destination = request.nextUrl.clone()
@@ -26,4 +37,4 @@ export default auth((request) => {
   }
 })
 
-export const config = { matcher: ["/api/v1/:path*", "/api/mcp", "/time-off", "/learning", "/ai-agents", "/data", "/employees"] }
+export const config = { matcher: ["/", "/login", "/api/v1/:path*", "/api/mcp", "/time-off", "/learning", "/ai-agents", "/data", "/employees"] }

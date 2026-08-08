@@ -81,6 +81,7 @@ export function AccessManager({ ownerEmail }: { ownerEmail: string }) {
             <select value={role} onChange={(event) => setRole(event.target.value)} className="mt-1 h-9 w-full rounded-md border border-border bg-background px-3 text-sm">
               <option value="hr">HR</option>
               <option value="manager">Manager</option>
+              <option value="employee">Employee</option>
               <option value="viewer">Viewer</option>
               <option value="admin">Admin</option>
             </select>
@@ -115,6 +116,7 @@ export function AccessManager({ ownerEmail }: { ownerEmail: string }) {
                   <option value="admin">Admin</option>
                   <option value="hr">HR</option>
                   <option value="manager">Manager</option>
+                  <option value="employee">Employee</option>
                   <option value="viewer">Viewer</option>
                 </select>
                 <button disabled={user.email === ownerEmail} onClick={() => update(user, { status: user.status === "active" ? "disabled" : "active" })} className="h-9 rounded-md border border-border bg-background px-3 text-xs font-semibold capitalize disabled:opacity-50">

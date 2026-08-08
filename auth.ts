@@ -7,6 +7,7 @@ import { verifyGoogleIdToken } from "@/lib/server/google-id-token"
 import { runtimeEnv } from "@/lib/server/runtime-env"
 
 const runtime = runtimeEnv as { GOOGLE_CLIENT_ID?: string; GOOGLE_CLIENT_SECRET?: string; AUTH_SECRET?: string }
+const sharedCookieDomain = runtimeEnv.AUTH_COOKIE_DOMAIN
 
 const googleScopes = [
   "openid",
@@ -40,6 +41,14 @@ export const { handlers, auth } = NextAuth({
   ],
   secret: runtime.AUTH_SECRET ?? "laidbackhr-local-development-secret-change-me",
   trustHost: true,
+  ...(sharedCookieDomain ? {
+    cookies: {
+      sessionToken: {
+        name: "__Secure-authjs.session-token",
+        options: { httpOnly: true, sameSite: "lax" as const, path: "/", secure: true, domain: sharedCookieDomain },
+      },
+    },
+  } : {}),
   pages: { signIn: "/login", error: "/login" },
   session: { strategy: "jwt", maxAge: 60 * 60 * 10 },
   callbacks: {

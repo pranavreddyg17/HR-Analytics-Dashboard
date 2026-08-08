@@ -1,6 +1,6 @@
 import { ensureHrDatabase, getHrDatabase, type Database } from "@/lib/server/hr-database"
 
-const roles = ["admin", "hr", "manager", "viewer"] as const
+const roles = ["admin", "hr", "manager", "viewer", "employee"] as const
 export type AppRole = (typeof roles)[number]
 export type AccessUser = { email: string; display_name: string; role: AppRole; status: "active" | "disabled"; created_at: string; updated_at: string; last_login_at: string | null }
 const ownerEmail = "pranavreddyg17@gmail.com"
@@ -35,13 +35,19 @@ export async function findAccessUser(email: string): Promise<AccessUser | null> 
 }
 
 export async function recordLogin(email: string, displayName: string) {
-  await accessTable((db) => db.prepare("UPDATE app_users SET display_name = CASE WHEN ? = '' THEN display_name ELSE ? END, last_login_at = CURRENT_TIMESTAMP, updated_at = CURRENT_TIMESTAMP WHERE email = ?")
-    .bind(displayName, displayName, normalizedEmail(email)).run())
+  await accessTable((db) => {
+    if (db.dialect === "postgres") {
+      return db.prepare("UPDATE app_users SET display_name = CASE WHEN ? = '' THEN display_name ELSE ? END, employee_id = COALESCE(employee_id, (SELECT employee_id FROM employees WHERE LOWER(work_email)=LOWER(?) AND archived_at IS NULL LIMIT 1)), last_login_at = CURRENT_TIMESTAMP, updated_at = CURRENT_TIMESTAMP WHERE email = ?")
+        .bind(displayName, displayName, normalizedEmail(email), normalizedEmail(email)).run()
+    }
+    return db.prepare("UPDATE app_users SET display_name = CASE WHEN ? = '' THEN display_name ELSE ? END, last_login_at = CURRENT_TIMESTAMP, updated_at = CURRENT_TIMESTAMP WHERE email = ?")
+      .bind(displayName, displayName, normalizedEmail(email)).run()
+  })
 }
 
 export async function listAccessUsers(): Promise<AccessUser[]> {
   const db = await database()
-  const result = await db.prepare("SELECT email, display_name, role, status, created_at, updated_at, last_login_at FROM app_users ORDER BY CASE role WHEN 'admin' THEN 0 WHEN 'hr' THEN 1 WHEN 'manager' THEN 2 ELSE 3 END, email").all<AccessUser>()
+  const result = await db.prepare("SELECT email, display_name, role, status, created_at, updated_at, last_login_at FROM app_users ORDER BY CASE role WHEN 'admin' THEN 0 WHEN 'hr' THEN 1 WHEN 'manager' THEN 2 WHEN 'viewer' THEN 3 ELSE 4 END, email").all<AccessUser>()
   return result.results ?? []
 }
 
@@ -50,8 +56,11 @@ export async function addAccessUser(input: { email: string; displayName?: string
   if (!/^\S+@\S+\.\S+$/.test(email)) throw new Error("INVALID_EMAIL")
   if (!validRole(input.role)) throw new Error("INVALID_ROLE")
   const db = await database()
+  const upsert = db.dialect === "postgres"
+    ? db.prepare("INSERT INTO app_users(email, display_name, role, status, invited_by, employee_id, updated_at) VALUES (?, ?, ?, 'active', ?, (SELECT employee_id FROM employees WHERE LOWER(work_email)=LOWER(?) AND archived_at IS NULL LIMIT 1), CURRENT_TIMESTAMP) ON CONFLICT(email) DO UPDATE SET display_name=excluded.display_name, role=excluded.role, status='active', employee_id=COALESCE(app_users.employee_id, excluded.employee_id), updated_at=CURRENT_TIMESTAMP").bind(email, input.displayName?.trim() ?? "", input.role, actor, email)
+    : db.prepare("INSERT INTO app_users(email, display_name, role, status, invited_by, updated_at) VALUES (?, ?, ?, 'active', ?, CURRENT_TIMESTAMP) ON CONFLICT(email) DO UPDATE SET display_name=excluded.display_name, role=excluded.role, status='active', updated_at=CURRENT_TIMESTAMP").bind(email, input.displayName?.trim() ?? "", input.role, actor)
   await db.batch([
-    db.prepare("INSERT INTO app_users(email, display_name, role, status, invited_by, updated_at) VALUES (?, ?, ?, 'active', ?, CURRENT_TIMESTAMP) ON CONFLICT(email) DO UPDATE SET display_name=excluded.display_name, role=excluded.role, status='active', updated_at=CURRENT_TIMESTAMP").bind(email, input.displayName?.trim() ?? "", input.role, actor),
+    upsert,
     db.prepare("INSERT INTO access_audit(id, actor_email, action, target_email, details_json) VALUES (?, ?, 'access_granted', ?, ?)").bind(crypto.randomUUID(), actor, email, JSON.stringify({ role: input.role })),
   ])
   return findAccessUser(email)

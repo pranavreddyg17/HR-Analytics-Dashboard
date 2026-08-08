@@ -10,10 +10,12 @@ output "resource_group" {
 output "deployment_endpoints" {
   description = "Azure endpoints created for application deployment."
   value = {
-    web_url         = "https://${azurerm_linux_web_app.web.default_hostname}"
-    model_url       = "https://${azurerm_linux_web_app.model.default_hostname}"
-    registry        = azurerm_container_registry.app.login_server
-    postgres_server = azurerm_postgresql_flexible_server.app.fqdn
-    key_vault_uri   = azurerm_key_vault.app.vault_uri
+    web_url          = "https://${azurerm_linux_web_app.web.default_hostname}"
+    model_url        = "https://${azurerm_linux_web_app.model.default_hostname}"
+    registry         = azurerm_container_registry.app.login_server
+    postgres_server  = azurerm_postgresql_flexible_server.app.fqdn
+    key_vault_uri    = azurerm_key_vault.app.vault_uri
+    document_storage = azurerm_storage_account.employee_documents.primary_blob_endpoint
+    employee_portal  = var.employee_portal_url
   }
 }

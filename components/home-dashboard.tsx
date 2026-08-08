@@ -4,19 +4,15 @@ import Link from "next/link"
 
 import { Card, CardContent } from "@/components/ui/card"
 import { MetricStrip, WorkspaceHeader, WorkspacePage, WorkspaceSectionHeader } from "@/components/workspace-ui"
-import type { WorkforceAnalytics } from "@/lib/hr-types"
 import type { InboxOperations } from "@/lib/inbox-types"
-import type { LearningOperations } from "@/lib/learning-types"
-import type { LeaveOperations } from "@/lib/leave-types"
 import { withReturnTo } from "@/lib/navigation"
 import type { InboxItem } from "@/lib/people-types"
+import type { HomeSnapshot } from "@/lib/server/home"
 import { cn } from "@/lib/utils"
 
 type HomeDashboardProps = {
-  analytics: WorkforceAnalytics
+  snapshot: HomeSnapshot
   inbox: InboxOperations
-  leave: LeaveOperations
-  learning: LearningOperations
   actorEmail: string
 }
 
@@ -48,21 +44,13 @@ function actionLabel(item: InboxItem): string {
   return "Open"
 }
 
-export function HomeDashboard({ analytics, inbox, leave, learning, actorEmail }: HomeDashboardProps) {
-  const today = new Date().toISOString().slice(0, 10)
-  const thirtyDaysDate = new Date()
-  thirtyDaysDate.setUTCDate(thirtyDaysDate.getUTCDate() + 30)
-  const thirtyDays = thirtyDaysDate.toISOString().slice(0, 10)
+export function HomeDashboard({ snapshot, inbox, actorEmail }: HomeDashboardProps) {
   const assigned = inbox.items.filter((item) => !item.isCompleted && (item.actionable || item.ownerEmail?.toLowerCase() === actorEmail.toLowerCase()))
   const decisions = assigned.filter((item) => item.requiresDecision && item.actionable)
   const overdue = assigned.filter((item) => item.slaStatus === "overdue")
+  const reimbursements = assigned.filter((item) => item.type === "reimbursement")
   const attention = [...assigned].sort((left, right) => urgency(left) - urgency(right) || (left.dueDate ?? "9999").localeCompare(right.dueDate ?? "9999")).slice(0, 6)
-  const employeeNames = new Map(analytics.employees.map((employee) => [employee.employee_id, `${employee.preferred_name || employee.first_name || employee.employee_id} ${employee.last_name || ""}`.trim()]))
-  const upcoming = [
-    ...analytics.employees.filter((person) => person.hire_date >= today && person.hire_date <= thirtyDays).map((person) => ({ id: `start-${person.employee_id}`, date: person.hire_date, title: `${employeeNames.get(person.employee_id)} starts`, detail: `${person.job_title} · ${person.department}`, href: withReturnTo(`/people/${encodeURIComponent(person.employee_id)}`, "/") })),
-    ...leave.upcoming.filter((request) => request.startDate >= today && request.startDate <= thirtyDays && request.status.toLowerCase() === "approved").map((request) => ({ id: `leave-${request.id}`, date: request.startDate, title: `${request.leaveType} leave begins`, detail: `${request.employeeName} · ${request.department}`, href: withReturnTo(`/leaves?request=${encodeURIComponent(request.id)}`, "/") })),
-    ...learning.assignments.filter((assignment) => assignment.isMandatory && assignment.status.toLowerCase() !== "completed" && assignment.dueDate && assignment.dueDate >= today && assignment.dueDate <= thirtyDays).map((assignment) => ({ id: `training-${assignment.id}`, date: assignment.dueDate as string, title: `${assignment.courseTitle} due`, detail: assignment.employeeName, href: withReturnTo(`/courses?assignment=${encodeURIComponent(assignment.id)}`, "/") })),
-  ].sort((left, right) => left.date.localeCompare(right.date)).slice(0, 6)
+  const upcoming = snapshot.upcoming
 
   return (
     <WorkspacePage>
@@ -75,8 +63,9 @@ export function HomeDashboard({ analytics, inbox, leave, learning, actorEmail }:
       <MetricStrip metrics={[
         { label: "Assigned to you", value: assigned.length.toLocaleString(), detail: `${overdue.length} overdue` },
         { label: "Awaiting decision", value: decisions.length.toLocaleString(), detail: "Requests you can decide" },
-        { label: "Away today", value: leave.summary.awayToday.toLocaleString(), detail: `${analytics.kpis.activeEmployees.toLocaleString()} active employees` },
-        { label: "Open requisitions", value: analytics.hiring.activeRequisitions.toLocaleString(), detail: `${analytics.hiring.offers} at offer` },
+        { label: "Away today", value: snapshot.awayToday.toLocaleString(), detail: `${snapshot.activeEmployees.toLocaleString()} active employees` },
+        { label: "Open requisitions", value: snapshot.activeRequisitions.toLocaleString(), detail: `${snapshot.offers} at offer` },
+        { label: "Reimbursements", value: reimbursements.length.toLocaleString(), detail: "Claims requiring review" },
       ]} />
 
       <Card className="gap-0 overflow-hidden py-0 shadow-none">
@@ -107,7 +96,7 @@ export function HomeDashboard({ analytics, inbox, leave, learning, actorEmail }:
       <Card className="gap-0 overflow-hidden py-0 shadow-none">
         <WorkspaceSectionHeader title="Upcoming" description="Starts, approved leave, and mandatory learning due in the next 30 days." />
         <CardContent className="divide-y divide-border p-0">
-          {upcoming.length ? upcoming.map((event) => <Link key={event.id} href={event.href} className="flex items-center gap-4 px-4 py-3 hover:bg-muted/20"><span className="min-w-0 flex-1"><span className="block truncate font-semibold">{event.title}</span><span className="block truncate text-meta text-muted-foreground">{event.detail}</span></span><time className="shrink-0 text-meta text-muted-foreground">{readableDate(event.date)}</time></Link>) : <p className="px-5 py-8 text-center text-muted-foreground">No workforce events are scheduled in the next 30 days.</p>}
+          {upcoming.length ? upcoming.map((event) => <Link key={event.id} href={withReturnTo(event.href, "/")} className="flex items-center gap-4 px-4 py-3 hover:bg-muted/20"><span className="min-w-0 flex-1"><span className="block truncate font-semibold">{event.title}</span><span className="block truncate text-meta text-muted-foreground">{event.detail}</span></span><time className="shrink-0 text-meta text-muted-foreground">{readableDate(event.date)}</time></Link>) : <p className="px-5 py-8 text-center text-muted-foreground">No workforce events are scheduled in the next 30 days.</p>}
         </CardContent>
       </Card>
     </WorkspacePage>

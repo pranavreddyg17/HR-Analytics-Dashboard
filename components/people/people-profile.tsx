@@ -21,13 +21,14 @@ import { formatWorkspaceDateTime } from "@/lib/date-format"
 import { WorkspacePage } from "@/components/workspace-ui"
 import { safeReturnTo } from "@/lib/navigation"
 
-type ProfileTab = "overview" | "job" | "time-off" | "growth" | "activity"
+type ProfileTab = "overview" | "job" | "time-off" | "growth" | "management" | "activity"
 
 const tabs: Array<{ id: ProfileTab; label: string }> = [
   { id: "overview", label: "Overview" },
   { id: "job", label: "Job" },
   { id: "time-off", label: "Leave" },
   { id: "growth", label: "Growth" },
+  { id: "management", label: "Management" },
   { id: "activity", label: "Activity" },
 ]
 
@@ -80,6 +81,7 @@ export function PeopleProfile({ employeeId, returnTo }: { employeeId: string; re
 
   const employee = data.employee
   const backHref = safeReturnTo(returnTo, "/people")
+  const visibleTabs = tabs.filter((item) => item.id !== "management" || data.permissions.canManageEmployment || data.permissions.canManageMeetings)
   return (
     <WorkspacePage>
       <div className="flex items-center justify-between gap-3">
@@ -104,7 +106,7 @@ export function PeopleProfile({ employeeId, returnTo }: { employeeId: string; re
 
         <div className="overflow-x-auto border-t border-border/60 px-3 sm:px-5">
           <nav aria-label="Employee profile sections" className="flex min-w-max gap-1">
-            {tabs.map((item) => {
+            {visibleTabs.map((item) => {
               const active = tab === item.id
               return <button key={item.id} type="button" onClick={() => setTab(item.id)} className={cn("-mb-px border-b-2 px-3 py-2.5 text-sm font-semibold", active ? "border-primary text-foreground" : "border-transparent text-muted-foreground hover:text-foreground")}>{item.label}</button>
             })}
@@ -117,6 +119,7 @@ export function PeopleProfile({ employeeId, returnTo }: { employeeId: string; re
           {tab === "job" && <JobTab data={data} />}
           {tab === "time-off" && <TimeOffTab data={data} />}
           {tab === "growth" && <GrowthTab data={data} />}
+          {tab === "management" && <ManagementTab data={data} onChanged={refreshProfile} />}
           {tab === "activity" && <ActivityTab data={data} />}
       </div>
 
@@ -134,10 +137,73 @@ export function PeopleProfile({ employeeId, returnTo }: { employeeId: string; re
   )
 }
 
+const managementFieldClass = "mt-1 h-9 w-full rounded-md border border-border bg-background px-3 text-control font-normal outline-none focus:ring-2 focus:ring-primary/20"
+const managementTextAreaClass = "mt-1 min-h-24 w-full resize-y rounded-md border border-border bg-background px-3 py-2 text-control font-normal outline-none focus:ring-2 focus:ring-primary/20"
+
+function ManagementTab({ data, onChanged }: { data: EmployeeProfileResponse; onChanged: () => void }) {
+  const [busy, setBusy] = useState(false)
+  const [message, setMessage] = useState("")
+  const endpoint = `/api/v1/hr/people/${encodeURIComponent(data.employee.employee_id)}/management`
+  const today = new Date().toISOString().slice(0, 10)
+  const scheduledMeetings = data.meetings.filter((meeting) => String(meeting.status) === "scheduled")
+
+  async function submit(payload: Record<string, unknown>, form?: HTMLFormElement) {
+    setBusy(true); setMessage("")
+    try {
+      const response = await fetch(endpoint, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(payload) })
+      const body = await response.json() as { error?: string; message?: string }
+      if (!response.ok) throw new Error(body.error ?? "The employee record could not be updated.")
+      setMessage(body.message ?? "Employee record updated.")
+      form?.reset()
+      onChanged()
+    } catch (reason) { setMessage(reason instanceof Error ? reason.message : "The employee record could not be updated.") }
+    finally { setBusy(false) }
+  }
+
+  const value = (form: FormData, name: string) => String(form.get(name) ?? "").trim()
+  return <div className="space-y-4">
+    {message && <div className="rounded-md border border-border bg-background px-4 py-3 text-body" role="status">{message}</div>}
+    {data.permissions.canManageMeetings && <Card className="gap-0 overflow-hidden rounded-lg border-border/70 shadow-none">
+      <SectionHeader title="One-on-ones" detail="Schedule meetings, prepare a synopsis, and approve the follow-up before an email draft is created." />
+      <div className="grid gap-5 p-5 lg:grid-cols-2">
+        <form className="space-y-3" onSubmit={(event) => { event.preventDefault(); const form = event.currentTarget; const values = new FormData(form); const raw = value(values, "scheduledAt"); void submit({ action: "schedule_one_on_one", scheduledAt: new Date(raw).toISOString() }, form) }}>
+          <p className="text-card-title font-semibold">Schedule meeting</p>
+          <label className="block text-label text-muted-foreground">Date and time<input className={managementFieldClass} type="datetime-local" name="scheduledAt" required /></label>
+          <Button size="sm" disabled={busy}>Schedule</Button>
+        </form>
+        <form className="space-y-3" onSubmit={(event) => { event.preventDefault(); const form = event.currentTarget; const values = new FormData(form); void submit({ action: "complete_one_on_one", meetingId: value(values, "meetingId"), employeeNotes: value(values, "employeeNotes"), managerNotes: value(values, "managerNotes") }, form) }}>
+          <p className="text-card-title font-semibold">Record outcome</p>
+          <label className="block text-label text-muted-foreground">Scheduled meeting<select className={managementFieldClass} name="meetingId" required defaultValue=""><option value="" disabled>Select meeting</option>{scheduledMeetings.map((meeting) => <option key={String(meeting.id)} value={String(meeting.id)}>{formatWorkspaceDateTime(String(meeting.scheduled_at))}</option>)}</select></label>
+          <label className="block text-label text-muted-foreground">Employee notes<textarea className={managementTextAreaClass} name="employeeNotes" maxLength={10000} /></label>
+          <label className="block text-label text-muted-foreground">Manager notes<textarea className={managementTextAreaClass} name="managerNotes" minLength={20} maxLength={10000} required /></label>
+          <Button size="sm" disabled={busy || !scheduledMeetings.length}>Prepare synopsis</Button>
+        </form>
+      </div>
+      <div className="border-t border-border/60">
+        {data.meetings.length ? data.meetings.map((meeting) => <div key={String(meeting.id)} className="grid gap-2 border-b border-border/60 px-5 py-3 last:border-0 lg:grid-cols-[180px_100px_1fr_auto] lg:items-start"><p className="text-body font-semibold">{formatWorkspaceDateTime(String(meeting.scheduled_at))}</p><RecordStatus status={String(meeting.status)} /><p className="text-body text-muted-foreground">{meeting.ai_summary ? String(meeting.ai_summary) : "No synopsis recorded."}</p>{meeting.ai_summary && !meeting.summary_approved_at ? <Button size="sm" variant="outline" disabled={busy} onClick={() => void submit({ action: "approve_one_on_one_summary", meetingId: String(meeting.id) })}>Approve follow-up</Button> : <span className="text-meta text-muted-foreground">{meeting.summary_approved_at ? "Approved" : ""}</span>}</div>) : <p className="px-5 py-8 text-center text-body text-muted-foreground">No one-on-ones recorded.</p>}
+      </div>
+    </Card>}
+
+    {data.permissions.canManageEmployment && <div className="grid gap-4 xl:grid-cols-3">
+      <form className="surface-card p-5" onSubmit={(event) => { event.preventDefault(); const form = event.currentTarget; const values = new FormData(form); void submit({ action: "set_compensation", annualSalary: Number(value(values, "annualSalary")), currency: value(values, "currency"), payFrequency: value(values, "payFrequency"), effectiveFrom: value(values, "effectiveFrom") }, form) }}>
+        <h3 className="text-section-title">Compensation</h3><div className="mt-4 space-y-3"><label className="block text-label text-muted-foreground">Annual amount<input className={managementFieldClass} type="number" name="annualSalary" min="0" step="0.01" required /></label><div className="grid grid-cols-2 gap-2"><label className="block text-label text-muted-foreground">Currency<input className={managementFieldClass} name="currency" defaultValue="USD" maxLength={3} required /></label><label className="block text-label text-muted-foreground">Frequency<select className={managementFieldClass} name="payFrequency" defaultValue="annual"><option value="annual">Annual</option><option value="monthly">Monthly</option><option value="biweekly">Biweekly</option><option value="weekly">Weekly</option><option value="hourly">Hourly</option></select></label></div><label className="block text-label text-muted-foreground">Effective date<input className={managementFieldClass} type="date" name="effectiveFrom" defaultValue={today} required /></label><Button size="sm" disabled={busy}>Save compensation</Button></div>
+      </form>
+      <form className="surface-card p-5" onSubmit={(event) => { event.preventDefault(); const form = event.currentTarget; const values = new FormData(form); void submit({ action: "assign_project", projectCode: value(values, "projectCode"), projectName: value(values, "projectName"), clientName: value(values, "clientName") || null, roleTitle: value(values, "roleTitle"), allocationPercent: Number(value(values, "allocationPercent")), startsOn: value(values, "startsOn"), endsOn: value(values, "endsOn") || null, isPrimary: values.get("isPrimary") === "on" }, form) }}>
+        <h3 className="text-section-title">Project assignment</h3><div className="mt-4 space-y-3"><div className="grid grid-cols-2 gap-2"><label className="block text-label text-muted-foreground">Project code<input className={managementFieldClass} name="projectCode" maxLength={40} required /></label><label className="block text-label text-muted-foreground">Allocation %<input className={managementFieldClass} type="number" name="allocationPercent" min="1" max="100" defaultValue="100" required /></label></div><label className="block text-label text-muted-foreground">Project name<input className={managementFieldClass} name="projectName" maxLength={160} required /></label><label className="block text-label text-muted-foreground">Client<input className={managementFieldClass} name="clientName" maxLength={160} /></label><label className="block text-label text-muted-foreground">Role<input className={managementFieldClass} name="roleTitle" defaultValue={data.employee.job_title} maxLength={160} required /></label><div className="grid grid-cols-2 gap-2"><label className="block text-label text-muted-foreground">Starts<input className={managementFieldClass} type="date" name="startsOn" defaultValue={today} required /></label><label className="block text-label text-muted-foreground">Ends<input className={managementFieldClass} type="date" name="endsOn" /></label></div><label className="flex items-center gap-2 text-body"><input type="checkbox" name="isPrimary" />Primary assignment</label><Button size="sm" disabled={busy}>Assign project</Button></div>
+      </form>
+      <form className="surface-card p-5" onSubmit={(event) => { event.preventDefault(); const form = event.currentTarget; const values = new FormData(form); void submit({ action: "create_review", cycleName: value(values, "cycleName"), startsOn: value(values, "startsOn"), endsOn: value(values, "endsOn") }, form) }}>
+        <h3 className="text-section-title">Performance review</h3><div className="mt-4 space-y-3"><label className="block text-label text-muted-foreground">Cycle name<input className={managementFieldClass} name="cycleName" maxLength={160} required /></label><label className="block text-label text-muted-foreground">Starts<input className={managementFieldClass} type="date" name="startsOn" defaultValue={today} required /></label><label className="block text-label text-muted-foreground">Ends<input className={managementFieldClass} type="date" name="endsOn" required /></label><Button size="sm" disabled={busy}>Assign review</Button></div>
+      </form>
+    </div>}
+    {data.permissions.canManageEmployment && <Card className="gap-0 overflow-hidden rounded-lg border-border/70 shadow-none"><SectionHeader title="Employee documents" detail="Private files associated with this employee record." /><div className="divide-y divide-border/60">{data.documents.length ? data.documents.map((document) => <div key={String(document.id)} className="grid gap-2 px-5 py-3 sm:grid-cols-[1fr_160px_auto] sm:items-center"><div><p className="text-card-title font-semibold">{String(document.file_name)}</p><p className="text-meta capitalize text-muted-foreground">{String(document.document_type).replaceAll("_", " ")}</p></div><span className="text-meta text-muted-foreground">{formatWorkspaceDateTime(String(document.created_at))}</span><a className="text-button" href={`/api/v1/employee/documents?id=${encodeURIComponent(String(document.id))}`}>Download</a></div>) : <p className="px-5 py-8 text-center text-body text-muted-foreground">No documents uploaded.</p>}</div></Card>}
+  </div>
+}
+
 function OverviewTab({ data }: { data: EmployeeProfileResponse }) {
   const { employee } = data
   const latestLeave = data.leave[0]
   const completedTraining = data.training.filter((item) => item.completion_status.toLowerCase() === "completed").length
+  const currentProject = data.projects.find((item) => Boolean(item.is_primary)) ?? data.projects.find((item) => String(item.status) === "active")
   return <div className="grid gap-5 xl:grid-cols-[1.25fr_.75fr]">
     <div className="grid gap-5 md:grid-cols-2">
       <InfoCard title="Contact">
@@ -158,6 +224,8 @@ function OverviewTab({ data }: { data: EmployeeProfileResponse }) {
         <InfoLine label="Tenure" value={`${employee.tenure_years.toFixed(1)} years`} />
         <InfoLine label="Training" value={`${completedTraining} of ${data.training.length} complete`} />
         <InfoLine label="Latest time off" value={latestLeave ? `${latestLeave.leave_type} · ${formatDate(latestLeave.start_date)}` : "No leave recorded"} />
+        <InfoLine label="Current project" value={currentProject ? String(currentProject.name) : "Not assigned"} />
+        {data.compensation && <InfoLine label="Annual salary" value={formatMoney(data.compensation.annual_salary, data.compensation.currency)} />}
       </InfoCard>
     </div>
     <Card className="gap-0 overflow-hidden rounded-lg border-border/70 shadow-none">
@@ -178,6 +246,7 @@ function JobTab({ data }: { data: EmployeeProfileResponse }) {
         <InfoLine label="Employment type" value={employee.employment_type} />
       </InfoCard>
       <InfoCard title="Manager">{data.manager ? <PersonLink employee={data.manager} detail={data.manager.job_title} /> : <p className="text-sm text-muted-foreground">No manager assigned</p>}</InfoCard>
+      <InfoCard title="Project assignments">{data.projects.length ? data.projects.map((project) => <div key={String(project.id)} className="border-b border-border/60 pb-3 last:border-0 last:pb-0"><div className="flex items-center justify-between gap-3"><p className="text-sm font-semibold">{String(project.name)}</p><span className="text-xs text-muted-foreground">{String(project.allocation_percent)}%</span></div><p className="mt-1 text-xs text-muted-foreground">{String(project.role_title)}{Boolean(project.client_name) ? ` · ${String(project.client_name)}` : ""}</p></div>) : <p className="text-sm text-muted-foreground">No project assignments recorded</p>}</InfoCard>
     </div>
     <Card className="gap-0 overflow-hidden rounded-lg border-border/70 shadow-none">
       <SectionHeader title="Team" detail={plural(data.directReports.length, "direct report")} />
@@ -240,6 +309,12 @@ function SectionHeader({ title, detail }: { title: string; detail?: string }) {
 function InfoLine({ label, value, href }: { label: string; value: string; href?: string }) {
   const content = <><span className="text-xs text-muted-foreground">{label}</span><span className={cn("max-w-[65%] truncate text-right text-sm font-semibold", href && "text-primary")}>{value}</span></>
   return href ? <a href={href} className="flex items-center justify-between gap-4 hover:underline">{content}</a> : <div className="flex items-center justify-between gap-4">{content}</div>
+}
+
+function formatMoney(value: unknown, currency: unknown): string {
+  const amount = Number(value)
+  if (!Number.isFinite(amount)) return "Not recorded"
+  return new Intl.NumberFormat("en", { style: "currency", currency: String(currency || "USD"), maximumFractionDigits: 0 }).format(amount)
 }
 
 function PersonLink({ employee, detail, roomy = false }: { employee: ManagedEmployee; detail: string; roomy?: boolean }) {

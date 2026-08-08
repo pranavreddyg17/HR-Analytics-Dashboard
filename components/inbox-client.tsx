@@ -34,9 +34,11 @@ const domainOptions: Array<{ id: DomainFilter; label: string }> = [
   { id: "hiring", label: "Hiring" },
   { id: "training", label: "Learning" },
   { id: "insight", label: "Insights" },
+  { id: "reimbursement", label: "Reimbursements" },
+  { id: "case", label: "Employee requests" },
 ]
 
-const domainLabel: Record<InboxItem["type"], string> = { leave: "Leave", hiring: "Hiring", training: "Learning", insight: "Insights" }
+const domainLabel: Record<InboxItem["type"], string> = { leave: "Leave", hiring: "Hiring", training: "Learning", insight: "Insights", reimbursement: "Reimbursement", case: "Employee request" }
 const PAGE_SIZE = 10
 const inputClass = "h-9 w-full rounded-md border border-border bg-background px-3 text-control outline-none focus:border-ring focus:ring-2 focus:ring-ring/20"
 const textareaClass = "min-h-20 w-full resize-y rounded-md border border-border bg-background px-3 py-2.5 text-control outline-none focus:border-ring focus:ring-2 focus:ring-ring/20"
@@ -138,7 +140,7 @@ function ActionDialog({ pending, leave, note, score, busy, error, onActionChange
     <button type="button" aria-label="Close action" className="absolute inset-0 bg-slate-950/45" onClick={() => !busy && onClose()} />
     <form onSubmit={onSubmit} className="relative max-h-[92dvh] w-full max-w-lg overflow-y-auto rounded-lg border border-border bg-background shadow-xl">
       <header className="border-b border-border px-5 py-4 pr-14">
-        <h2 className="text-section font-semibold">{isDecision ? item.type === "leave" ? "Leave decision" : "Headcount decision" : "Record course completion"}</h2>
+        <h2 className="text-section font-semibold">{isDecision ? item.type === "leave" ? "Leave decision" : item.type === "reimbursement" ? "Reimbursement decision" : "Headcount decision" : item.type === "case" ? "Resolve employee request" : "Record course completion"}</h2>
         <p className="mt-0.5 text-description text-muted-foreground">{item.title}{item.person ? ` · ${item.person}` : ""}</p>
       </header>
       <button type="button" aria-label="Close" onClick={onClose} className="absolute right-5 top-5 text-muted-foreground hover:text-foreground"><X className="size-4" /></button>
@@ -157,12 +159,12 @@ function ActionDialog({ pending, leave, note, score, busy, error, onActionChange
         </div>}
 
         {item.type === "training" && <label className="block"><span className="mb-1.5 block text-label font-semibold">Assessment score</span><input type="number" min="0" max="100" step="1" value={score} onChange={(event) => onScoreChange(event.target.value)} className={inputClass} placeholder="Optional, 0–100" /></label>}
-        <label className="block"><span className="mb-1.5 block text-label font-semibold">{declineNeedsReason ? "Reason" : item.type === "training" ? "Completion note" : "Decision note"}</span><textarea required={declineNeedsReason} minLength={declineNeedsReason ? 10 : undefined} value={note} onChange={(event) => onNoteChange(event.target.value)} className={textareaClass} placeholder={declineNeedsReason ? "Record a clear reason for the requester and audit history" : "Optional context for the audit history"} /></label>
+        <label className="block"><span className="mb-1.5 block text-label font-semibold">{declineNeedsReason ? "Reason" : item.type === "training" ? "Completion note" : item.type === "case" ? "Resolution" : "Decision note"}</span><textarea required={declineNeedsReason || item.type === "case"} minLength={declineNeedsReason || item.type === "case" ? 10 : undefined} value={note} onChange={(event) => onNoteChange(event.target.value)} className={textareaClass} placeholder={declineNeedsReason ? "Record a clear reason for the requester and audit history" : item.type === "case" ? "Record the resolution shared with the employee" : "Optional context for the audit history"} /></label>
         {error && <p role="alert" className="text-meta text-destructive">{error}</p>}
       </div>
       <footer className="flex justify-end gap-2 border-t border-border px-5 py-4">
         <Button type="button" variant="ghost" onClick={onClose} disabled={busy}>Cancel</Button>
-        <Button type="submit" variant={action === "reject" ? "destructive" : "default"} disabled={busy || declineNeedsReason && note.trim().length < 10}>{busy && <LoaderCircle className="size-4 animate-spin" />}{action === "approve" ? "Approve request" : action === "reject" ? "Decline request" : "Record completion"}</Button>
+        <Button type="submit" variant={action === "reject" ? "destructive" : "default"} disabled={busy || (declineNeedsReason || item.type === "case") && note.trim().length < 10}>{busy && <LoaderCircle className="size-4 animate-spin" />}{action === "approve" ? "Approve request" : action === "reject" ? "Decline request" : item.type === "case" ? "Resolve request" : "Record completion"}</Button>
       </footer>
     </form>
   </div>

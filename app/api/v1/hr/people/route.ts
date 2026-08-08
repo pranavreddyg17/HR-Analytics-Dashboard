@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server"
 import { ZodError } from "zod"
 
 import { createPerson, listPeople, PeopleError } from "@/lib/server/people"
-import { requireRequestActor, requireRole } from "@/lib/server/request-user"
+import { requireRole } from "@/lib/server/request-user"
 
 export const dynamic = "force-dynamic"
 
@@ -16,7 +16,7 @@ function failure(error: unknown) {
 
 export async function GET(request: NextRequest) {
   try {
-    await requireRequestActor(request)
+    await requireRole(request, ["admin", "hr", "manager", "viewer"])
     const params = request.nextUrl.searchParams
     return NextResponse.json(await listPeople({
       search: params.get("search") ?? "",

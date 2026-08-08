@@ -30,13 +30,16 @@ export async function POST(request: Request) {
           void (async () => {
             try {
               controller.enqueue(event("conversation", { conversationId: conversation.id }))
-              controller.enqueue(event("status", { message: "Reviewing workspace records" }))
-              const answer = await runHrAgent({ message: body.message, history })
-              controller.enqueue(event("status", { message: "Preparing response" }))
+              const answer = await runHrAgent({
+                message: body.message,
+                history,
+                actorEmail: actor.email,
+                conversationId: conversation.id,
+                onProgress: (progress) => { controller.enqueue(event("progress", progress)) },
+              })
               const chunks = answer.answer.match(/[\s\S]{1,72}/g) ?? [answer.answer]
               for (const chunk of chunks) {
                 controller.enqueue(event("delta", { text: chunk }))
-                await new Promise((resolve) => setTimeout(resolve, 8))
               }
               await appendConversationMessage(actor, conversation.id, {
                 role: "assistant",
@@ -72,7 +75,7 @@ export async function POST(request: Request) {
       })
     }
 
-    const answer = await runHrAgent({ message: body.message, history })
+    const answer = await runHrAgent({ message: body.message, history, actorEmail: actor.email, conversationId: conversation.id })
     await appendConversationMessage(actor, conversation.id, {
       role: "assistant",
       content: answer.answer,

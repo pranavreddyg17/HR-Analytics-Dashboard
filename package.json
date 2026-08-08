@@ -13,9 +13,12 @@
     "lint": "eslint . --ignore-pattern dist --ignore-pattern .next",
     "db:generate": "drizzle-kit generate",
     "test:backend": "cd backend && PYTHONPATH=. .venv/bin/python -m pytest -q",
-    "test:live": "node --test tests/api-live.test.mjs"
+    "test:live": "node --test tests/api-live.test.mjs",
+    "ai:sync": "node scripts/sync-ai-search.mjs"
   },
   "dependencies": {
+    "@azure/identity": "^4.13.1",
+    "@azure/storage-blob": "^12.33.0",
     "@base-ui/react": "^1.5.0",
     "@langchain/core": "^1.2.4",
     "@langchain/langgraph": "^1.4.8",

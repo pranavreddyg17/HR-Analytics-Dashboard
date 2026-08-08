@@ -8,7 +8,9 @@ import { resolveHrIntent, type AgentHistoryMessage, type ToolPlan } from "@/lib/
 import { renderHrEvidence } from "@/lib/server/hr-agent-response"
 import { getWorkforceAnalytics } from "@/lib/server/hr-analytics"
 import { createHrMcpServer } from "@/lib/server/hr-mcp"
+import { ensureHrDatabase } from "@/lib/server/hr-database"
 import { runtimeEnv } from "@/lib/server/runtime-env"
+import { synthesizeWithAzureResponses } from "@/lib/server/azure-ai"
 
 type ToolTrace = {
   tool: string
@@ -31,12 +33,26 @@ type AgentAnswer = {
   groundedAt: string
 }
 
+export type AgentProgress =
+  | { phase: "planning"; message: string }
+  | { phase: "tool_started"; tool: string; iteration: number }
+  | { phase: "tool_completed"; tool: string; iteration: number; durationMs: number }
+  | { phase: "synthesis"; message: string }
+
 type EvidenceResult = {
   plan: ToolPlan
   data: Record<string, unknown>
 }
 
 const outOfScopeResponse = "I can help with workforce analytics, HR data questions, or model explanations from the available workspace data. For operational decisions, I recommend human review."
+
+const agentFocus: Record<string, string> = {
+  "workforce-intelligence": "Focus on workforce headcount, movement, departmental comparison, operating coverage, and data quality",
+  "retention-planner": "Focus on attrition and retention evidence, model contributors, mobility context, learning context, and a practical human-reviewed retention plan",
+  "recruiting-operations": "Focus on hiring requisitions, candidate pipeline, recruiting ownership, overdue work, and replacement coverage",
+  "learning-compliance": "Focus on learning assignments, mandatory compliance gaps, course completion, and development context",
+  "people-operations": "Focus on employee records, leave, promotions, mobility, and cross-domain people operations",
+}
 
 function contentToJson(value: unknown): Record<string, unknown> {
   if (typeof value === "string") {
@@ -88,7 +104,7 @@ function evidenceContext(data: Record<string, unknown>): ToolTrace["resultContex
 }
 
 function followUpEvidencePlans(evidence: EvidenceResult[], iteration: number): ToolPlan[] {
-  if (iteration !== 1) return []
+  if (iteration > 2) return []
   const retention = evidence.find((item) => item.plan.purpose === "attrition_record_retention_plan")
   if (!retention) return []
   const employeeIds = Array.isArray(retention.data.joinedEmployeeRecords)
@@ -101,8 +117,8 @@ function followUpEvidencePlans(evidence: EvidenceResult[], iteration: number): T
   if (!employeeIds.length) return []
   return [{
     name: "review_people_operations",
-    input: { domain: "promotions", employeeIds },
-    purpose: "retention_mobility_context",
+    input: { domain: iteration === 1 ? "promotions" : "training", employeeIds },
+    purpose: iteration === 1 ? "retention_mobility_context" : "retention_learning_context",
     limit: employeeIds.length,
   }]
 }
@@ -132,6 +148,15 @@ async function synthesizeWithModel({
   draft: string
   systemPrompt: string
 }): Promise<string | null> {
+  const synthesisInstruction = `${systemPrompt}\n\nYou are synthesizing a completed, deterministic tool result. Use only the supplied draft. Preserve every number and data-source qualification. Do not add facts, repeat sections, or mention tools. Return a concise answer beginning with the same Current source line.`
+  const userContent = `Question:\n${query}\n\nGrounded draft:\n${draft}`
+  const azureAnswer = await synthesizeWithAzureResponses({ system: synthesisInstruction, user: userContent }).catch(() => null)
+  if (azureAnswer) {
+    const draftSource = draft.split("\n", 1)[0]
+    const allowedNumbers = numericTokens(draft)
+    const introducedNumber = [...numericTokens(azureAnswer)].some((token) => !allowedNumbers.has(token))
+    if (azureAnswer.length <= 6_000 && azureAnswer.split("\n", 1)[0] === draftSource && !introducedNumber) return azureAnswer
+  }
   const apiKey = getWorkerSecret("OPENAI_API_KEY")
   if (!apiKey) return null
   try {
@@ -139,9 +164,9 @@ async function synthesizeWithModel({
     const response = await model.invoke([
       {
         role: "system",
-        content: `${systemPrompt}\n\nYou are synthesizing a completed, deterministic tool result. Use only the supplied draft. Preserve every number and data-source qualification. Do not add facts, repeat sections, or mention tools. Return a concise answer beginning with the same Current source line.`,
+        content: synthesisInstruction,
       },
-      { role: "user", content: `Question:\n${query}\n\nGrounded draft:\n${draft}` },
+      { role: "user", content: userContent },
     ])
     const answer = messageText(response).trim()
     const draftSource = draft.split("\n", 1)[0]
@@ -155,7 +180,39 @@ async function synthesizeWithModel({
   }
 }
 
-export async function runHrAgent({ message, history = [] }: { message: unknown; history?: AgentHistoryMessage[] }): Promise<AgentAnswer> {
+async function startRun(input: { actorEmail?: string; conversationId?: string; agentId?: string; objective: string }): Promise<string | null> {
+  if (!input.actorEmail) return null
+  try {
+    const database = await ensureHrDatabase()
+    if (!database) return null
+    const id = `AGENT-${crypto.randomUUID().slice(0, 12).toUpperCase()}`
+    await database.prepare(`INSERT INTO agent_runs(id, agent_id, actor_email, conversation_id, objective, status, provider) VALUES (?, ?, ?, ?, ?, 'running', 'langchain-mcp')`)
+      .bind(id, input.agentId ?? "workforce-intelligence", input.actorEmail, input.conversationId ?? null, input.objective).run()
+    return id
+  } catch { return null }
+}
+
+async function recordRunStep(runId: string | null, stepNumber: number, trace: ToolTrace) {
+  if (!runId) return
+  try {
+    const database = await ensureHrDatabase()
+    if (!database) return
+    await database.prepare(`INSERT INTO agent_run_steps(id, run_id, step_number, tool_name, input_json, output_summary, status, duration_ms) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`)
+      .bind(crypto.randomUUID(), runId, stepNumber, trace.tool, JSON.stringify(trace.input), trace.resultContext ? JSON.stringify(trace.resultContext) : null, trace.status, trace.durationMs).run()
+  } catch { /* Audit persistence must not hide a valid grounded answer. */ }
+}
+
+async function finishRun(runId: string | null, status: "completed" | "failed", provider?: string) {
+  if (!runId) return
+  try {
+    const database = await ensureHrDatabase()
+    if (!database) return
+    await database.prepare("UPDATE agent_runs SET status=?, provider=COALESCE(?, provider), completed_at=CURRENT_TIMESTAMP WHERE id=?")
+      .bind(status, provider ?? null, runId).run()
+  } catch { /* Best-effort operational audit. */ }
+}
+
+export async function runHrAgent({ message, history = [], actorEmail, conversationId, agentId, onProgress }: { message: unknown; history?: AgentHistoryMessage[]; actorEmail?: string; conversationId?: string; agentId?: string; onProgress?: (progress: AgentProgress) => void | Promise<void> }): Promise<AgentAnswer> {
   if (typeof message !== "string" || !message.trim() || message.length > 2000) throw new Error("message must contain between 1 and 2,000 characters.")
   const query = message.trim()
   if (/^(?:hi|hello|hey|good (?:morning|afternoon|evening))[!.?\s]*$/i.test(query)) {
@@ -167,15 +224,23 @@ export async function runHrAgent({ message, history = [] }: { message: unknown; 
       groundedAt: new Date().toISOString(),
     }
   }
+  const runId = await startRun({ actorEmail, conversationId, agentId, objective: query })
   const safeHistory = history
     .filter((item): item is AgentHistoryMessage => Boolean(item) && (item.role === "user" || item.role === "assistant") && typeof item.content === "string")
     .slice(-12)
   const dimensions = (await getWorkforceAnalytics()).dimensions
+  await onProgress?.({ phase: "planning", message: "Selecting workspace evidence" })
+  const focus = agentId ? agentFocus[agentId] : undefined
+  // Intent routing must reflect the user's objective, not the agent's role
+  // description. Mixing the two can select an unrelated MCP schema (for
+  // example, a generic workforce objective being treated as a comparison).
   const intent = resolveHrIntent(query, safeHistory, dimensions)
-  const { prompt, context } = buildHrSystemPrompt(intent.contextQuery)
+  const { prompt: basePrompt, context } = await buildHrSystemPrompt(intent.contextQuery)
+  const prompt = focus ? `${basePrompt}\n\nSpecialized agent scope: ${focus}.` : basePrompt
   const citedContext = context.map(({ source, section }) => ({ source, section }))
 
   if (!intent.inScope || !intent.plans.length) {
+    await finishRun(runId, "completed", "scope-guard")
     return { answer: outOfScopeResponse, provider: "scope-guard", tools: [], context: citedContext, groundedAt: new Date().toISOString() }
   }
 
@@ -183,40 +248,51 @@ export async function runHrAgent({ message, history = [] }: { message: unknown; 
   const traces: ToolTrace[] = []
   try {
     const evidence: EvidenceResult[] = []
+    let stepNumber = 0
     let pendingPlans = intent.plans
-    for (let iteration = 1; iteration <= 2 && pendingPlans.length; iteration += 1) {
-      const iterationEvidence: EvidenceResult[] = []
+    for (let iteration = 1; iteration <= 3 && pendingPlans.length; iteration += 1) {
       for (const plan of pendingPlans) {
         const tool = mcp.tools.find((candidate) => candidate.name === plan.name)
         if (!tool) continue
         const started = Date.now()
+        await onProgress?.({ phase: "tool_started", tool: plan.name, iteration })
         try {
           const output = await tool.invoke(plan.input)
           const data = contentToJson(output)
           const item = { plan, data }
           evidence.push(item)
-          iterationEvidence.push(item)
-          traces.push({ tool: plan.name, input: plan.input, iteration, resultContext: evidenceContext(data), durationMs: Date.now() - started, status: "completed" })
+          const trace: ToolTrace = { tool: plan.name, input: plan.input, iteration, resultContext: evidenceContext(data), durationMs: Date.now() - started, status: "completed" }
+          traces.push(trace)
+          await recordRunStep(runId, ++stepNumber, trace)
+          await onProgress?.({ phase: "tool_completed", tool: plan.name, iteration, durationMs: trace.durationMs })
         } catch (error) {
-          traces.push({ tool: plan.name, input: plan.input, iteration, durationMs: Date.now() - started, status: "failed" })
+          const trace: ToolTrace = { tool: plan.name, input: plan.input, iteration, durationMs: Date.now() - started, status: "failed" }
+          traces.push(trace)
+          await recordRunStep(runId, ++stepNumber, trace)
           throw error
         }
       }
-      pendingPlans = followUpEvidencePlans(iterationEvidence, iteration)
+      pendingPlans = followUpEvidencePlans(evidence, iteration)
     }
 
     const draft = evidence.map(({ plan, data }) => renderHrEvidence(plan, data)).join("\n\n")
+    await onProgress?.({ phase: "synthesis", message: "Preparing grounded response" })
     const synthesized = await synthesizeWithModel({ query, draft, systemPrompt: prompt })
     const answer = synthesized ?? draft
     const dataMode = evidence.map((item) => item.data.dataMode).find((value): value is string => typeof value === "string")
+    const provider = synthesized ? (runtimeEnv.AZURE_OPENAI_MODEL ? "azure-openai-langchain-mcp" : "langchain-openai-mcp-grounded-synthesis") : "langchain-mcp-deterministic-orchestrator"
+    await finishRun(runId, "completed", provider)
     return {
       answer,
-      provider: synthesized ? "langchain-openai-mcp-grounded-synthesis" : "langchain-mcp-deterministic-orchestrator",
+      provider,
       tools: traces,
       context: citedContext,
       dataMode,
       groundedAt: new Date().toISOString(),
     }
+  } catch (error) {
+    await finishRun(runId, "failed")
+    throw error
   } finally {
     await mcp.close()
   }

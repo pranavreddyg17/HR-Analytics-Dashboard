@@ -16,9 +16,9 @@ function failure(error: unknown) {
 
 export async function GET(request: NextRequest, context: { params: Promise<{ employee_id: string }> }) {
   try {
-    await requireRequestActor(request)
+    const actor = await requireRole(request, ["admin", "hr", "manager", "viewer"])
     const { employee_id: employeeId } = await context.params
-    return NextResponse.json(await getPerson(employeeId))
+    return NextResponse.json(await getPerson(employeeId, actor))
   } catch (error) { return failure(error) }
 }
 

@@ -1,0 +1,140 @@
+name: LaidbackHR production
+
+on:
+  pull_request:
+    branches: [azure/migration]
+  push:
+    branches: [azure/migration]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  id-token: write
+
+concurrency:
+  group: laidbackhr-production
+  cancel-in-progress: false
+
+env:
+  AZURE_RESOURCE_GROUP: Laidback.ai
+  ACR_NAME: laidbackhrf61hno
+  ACR_LOGIN_SERVER: laidbackhrf61hno.azurecr.io
+  WEB_APP_NAME: laidbackhr-f61hno-web
+  APP_KEY_VAULT: laidbackhr-f61hno-kv
+  TERRAFORM_VERSION: 1.15.8
+  IMAGE_TAG: ${{ github.sha }}
+
+jobs:
+  validate:
+    name: Validate
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v6
+        with:
+          node-version: "22"
+          package-manager-cache: false
+      - name: Validate web application
+        run: |
+          set -euo pipefail
+          corepack enable
+          pnpm install --frozen-lockfile
+          pnpm lint
+          pnpm exec tsc --noEmit
+          pnpm build:azure
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.12"
+      - name: Validate model service
+        run: |
+          set -euo pipefail
+          python -m pip install --disable-pip-version-check -r backend/requirements.txt -r backend/requirements-dev.txt
+          cd backend
+          PYTHONPATH=. python -m pytest -q
+      - name: Validate Terraform
+        run: |
+          set -euo pipefail
+          curl -fsSLo terraform.zip "https://releases.hashicorp.com/terraform/${TERRAFORM_VERSION}/terraform_${TERRAFORM_VERSION}_linux_amd64.zip"
+          unzip -q terraform.zip
+          sudo install terraform /usr/local/bin/terraform
+          terraform -chdir=infra init -backend=false
+          terraform -chdir=infra fmt -check -recursive
+          terraform -chdir=infra validate
+
+  deploy:
+    name: Deploy
+    if: github.event_name != 'pull_request'
+    needs: validate
+    runs-on: ubuntu-latest
+    environment: production
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v6
+        with:
+          node-version: "22"
+          package-manager-cache: false
+      - name: Sign in to Azure with OIDC
+        uses: azure/login@v3
+        with:
+          client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+      - name: Copy Azure AI configuration to the application vault
+        env:
+          AI_SEARCH_KEY: ${{ secrets.AI_SEARCH_KEY }}
+          AI_SEARCH_ENDPOINT: ${{ secrets.AI_SEARCH_ENDPOINT }}
+          AZURE_OPENAI_KEY: ${{ secrets.AZURE_OPENAI_KEY }}
+          AZURE_OPENAI_ENDPOINT: ${{ secrets.AZURE_OPENAI_ENDPOINT }}
+          AZURE_EMBEDDING_KEY: ${{ secrets.AZURE_EMBEDDING_KEY }}
+          AZURE_EMBEDDING_ENDPOINT: ${{ secrets.AZURE_EMBEDDING_ENDPOINT }}
+        run: |
+          set -euo pipefail
+          az keyvault secret set --vault-name "$APP_KEY_VAULT" --name azure-ai-search-key --value "$AI_SEARCH_KEY" --output none
+          az keyvault secret set --vault-name "$APP_KEY_VAULT" --name azure-ai-search-endpoint --value "$AI_SEARCH_ENDPOINT" --output none
+          az keyvault secret set --vault-name "$APP_KEY_VAULT" --name azure-openai-key --value "$AZURE_OPENAI_KEY" --output none
+          az keyvault secret set --vault-name "$APP_KEY_VAULT" --name azure-openai-endpoint --value "$AZURE_OPENAI_ENDPOINT" --output none
+          az keyvault secret set --vault-name "$APP_KEY_VAULT" --name azure-openai-embedding-key --value "$AZURE_EMBEDDING_KEY" --output none
+          az keyvault secret set --vault-name "$APP_KEY_VAULT" --name azure-openai-embedding-endpoint --value "$AZURE_EMBEDDING_ENDPOINT" --output none
+      - name: Build and push application images
+        run: |
+          set -euo pipefail
+          az acr login --name "$ACR_NAME"
+          docker build --pull --tag "$ACR_LOGIN_SERVER/laidbackhr-web:$IMAGE_TAG" .
+          docker push "$ACR_LOGIN_SERVER/laidbackhr-web:$IMAGE_TAG"
+      - name: Apply Azure infrastructure
+        run: |
+          set -euo pipefail
+          curl -fsSLo terraform.zip "https://releases.hashicorp.com/terraform/${TERRAFORM_VERSION}/terraform_${TERRAFORM_VERSION}_linux_amd64.zip"
+          unzip -q terraform.zip
+          sudo install terraform /usr/local/bin/terraform
+          export ARM_USE_OIDC=true
+          export ARM_CLIENT_ID="${{ secrets.AZURE_CLIENT_ID }}"
+          export ARM_TENANT_ID="${{ secrets.AZURE_TENANT_ID }}"
+          export ARM_SUBSCRIPTION_ID="${{ secrets.AZURE_SUBSCRIPTION_ID }}"
+          terraform -chdir=infra init -reconfigure -backend-config=environments/production/backend.hcl
+          terraform -chdir=infra plan -var-file=environments/production/terraform.tfvars.example -var="image_tag=$IMAGE_TAG" -out=production.tfplan
+          terraform -chdir=infra apply -auto-approve production.tfplan
+      - name: Synchronize grounded HR knowledge
+        run: |
+          set -euo pipefail
+          corepack enable
+          pnpm install --frozen-lockfile
+          export AZURE_AI_SEARCH_KEY="$(az keyvault secret show --vault-name "$APP_KEY_VAULT" --name azure-ai-search-key --query value -o tsv)"
+          export AZURE_AI_SEARCH_ENDPOINT="$(az keyvault secret show --vault-name "$APP_KEY_VAULT" --name azure-ai-search-endpoint --query value -o tsv)"
+          export AZURE_OPENAI_EMBEDDING_API_KEY="$(az keyvault secret show --vault-name "$APP_KEY_VAULT" --name azure-openai-embedding-key --query value -o tsv)"
+          export AZURE_OPENAI_EMBEDDING_ENDPOINT="$(az keyvault secret show --vault-name "$APP_KEY_VAULT" --name azure-openai-embedding-endpoint --query value -o tsv)"
+          export AZURE_AI_SEARCH_INDEX="laidbackhr-knowledge-v1"
+          pnpm ai:sync
+      - name: Verify deployed services
+        run: |
+          set -euo pipefail
+          wait_for_url() {
+            local url="$1"
+            for attempt in $(seq 1 30); do
+              if curl --fail --silent --show-error --max-time 20 "$url" >/dev/null; then return 0; fi
+              sleep 10
+            done
+            echo "Health check failed: $url" >&2
+            return 1
+          }
+          wait_for_url "https://$WEB_APP_NAME.azurewebsites.net/api/v1/ready"
