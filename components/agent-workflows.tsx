@@ -1,12 +1,12 @@
 "use client"
 
 import { useEffect, useState } from "react"
-import { CalendarDays, Check, ExternalLink, LoaderCircle, UserRound } from "lucide-react"
 import { signIn } from "next-auth/react"
 
 import { Button } from "@/components/ui/button"
 
 type CalendarPlan = {
+  type: "calendar_invite"
   title: string
   start: string
   end: string
@@ -14,44 +14,80 @@ type CalendarPlan = {
   location: string
   agenda: string
   employeeIds: string[]
-  employees: Array<{
-    employeeId: string
-    name: string
-    jobTitle: string
-    department: string
-    location: string
-    tenureYears: number
-  }>
+  employees: Array<{ employeeId: string; name: string; jobTitle: string; department: string; location: string; tenureYears: number }>
   evidence: string
-  sourceMode: string
   requiresConfirmation: boolean
 }
 
+type LearningPlan = {
+  type: "learning_assignment"
+  title: string
+  courseId: string
+  courseTitle: string
+  skillName: string
+  targetType: "department" | "job_title" | "job_level" | "manager_team" | "job_profile"
+  targetValue: string
+  targetLabel: string
+  dueDate: string
+  hours: number
+  note: string
+  recipientCount: number
+  alreadyCompleted: number
+  openRequisitions: number
+  evidence: string
+  recommendationId: string
+  requiresConfirmation: boolean
+}
+
+type HiringPlan = {
+  type: "hiring_requisition"
+  title: string
+  position: string
+  department: string
+  location: string
+  employmentType: "Full-time" | "Part-time" | "Contract" | "Intern" | "Temporary"
+  justification: string
+  activeEmployees: number
+  evidence: string
+  requiresConfirmation: boolean
+}
+
+type RetentionPlan = {
+  type: "retention_review"
+  title: string
+  department: string
+  population: number
+  recordedAttritionRate: number
+  aboveThresholdShare: number
+  leadingExitReason: string
+  priority: "Priority" | "Watch" | "Stable"
+  currentReviewStatus: "not_started" | "pending" | "in_progress" | "completed"
+  evidence: string
+  requiresConfirmation: boolean
+}
+
+type WorkflowPlan = CalendarPlan | LearningPlan | HiringPlan | RetentionPlan
+
 const examples = [
-  "Create a 45 minute employee review with Pranav G next Friday at 2pm.",
-  "Invite Pranav G to a team review on 2026-08-07 at 11am.",
-  "Schedule a career progression review with Pranav G tomorrow at 10am for 30 minutes Pacific time.",
+  "Recommend and assign the highest-priority capability course.",
+  "Upskill Research Analysts based on current capability gaps.",
+  "Request a full-time Platform Engineer in Research & Development, Remote, because the reliability programme needs additional delivery capacity.",
+  "Create a retention review for the highest-priority department.",
+  "Schedule a career progression review with Pranav G next Friday at 10am Pacific time.",
 ]
 
 function dateTimeLabel(value: string): string {
-  const [dateValue, timeValue] = value.split("T")
-  const [year, month, day] = dateValue.split("-").map(Number)
-  const [hours, minutes] = timeValue.split(":").map(Number)
-  const date = new Date(Date.UTC(year, month - 1, day))
-  if (![year, month, day, hours, minutes].every(Number.isFinite)) return value.replace("T", " ")
-  const dateLabel = new Intl.DateTimeFormat("en", { dateStyle: "medium", timeZone: "UTC" }).format(date)
-  const timeLabel = new Intl.DateTimeFormat("en", { hour: "numeric", minute: "2-digit", timeZone: "UTC" })
-    .format(new Date(Date.UTC(2000, 0, 1, hours, minutes)))
-  return `${dateLabel}, ${timeLabel}`
+  const parsed = new Date(`${value}:00`)
+  return Number.isFinite(parsed.getTime()) ? new Intl.DateTimeFormat("en", { dateStyle: "medium", timeStyle: "short" }).format(parsed) : value.replace("T", " ")
 }
 
 export function AgentWorkflows({ canPrepare }: { canPrepare: boolean }) {
   const [calendarConnection, setCalendarConnection] = useState<"loading" | "connected" | "disconnected">("loading")
   const [prompt, setPrompt] = useState("")
-  const [plan, setPlan] = useState<CalendarPlan | null>(null)
+  const [plan, setPlan] = useState<WorkflowPlan | null>(null)
   const [draftId, setDraftId] = useState("")
   const [planning, setPlanning] = useState(false)
-  const [sending, setSending] = useState(false)
+  const [executing, setExecuting] = useState(false)
   const [error, setError] = useState("")
   const [errorCode, setErrorCode] = useState("")
   const [notice, setNotice] = useState("")
@@ -81,187 +117,79 @@ export function AgentWorkflows({ canPrepare }: { canPrepare: boolean }) {
   async function createPlan(text = prompt) {
     const request = text.trim()
     if (!request || planning) return
-    setPrompt(request)
-    setPlanning(true)
-    setPlan(null)
-    setDraftId("")
-    setError("")
-    setErrorCode("")
-    setNotice("")
-    setEventUrl("")
+    setPrompt(request); setPlanning(true); setPlan(null); setDraftId(""); setError(""); setErrorCode(""); setNotice(""); setEventUrl("")
     try {
-      const response = await fetch("/api/v1/ai/workflows/plan", {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({ prompt: request }),
-      })
-      const body = await response.json() as CalendarPlan & { error?: string }
-      if (!response.ok) throw new Error(body.error ?? "The scheduling plan could not be created.")
+      const response = await fetch("/api/v1/ai/workflows/plan", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ prompt: request }) })
+      const body = await response.json() as WorkflowPlan & { error?: string }
+      if (!response.ok) throw new Error(body.error ?? "The workflow plan could not be created.")
       setPlan(body)
-    } catch (reason) {
-      setError(reason instanceof Error ? reason.message : "The scheduling plan could not be created.")
-    } finally {
-      setPlanning(false)
-    }
+    } catch (reason) { setError(reason instanceof Error ? reason.message : "The workflow plan could not be created.") }
+    finally { setPlanning(false) }
   }
 
-  async function createEvent() {
-    if (!plan || sending) return
-    setSending(true)
-    setError("")
-    setErrorCode("")
-    setNotice("")
+  async function executePlan() {
+    if (!plan || executing) return
+    setExecuting(true); setError(""); setErrorCode(""); setNotice("")
     try {
       let workflowId = draftId
       if (!workflowId) {
-        const draftResponse = await fetch("/api/v1/ai/workflows", {
-          method: "POST",
-          headers: { "content-type": "application/json" },
-          body: JSON.stringify({
-            type: "calendar_invite",
-            employeeIds: plan.employeeIds,
-            title: plan.title,
-            start: plan.start,
-            end: plan.end,
-            timezone: plan.timezone,
-            location: plan.location,
-            agenda: plan.agenda,
-          }),
-        })
-        const draftBody = await draftResponse.json() as { draft?: { id?: string }; error?: string }
-        if (!draftResponse.ok || !draftBody.draft?.id) throw new Error(draftBody.error ?? "The calendar workflow could not be saved.")
-        workflowId = draftBody.draft.id
+        const payload = plan.type === "calendar_invite"
+          ? { type: plan.type, employeeIds: plan.employeeIds, title: plan.title, start: plan.start, end: plan.end, timezone: plan.timezone, location: plan.location, agenda: plan.agenda }
+          : plan.type === "learning_assignment"
+            ? { type: plan.type, targetType: plan.targetType, targetValue: plan.targetValue, courseId: plan.courseId, dueDate: plan.dueDate, hours: plan.hours, note: plan.note, recommendationId: plan.recommendationId }
+            : plan.type === "hiring_requisition"
+              ? { type: plan.type, position: plan.position, department: plan.department, location: plan.location, employmentType: plan.employmentType, justification: plan.justification }
+              : { type: plan.type, department: plan.department }
+        const response = await fetch("/api/v1/ai/workflows", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(payload) })
+        const body = await response.json() as { draft?: { id?: string }; error?: string }
+        if (!response.ok || !body.draft?.id) throw new Error(body.error ?? "The workflow could not be saved.")
+        workflowId = body.draft.id
         setDraftId(workflowId)
       }
-
       const response = await fetch(`/api/v1/ai/workflows/${encodeURIComponent(workflowId)}/execute`, { method: "POST" })
       const body = await response.json() as { message?: string; eventUrl?: string | null; error?: string; code?: string }
       if (!response.ok) {
         setErrorCode(body.code ?? "")
         if (body.code === "GOOGLE_CALENDAR_CONNECT_REQUIRED") setCalendarConnection("disconnected")
-        throw new Error(body.error ?? "Google Calendar could not create the event.")
+        throw new Error(body.error ?? "The workflow could not be completed.")
       }
-      setNotice(body.message ?? "Calendar event created and invitations sent.")
+      setNotice(body.message ?? "Workflow completed.")
       setEventUrl(body.eventUrl ?? "")
-    } catch (reason) {
-      setError(reason instanceof Error ? reason.message : "Google Calendar could not create the event.")
-    } finally {
-      setSending(false)
-    }
+    } catch (reason) { setError(reason instanceof Error ? reason.message : "The workflow could not be completed.") }
+    finally { setExecuting(false) }
   }
 
-  return (
-    <section>
-      <div className="grid gap-0 lg:grid-cols-[minmax(0,0.9fr)_minmax(0,1.1fr)]">
-        <div className="border-b border-border p-5 lg:border-b-0 lg:border-r">
-          <div className="flex items-center gap-2">
-            <CalendarDays className="size-4 text-primary" />
-            <h3 className="text-sm font-semibold">Scheduling agent</h3>
-          </div>
-          <p className="mt-2 text-xs text-muted-foreground">Describe the participants and timing. Review the plan before sending.</p>
+  const calendarNeedsConnection = plan?.type === "calendar_invite" && calendarConnection !== "connected"
 
-          <div className="mt-4 flex items-center justify-between rounded-md border border-border bg-background px-3 py-2.5">
-            <div>
-              <p className="text-xs font-semibold">Google Calendar</p>
-              <p className="mt-0.5 text-meta text-muted-foreground">
-                {calendarConnection === "loading" ? "Checking connection" : calendarConnection === "connected" ? "Connected for event creation" : "Not connected"}
-              </p>
-            </div>
-            {calendarConnection === "disconnected" && canPrepare && <Button type="button" size="sm" variant="outline" onClick={connectGoogleCalendar}>Connect</Button>}
-          </div>
+  return <section className="grid gap-0 lg:grid-cols-[minmax(0,0.85fr)_minmax(0,1.15fr)]">
+    <div className="border-b border-border p-5 lg:border-b-0 lg:border-r">
+      <h3 className="text-subsection font-semibold">Workflow agent</h3>
+      <p className="mt-1 text-description text-muted-foreground">Describe the outcome. The agent resolves workspace records and prepares a reviewable action.</p>
+      <form onSubmit={(event) => { event.preventDefault(); void createPlan() }} className="mt-5">
+        <label className="text-label font-semibold" htmlFor="workflow-agent-request">Request</label>
+        <textarea id="workflow-agent-request" value={prompt} onChange={(event) => setPrompt(event.target.value)} rows={5} placeholder="Assign the highest-priority capability course to the relevant role cohort." className="mt-1.5 w-full resize-y rounded-md border border-border bg-background px-3 py-2.5 text-control outline-none focus:ring-2 focus:ring-ring/30" />
+        <Button type="submit" className="mt-3" disabled={!canPrepare || prompt.trim().length < 10 || planning}>{planning ? "Building plan" : "Build plan"}</Button>
+      </form>
+      <div className="mt-5 border-t border-border pt-4"><p className="text-label font-semibold text-muted-foreground">Examples</p><div className="mt-2 space-y-1">{examples.map((example) => <button key={example} type="button" onClick={() => void createPlan(example)} className="block w-full rounded-md px-2 py-2 text-left text-body text-muted-foreground hover:bg-muted hover:text-foreground">{example}</button>)}</div></div>
+      {!canPrepare && <p className="mt-4 rounded-md border border-border bg-muted/35 px-3 py-2 text-meta text-muted-foreground">Your role can analyze data but cannot execute employee workflows.</p>}
+    </div>
 
-          <form onSubmit={(event) => { event.preventDefault(); void createPlan() }} className="mt-5">
-            <label className="text-xs font-semibold text-foreground" htmlFor="calendar-agent-request">Request</label>
-            <textarea
-              id="calendar-agent-request"
-              value={prompt}
-              onChange={(event) => setPrompt(event.target.value)}
-              rows={5}
-              placeholder="Schedule a career progression review with Pranav G next Friday at 10am for 30 minutes."
-              className="mt-1.5 w-full resize-y rounded-md border border-border bg-background px-3 py-2.5 text-sm outline-none focus:ring-2 focus:ring-ring/30"
-            />
-            <Button type="submit" className="mt-3" disabled={!canPrepare || prompt.trim().length < 10 || planning}>
-              {planning ? <LoaderCircle className="size-4 animate-spin" /> : <CalendarDays className="size-4" />}
-              Build meeting plan
-            </Button>
-          </form>
-
-          <div className="mt-5 border-t border-border pt-4">
-            <p className="text-meta font-semibold text-muted-foreground">Examples</p>
-            <div className="mt-2 space-y-1">
-              {examples.map((example) => (
-                <button key={example} type="button" onClick={() => void createPlan(example)} className="block w-full rounded-md px-2 py-2 text-left text-xs text-muted-foreground hover:bg-muted hover:text-foreground">
-                  {example}
-                </button>
-              ))}
-            </div>
-          </div>
-          {!canPrepare && <p className="mt-4 rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-900">Your current role can analyze data but cannot create employee calendar events.</p>}
-        </div>
-
-        <div className="min-h-[420px] p-5">
-          {!plan && !planning && (
-            <div className="flex h-full min-h-[360px] flex-col items-center justify-center px-6 text-center">
-              <CalendarDays className="size-7 text-muted-foreground" />
-              <h3 className="mt-3 text-sm font-semibold">No meeting plan yet</h3>
-              <p className="mt-1 max-w-sm text-xs text-muted-foreground">The meeting plan will appear here for confirmation.</p>
-            </div>
-          )}
-          {planning && <div className="flex min-h-[360px] items-center justify-center gap-2 text-sm text-muted-foreground"><LoaderCircle className="size-4 animate-spin" />Reviewing employee and promotion records</div>}
-          {plan && (
-            <div>
-              <div className="flex flex-col gap-3 border-b border-border pb-4 sm:flex-row sm:items-start sm:justify-between">
-                <div>
-                  <p className="text-meta font-semibold text-muted-foreground">Review before sending</p>
-                  <h3 className="mt-1 text-lg font-semibold">{plan.title}</h3>
-                  <p className="mt-1 text-xs text-muted-foreground">{dateTimeLabel(plan.start)}–{dateTimeLabel(plan.end).split(", ").at(-1)} · {plan.timezone}</p>
-                </div>
-                <span className="text-xs font-semibold text-muted-foreground">{plan.employees.length} attendee{plan.employees.length === 1 ? "" : "s"}</span>
-              </div>
-
-              <div className="grid gap-5 py-5 sm:grid-cols-2">
-                <div>
-                  <p className="text-xs font-semibold">Participants</p>
-                  <div className="mt-2 divide-y divide-border rounded-md border border-border">
-                    {plan.employees.map((employee) => (
-                      <div key={employee.employeeId} className="flex gap-3 px-3 py-2.5">
-                        <UserRound className="mt-0.5 size-4 shrink-0 text-muted-foreground" />
-                        <div className="min-w-0">
-                          <p className="truncate text-xs font-semibold">{employee.name}</p>
-                          <p className="mt-0.5 truncate text-meta text-muted-foreground">{employee.jobTitle} · {employee.department} · {employee.employeeId}</p>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-                <div>
-                  <p className="text-xs font-semibold">Agenda</p>
-                  <p className="mt-2 text-xs text-muted-foreground">{plan.agenda}</p>
-                  <div className="mt-4 rounded-md bg-muted/45 p-3">
-                    <p className="text-meta font-semibold text-foreground">Evidence used</p>
-                    <p className="mt-1 text-meta text-muted-foreground">{plan.evidence}</p>
-                  </div>
-                </div>
-              </div>
-
-              {error && <div role="alert" className="mb-3 rounded-md border border-destructive/20 bg-destructive/5 px-3 py-2 text-xs text-destructive">{error}</div>}
-              {errorCode === "GOOGLE_CALENDAR_API_DISABLED" && (
-                <a className="mb-3 inline-flex text-xs font-semibold text-primary hover:underline" href="https://console.cloud.google.com/apis/library/calendar-json.googleapis.com" target="_blank" rel="noreferrer">Open Google Calendar API settings</a>
-              )}
-              {notice && <div className="mb-3 flex items-center gap-2 rounded-md border border-emerald-200 bg-emerald-50 px-3 py-2 text-xs text-emerald-900"><Check className="size-4" />{notice}</div>}
-
-              <div className="flex flex-wrap items-center justify-between gap-3 border-t border-border pt-4">
-                <p className="max-w-md text-meta text-muted-foreground">Confirm the participants and agenda before sending.</p>
-                <div className="flex gap-2">
-                  {eventUrl && <Button nativeButton={false} variant="outline" render={<a href={eventUrl} target="_blank" rel="noreferrer" />}><ExternalLink className="size-4" />Open event</Button>}
-                  {!notice && calendarConnection === "connected" && <Button type="button" onClick={() => void createEvent()} disabled={sending}>{sending ? <LoaderCircle className="size-4 animate-spin" /> : <CalendarDays className="size-4" />}Create event and send invites</Button>}
-                  {!notice && calendarConnection === "disconnected" && <Button type="button" onClick={connectGoogleCalendar}>Connect Google Calendar</Button>}
-                </div>
-              </div>
-            </div>
-          )}
-        </div>
-      </div>
-    </section>
-  )
+    <div className="min-h-[430px] p-5">
+      {!plan && !planning && <div className="flex min-h-[370px] flex-col items-center justify-center text-center"><h3 className="text-subsection font-semibold">No plan prepared</h3><p className="mt-1 max-w-sm text-description text-muted-foreground">A bounded plan with evidence, affected records, and confirmation controls will appear here.</p></div>}
+      {planning && <div className="flex min-h-[370px] items-center justify-center text-body text-muted-foreground">Resolving workspace records and policy controls…</div>}
+      {plan && <div>
+        <div className="border-b border-border pb-4"><p className="text-label font-semibold text-muted-foreground">Review before execution</p><h3 className="mt-1 text-section font-semibold">{plan.title}</h3><p className="mt-1 text-description text-muted-foreground">{plan.type === "calendar_invite" ? `${dateTimeLabel(plan.start)} · ${plan.timezone}` : plan.type === "learning_assignment" ? `${plan.targetLabel} · due ${plan.dueDate}` : plan.type === "hiring_requisition" ? `${plan.department} · ${plan.location} · ${plan.employmentType}` : `${plan.department} · ${plan.priority}`}</p></div>
+        {plan.type === "calendar_invite" ? <div className="grid gap-5 py-5 sm:grid-cols-2"><div><p className="text-label font-semibold">Participants</p><div className="mt-2 divide-y divide-border rounded-md border border-border">{plan.employees.map((employee) => <div key={employee.employeeId} className="px-3 py-2.5"><p className="font-semibold">{employee.name}</p><p className="text-meta text-muted-foreground">{employee.jobTitle} · {employee.department} · {employee.employeeId}</p></div>)}</div></div><div><p className="text-label font-semibold">Agenda</p><p className="mt-2 text-body text-muted-foreground">{plan.agenda}</p></div></div>
+          : plan.type === "learning_assignment" ? <div className="grid gap-4 py-5 sm:grid-cols-2"><div className="rounded-md border border-border p-3"><p className="text-label font-semibold">Capability and course</p><p className="mt-1 font-semibold">{plan.skillName}</p><p className="text-meta text-muted-foreground">{plan.courseTitle} · {plan.hours} hours</p></div><div className="rounded-md border border-border p-3"><p className="text-label font-semibold">Cohort impact</p><p className="mt-1 font-semibold">{plan.recipientCount} employees need evidence</p><p className="text-meta text-muted-foreground">{plan.alreadyCompleted} completed · {plan.openRequisitions} matching open roles</p></div></div>
+            : plan.type === "hiring_requisition" ? <div className="grid gap-4 py-5 sm:grid-cols-2"><div className="rounded-md border border-border p-3"><p className="text-label font-semibold">Position</p><p className="mt-1 font-semibold">{plan.position}</p><p className="text-meta text-muted-foreground">{plan.department} · {plan.location}</p></div><div className="rounded-md border border-border p-3"><p className="text-label font-semibold">Business justification</p><p className="mt-1 text-body text-muted-foreground">{plan.justification}</p></div></div>
+              : <div className="grid gap-4 py-5 sm:grid-cols-3"><div className="rounded-md border border-border p-3"><p className="text-label font-semibold">Population</p><p className="mt-1 font-semibold tabular-nums">{plan.population}</p></div><div className="rounded-md border border-border p-3"><p className="text-label font-semibold">Recorded attrition</p><p className="mt-1 font-semibold tabular-nums">{plan.recordedAttritionRate}%</p></div><div className="rounded-md border border-border p-3"><p className="text-label font-semibold">Leading exit reason</p><p className="mt-1 font-semibold">{plan.leadingExitReason}</p></div></div>}
+        <div className="rounded-md bg-muted/45 p-3"><p className="text-label font-semibold">Evidence</p><p className="mt-1 text-meta text-muted-foreground">{plan.evidence}</p></div>
+        {plan.type === "calendar_invite" && <div className="mt-4 flex items-center justify-between rounded-md border border-border px-3 py-2"><div><p className="font-semibold">Google Calendar</p><p className="text-meta text-muted-foreground">{calendarConnection === "loading" ? "Checking connection" : calendarConnection === "connected" ? "Connected" : "Connection required"}</p></div>{calendarConnection === "disconnected" && <Button size="sm" variant="outline" onClick={connectGoogleCalendar}>Connect</Button>}</div>}
+        {error && <p role="alert" className="mt-4 rounded-md border border-destructive/20 bg-destructive/5 px-3 py-2 text-meta text-destructive">{error}</p>}
+        {errorCode === "GOOGLE_CALENDAR_API_DISABLED" && <a className="mt-2 inline-flex text-body font-semibold text-primary hover:underline" href="https://console.cloud.google.com/apis/library/calendar-json.googleapis.com" target="_blank" rel="noreferrer">Open Google Calendar API settings</a>}
+        {notice && <p className="mt-4 rounded-md border border-emerald-200 bg-emerald-50 px-3 py-2 text-meta text-emerald-900">{notice}</p>}
+        <div className="mt-5 flex flex-wrap items-center justify-between gap-3 border-t border-border pt-4"><p className="max-w-md text-meta text-muted-foreground">Nothing is written until you confirm. Execution uses the same audited domain service as the workspace UI.</p><div className="flex gap-2">{eventUrl && <Button nativeButton={false} variant="outline" render={<a href={eventUrl} target="_blank" rel="noreferrer" />}>Open event</Button>}{!notice && (calendarNeedsConnection ? <Button onClick={connectGoogleCalendar}>Connect Calendar</Button> : <Button onClick={() => void executePlan()} disabled={executing}>{executing ? "Executing" : plan.type === "calendar_invite" ? "Create event and send" : plan.type === "learning_assignment" ? "Create assignments" : plan.type === "hiring_requisition" ? "Submit requisition" : "Create retention review"}</Button>)}</div></div>
+      </div>}
+    </div>
+  </section>
 }

@@ -102,6 +102,54 @@ async function getDomainStatus(rowsByDomain: Record<HrDomain, Array<Record<strin
   })
 }
 
+export async function getWorkspaceDomainStatus(): Promise<DomainStatus[]> {
+  const database = await ensureHrDatabase()
+  const relations: Record<HrDomain, string> = {
+    employees: "employee_directory_view",
+    hiring: "hiring_requisitions_view",
+    attrition: "attrition_events_view",
+    leave: "leave_requests_view",
+    training: "learning_assignments_view",
+    promotions: "promotion_events_view",
+  }
+  const [counts, imports] = await Promise.all([
+    Promise.all(hrDomains.map(async (domain) => {
+      const row = await database.prepare(`SELECT COUNT(*)::int AS count,
+        COALESCE(BOOL_OR(LOWER(data_source)='demo'), FALSE) AS has_demo,
+        COALESCE(BOOL_OR(LOWER(data_source)<>'demo'), FALSE) AS has_live
+        FROM ${relations[domain]}`).first<{ count: number; has_demo: boolean; has_live: boolean }>()
+      return { domain, count: Number(row?.count ?? 0), hasDemo: Boolean(row?.has_demo), hasLive: Boolean(row?.has_live) }
+    })),
+    database.prepare("SELECT domain, MAX(imported_at) AS imported_at FROM data_imports WHERE status='completed' GROUP BY domain")
+      .all<{ domain: string; imported_at: string }>(),
+  ])
+  const latest = new Map((imports.results ?? []).map((row) => [row.domain, row.imported_at]))
+  return counts.map((row) => ({
+    domain: row.domain,
+    count: row.count,
+    mode: row.count === 0 ? "empty" : row.hasDemo && row.hasLive ? "mixed" : row.hasLive ? "imported" : "demo",
+    lastImport: latest.get(row.domain) ?? null,
+  }))
+}
+
+export async function getWorkforceDimensions(): Promise<{ departments: string[]; jobTitles: string[]; locations: string[] }> {
+  const database = await ensureHrDatabase()
+  const [employees, requisitions] = await Promise.all([
+    database.prepare(`SELECT DISTINCT department, job_title, location
+      FROM employee_directory_view
+      WHERE archived_at IS NULL`).all<{ department: string; job_title: string; location: string }>(),
+    database.prepare(`SELECT DISTINCT department, position, location
+      FROM hiring_requisitions_view`).all<{ department: string; position: string; location: string }>(),
+  ])
+  const employeeRows = employees.results ?? []
+  const requisitionRows = requisitions.results ?? []
+  return {
+    departments: unique([...employeeRows.map((row) => row.department), ...requisitionRows.map((row) => row.department)]),
+    jobTitles: unique([...employeeRows.map((row) => row.job_title), ...requisitionRows.map((row) => row.position)]),
+    locations: unique([...employeeRows.map((row) => row.location), ...requisitionRows.map((row) => row.location)]),
+  }
+}
+
 export async function getWorkforceAnalytics(filters: HrFilters = {}, options: { rowLimit?: number | null } = {}): Promise<WorkforceAnalytics> {
   const normalizedFilters: WorkforceAnalytics["filters"] = { ...filters, period: filters.period ?? "month" }
   const outputRows = <T>(rows: T[], defaultLimit: number): T[] => options.rowLimit === null ? rows : rows.slice(0, options.rowLimit ?? defaultLimit)
@@ -153,15 +201,22 @@ export async function getWorkforceAnalytics(filters: HrFilters = {}, options: { 
   })
   const requisitions = hiringByDimensions.filter((record) => inRange(record.application_date, normalizedFilters))
   const completedHires = hiringByDimensions.filter((record) => record.recruitment_status.toLowerCase() === "hired" && record.hiring_date && inRange(record.hiring_date, normalizedFilters))
-  const hiringIds = new Set([...requisitions, ...completedHires].map((record) => record.id))
+  const currentOpenRequisitions = hiringByDimensions.filter((record) => ["requested", "open", "offer"].includes(record.recruitment_status.toLowerCase()))
+  const hiringIds = new Set([...requisitions, ...completedHires, ...currentOpenRequisitions].map((record) => record.id))
   const hiring = hiringByDimensions.filter((record) => hiringIds.has(record.id))
   const attrition = allAttrition.filter((record) => isIncluded(record) && inRange(record.exit_date, normalizedFilters) && matchesEmployee(employeeMap.get(record.employee_id), normalizedFilters) && (!normalizedFilters.department || record.department === normalizedFilters.department))
   const leave = allLeave.filter((record) => isIncluded(record) && inRange(record.start_date, normalizedFilters) && matchesEmployee(employeeMap.get(record.employee_id), normalizedFilters) && (!normalizedFilters.department || record.department === normalizedFilters.department) && (!normalizedFilters.leaveType || record.leave_type === normalizedFilters.leaveType))
-  const training = allTraining.filter((record) => isIncluded(record) && (!record.completion_date || inRange(record.completion_date, normalizedFilters)) && matchesEmployee(employeeMap.get(record.employee_id), normalizedFilters) && (!normalizedFilters.department || record.department === normalizedFilters.department))
+  const training = allTraining.filter((record) => {
+    if (!isIncluded(record) || !matchesEmployee(employeeMap.get(record.employee_id), normalizedFilters) || normalizedFilters.department && record.department !== normalizedFilters.department) return false
+    const eventDate = record.completion_status.toLowerCase() === "completed"
+      ? record.completion_date
+      : record.assigned_at?.slice(0, 10) ?? record.updated_at?.slice(0, 10) ?? null
+    return inRange(eventDate, normalizedFilters)
+  })
   const promotions = allPromotions.filter((record) => isIncluded(record) && inRange(record.promotion_date, normalizedFilters) && matchesEmployee(employeeMap.get(record.employee_id), normalizedFilters) && (!normalizedFilters.department || record.department === normalizedFilters.department))
 
   const hired = completedHires
-  const activeHiring = requisitions.filter((record) => ["requested", "open", "offer"].includes(record.recruitment_status.toLowerCase()))
+  const activeHiring = currentOpenRequisitions
   const approvedLeave = leave.filter((record) => record.approval_status.toLowerCase() === "approved")
   const today = dateInTimeZone("America/Los_Angeles")
   const operatingTo = normalizedFilters.to ?? today
@@ -257,7 +312,7 @@ export async function getWorkforceAnalytics(filters: HrFilters = {}, options: { 
     && (!normalizedFilters.department || record.department === normalizedFilters.department))
   const operatingHires = hiringByDimensions.filter((record) => record.recruitment_status.toLowerCase() === "hired"
     && inOperatingWindow(record.hiring_date))
-  const openRequisitions = hiringByDimensions.filter((record) => ["requested", "open", "offer"].includes(record.recruitment_status.toLowerCase()))
+  const openRequisitions = currentOpenRequisitions
   const operatingExitByDepartment = new Map(groupBy(operatingAttrition, (record) => record.department).map((row) => [row.label, row.value]))
   const operatingHireByDepartment = new Map(groupBy(operatingHires, (record) => record.department).map((row) => [row.label, row.value]))
   const openRequisitionByDepartment = new Map(groupBy(openRequisitions, (record) => record.department).map((row) => [row.label, row.value]))
@@ -369,6 +424,7 @@ export async function getWorkforceAnalytics(filters: HrFilters = {}, options: { 
   })
 
   const workforceImpact = buildWorkforceImpact({
+    workforceEmployees: employees,
     activeEmployees,
     attrition,
     hired,
@@ -515,11 +571,18 @@ export async function getWorkforceAnalytics(filters: HrFilters = {}, options: { 
   if (hiringBySource[0]) insights.push(`${hiringBySource[0].label} produced the most hires (${hiringBySource[0].value}); effectiveness should also be evaluated against time-to-hire and quality-of-hire.`)
   if (leaveByDepartment[0]) insights.push(`${leaveByDepartment[0].label} used the most approved leave (${leaveByDepartment[0].value} days); inspect leave type and staffing coverage rather than treating leave use as a performance signal.`)
   const incomplete = training.length - completedTraining.length
-  if (incomplete) insights.push(`${incomplete} training assignments are incomplete, including ${training.filter((record) => record.completion_status.toLowerCase() !== "completed" && /security|safety/i.test(record.training_program)).length} mandatory security or safety assignments.`)
+  if (incomplete) insights.push(`${incomplete} learning assignments are incomplete, including ${training.filter((record) => record.completion_status.toLowerCase() !== "completed" && mandatoryTraining(record)).length} mandatory assignments.`)
   if (withoutPromotion) insights.push(`${withoutPromotion} active employees with at least three years of tenure have no promotion in the selected data; review career paths and data completeness.`)
 
   return {
     generatedAt: new Date().toISOString(),
+    calculationBasis: {
+      asOfDate: today,
+      reportingWindow: `${operatingFrom} to ${operatingTo}`,
+      headcount: "Current active and on-leave employee snapshot after department and location filters.",
+      eventMetrics: "Hires, exits, leave, learning, and promotions use persisted event dates inside the reporting window; open roles are a current snapshot.",
+      costMetrics: "Scenario estimates use current compensation coverage, observed refill time, and workspace assumptions.",
+    },
     filters: normalizedFilters,
     dimensions: {
       departments: unique([...allEmployees.map((record) => record.department), ...allHiring.map((record) => record.department)]),
@@ -604,7 +667,7 @@ export async function getWorkforceAnalytics(filters: HrFilters = {}, options: { 
       completionRate: percent(completedTraining.length, training.length),
       totalHours: Number(training.reduce((sum, record) => sum + record.training_hours, 0).toFixed(1)),
       averageScore: average(completedTraining.map((record) => record.assessment_score)),
-      requiringMandatoryTraining: training.filter((record) => record.completion_status.toLowerCase() !== "completed" && /security|safety/i.test(record.training_program)).length,
+      requiringMandatoryTraining: training.filter((record) => record.completion_status.toLowerCase() !== "completed" && mandatoryTraining(record)).length,
       trend: trend(completedTraining, (record) => record.completion_date, normalizedFilters.period, (record) => record.training_hours),
       byDepartment: trainingByDepartment,
       byProgram: groupBy(training, (record) => record.training_program, (record) => record.training_hours),

@@ -13,7 +13,7 @@ All runtime resources are provisioned in the existing `Laidback.ai` resource gro
 - Azure AI Search indexes the curated Markdown knowledge base for hybrid/vector retrieval.
 - Azure OpenAI provides grounded synthesis when a chat deployment is configured. The assistant retains a deterministic, evidence-only fallback if generation is unavailable.
 - Azure Container Registry stores immutable web images. The validated prediction artifact runs inside the web application; the Python package remains a test and retraining reference, not a second production service.
-- Application Insights and Log Analytics collect platform telemetry.
+- Application Insights and Log Analytics collect sampled server, HTTP, PostgreSQL, and Azure SDK telemetry through the Azure Monitor OpenTelemetry distribution. Live metrics and console capture are disabled to control ingestion cost.
 - Terraform owns the Azure resources and GitHub Actions is the only deployment pipeline. Azure DevOps validates the mirrored `main` commit and verifies that the same immutable SHA is live; it does not perform a competing deployment.
 
 Production demo seeding is disabled. Existing PostgreSQL records are preserved; new migrations add structures without replacing operational rows.
@@ -23,7 +23,7 @@ Production demo seeding is disabled. Existing PostgreSQL records are preserved; 
 - `/` — HR work requiring attention and upcoming workforce events
 - `/people` — employee directory and employee administration
 - `/inbox` — approvals and assigned work across hiring, leave, learning, reimbursement, employee cases, and insight reviews
-- `/hiring` — requisitions and the candidate pipeline
+- `/onboarding` — new-joiner readiness, verification, and the recruiting handoff; `/hiring` redirects here for compatibility
 - `/leaves` — requests, decisions, absence schedules, and coverage
 - `/courses` — course catalog, assignments, completion, and compliance
 - `/insights` — aggregate workforce movement, coverage, cost, and capability analysis
@@ -61,6 +61,8 @@ The agent catalog is available from `GET /api/v1/agents`. Each agent is invoked 
 - `people-operations`
 
 Every invocation is authenticated, role-scoped, grounded through HR tools and the current workspace, and stored in `agent_runs` with ordered tool steps. The orchestrator can perform a bounded multi-step loop—for example, connecting attrition evidence to mobility and relevant learning records—without allowing autonomous employment decisions.
+
+The MCP server exposes eight read-only evidence tools for actor-scoped work queues, workforce summaries, department comparisons, attrition signals, people operations, employee lookup, onboarding readiness, and capability planning. Azure AI Search indexes seven stable Markdown guides. Live employee facts remain in PostgreSQL and are never copied into the vector index.
 
 The employee assistant and future integrations should use these APIs instead of duplicating agent logic.
 
@@ -104,6 +106,7 @@ Use `.env.local.example` as the local configuration reference. Never commit secr
 ```bash
 pnpm lint
 pnpm exec tsc --noEmit
+pnpm test:knowledge
 pnpm build
 pnpm model:export
 
@@ -130,6 +133,8 @@ terraform -chdir=infra validate
 `azure-pipelines.yml` runs the same source, model, and Terraform validations against the Azure Repos mirror. Its final stage checks that `/api/v1/ready` reports the mirrored commit. Keeping it read-only prevents two CI systems from applying the same Terraform state concurrently.
 
 The GitHub `production` environment must contain the Azure OIDC identifiers and the approved Azure AI secret values. The application Key Vault remains the only runtime secret source.
+
+Terraform generated the persisted suffix `f61hno` for Azure resources that require globally unique names. It has no business meaning. Renaming those resources would recreate the Key Vault, PostgreSQL server, registry, storage account, and App Service, so environment and purpose are represented by tags while the stable suffix remains unchanged. `terraform output resource_naming` records this contract.
 
 To enable `employee.laidbackhr.cloud`, first create the DNS records described in `infra/environments/production/README.md`, add the origin to Google OAuth, then set `enable_employee_custom_domain = true` in the production variables and run the pipeline.
 

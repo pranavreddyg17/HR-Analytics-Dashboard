@@ -1,7 +1,7 @@
 import type { RequestActor } from "@/lib/server/request-user"
 import { ensureHrDatabase } from "@/lib/server/hr-repository"
 
-export type ConversationMessage = {
+type ConversationMessage = {
   id: string
   role: "user" | "assistant"
   content: string
@@ -12,7 +12,7 @@ export type ConversationMessage = {
   createdAt: string
 }
 
-export type ConversationSummary = {
+type ConversationSummary = {
   id: string
   title: string
   messageCount: number

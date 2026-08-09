@@ -460,7 +460,7 @@ export async function listInboxItems(actor?: RequestActor): Promise<InboxItem[]>
         createdAt: row.workflow_created_at || String(row.updated_at || nowIso), completedAt: row.completed_at ?? null, completionNotes: row.completion_notes ?? null, blockedReason: row.blocked_reason ?? null,
         actionable: canDecide, actions: canDecide ? ["reject", "approve"] : [],
         reviewHref: reviewHref("hiring", String(row.id), isCompleted ? "completed" : requiresDecision ? "decisions" : "my_work"),
-        recordHref: `/hiring?requisition=${encodeURIComponent(String(row.id))}`,
+        recordHref: `/onboarding?view=talent&requisition=${encodeURIComponent(String(row.id))}`,
       }
     }),
     ...visibleTraining.map((row): InboxItem => {

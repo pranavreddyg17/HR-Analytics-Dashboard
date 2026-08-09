@@ -1,12 +1,12 @@
 import type { RequestActor } from "@/lib/server/request-user"
 import { ensureHrDatabase } from "@/lib/server/hr-repository"
 
-export type GlobalSearchResult = {
+type GlobalSearchResult = {
   id: string
   href: string
   label: string
   detail: string
-  section: "People" | "Hiring" | "Leaves" | "Learning" | "Work"
+  section: "People" | "Onboarding" | "Leaves" | "Learning" | "Work"
   kind: "person" | "record"
   initials?: string
 }
@@ -47,7 +47,7 @@ export async function searchWorkspace(query: string, actor: RequestActor): Promi
     database.prepare(`
       SELECT id, position AS label,
         department || ' · ' || location || ' · ' || recruitment_status AS detail,
-        '/hiring?requisition=' || id AS href
+        '/onboarding?view=talent&requisition=' || id AS href
       FROM hiring_requisitions_view
       WHERE LOWER(id || ' ' || position || ' ' || department || ' ' || location ||
         ' ' || recruitment_status || ' ' || hiring_source) LIKE ?
@@ -58,7 +58,7 @@ export async function searchWorkspace(query: string, actor: RequestActor): Promi
     database.prepare(`
       SELECT id, full_name AS label,
         stage || ' · ' || email AS detail,
-        '/hiring?candidateRecord=' || id AS href
+        '/onboarding?view=talent&candidateRecord=' || id AS href
       FROM candidate_applications_view
       WHERE LOWER(id || ' ' || full_name || ' ' || email || ' ' || stage ||
         ' ' || source || ' ' || next_step) LIKE ?
@@ -122,8 +122,8 @@ export async function searchWorkspace(query: string, actor: RequestActor): Promi
 
   return [
     ...mapRows(people.results, "People", "person"),
-    ...mapRows(requisitions.results, "Hiring"),
-    ...mapRows(candidates.results, "Hiring"),
+    ...mapRows(requisitions.results, "Onboarding"),
+    ...mapRows(candidates.results, "Onboarding"),
     ...mapRows(leave.results, "Leaves"),
     ...mapRows(learning.results, "Learning"),
     ...mapRows(work.results, "Work"),

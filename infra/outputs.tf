@@ -18,3 +18,12 @@ output "deployment_endpoints" {
     employee_portal  = var.employee_portal_url
   }
 }
+
+output "resource_naming" {
+  description = "Naming metadata for globally unique Azure resources."
+  value = {
+    uniqueness_suffix          = random_string.suffix.result
+    purpose                    = "Stable Terraform-generated suffix required because Azure resource names such as Key Vault, Container Registry, PostgreSQL, Storage, and App Service must be globally unique."
+    renaming_requires_recreate = true
+  }
+}

@@ -60,7 +60,7 @@ type RetentionPriority = {
   dueAt: string | null
 }
 
-export type RetentionIntelligence = {
+type RetentionIntelligence = {
   apiVersion: "1.0"
   generatedAt: string
   minimumCohortSize: number

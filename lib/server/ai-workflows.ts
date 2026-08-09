@@ -1,13 +1,18 @@
 import { z } from "zod"
 
 import { ensureHrDatabase, type Database } from "@/lib/server/hr-repository"
+import { synthesizeWithAzureResponses } from "@/lib/server/azure-ai"
 import { createGoogleCalendarEvent } from "@/lib/server/google-calendar"
+import { assignLearningCourse, listLearningOperations } from "@/lib/server/learning"
 import { PeopleError } from "@/lib/server/people"
 import type { RequestActor } from "@/lib/server/request-user"
+import { createRetentionReview, getRetentionIntelligence } from "@/lib/server/retention-intelligence"
+import { createWorkflow } from "@/lib/server/workflows"
 
 const employeeIds = z.array(z.string().trim().min(1).max(60)).min(1).max(20)
 const localDateTime = z.string().regex(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$/)
 const calendarAgentPrompt = z.object({ prompt: z.string().trim().min(10).max(1200) })
+const learningTargetType = z.enum(["department", "job_title", "job_level", "manager_team", "job_profile"])
 
 const draftSchema = z.discriminatedUnion("type", [
   z.object({
@@ -26,6 +31,28 @@ const draftSchema = z.discriminatedUnion("type", [
     subject: z.string().trim().min(3).max(160),
     message: z.string().trim().min(10).max(5000),
   }),
+  z.object({
+    type: z.literal("learning_assignment"),
+    targetType: learningTargetType,
+    targetValue: z.string().trim().max(160).optional().default(""),
+    courseId: z.string().trim().min(3).max(240),
+    dueDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+    hours: z.number().positive().max(500).optional(),
+    note: z.string().trim().max(600).optional().default(""),
+    recommendationId: z.string().trim().max(300).optional(),
+  }),
+  z.object({
+    type: z.literal("hiring_requisition"),
+    position: z.string().trim().min(2).max(120),
+    department: z.string().trim().min(1).max(100),
+    location: z.string().trim().min(1).max(120),
+    employmentType: z.enum(["Full-time", "Part-time", "Contract", "Intern", "Temporary"]),
+    justification: z.string().trim().min(10).max(800),
+  }),
+  z.object({
+    type: z.literal("retention_review"),
+    department: z.string().trim().min(1).max(120),
+  }),
 ])
 
 type ContactEmployee = {
@@ -42,7 +69,7 @@ type ContactEmployee = {
 
 type DraftRow = {
   id: string
-  type: "calendar_invite" | "employee_email"
+  type: "calendar_invite" | "employee_email" | "learning_assignment" | "hiring_requisition" | "retention_review"
   title: string
   status: string
   employee_ids_json: string
@@ -181,7 +208,7 @@ function addMinutes(value: string, minutes: number): string {
   return date.toISOString().slice(0, 16)
 }
 
-export async function planAiCalendarWorkflow(value: unknown, actor: RequestActor) {
+async function planAiCalendarWorkflow(value: unknown, actor: RequestActor) {
   if (!["admin", "hr", "manager"].includes(actor.role)) throw new PeopleError("Your role cannot schedule employee meetings.", 403)
   const { prompt } = calendarAgentPrompt.parse(value)
   const lower = prompt.toLowerCase()
@@ -236,6 +263,7 @@ export async function planAiCalendarWorkflow(value: unknown, actor: RequestActor
     : "Review current priorities, support needed, development opportunities, and agreed follow-up actions."
 
   return {
+    type: "calendar_invite" as const,
     prompt,
     title,
     start,
@@ -256,6 +284,151 @@ export async function planAiCalendarWorkflow(value: unknown, actor: RequestActor
     sourceMode: "operational",
     requiresConfirmation: true,
   }
+}
+
+function textScore(prompt: string, values: string[]): number {
+  const normalized = prompt.toLowerCase()
+  return values.reduce((score, value) => score + (value.length >= 3 && normalized.includes(value.toLowerCase()) ? value.split(/\s+/).length + 1 : 0), 0)
+}
+
+async function planAiLearningWorkflow(value: unknown, actor: RequestActor) {
+  if (!["admin", "hr"].includes(actor.role)) throw new PeopleError("Only HR can prepare role-cohort learning assignments. Managers can assign direct reports from Learning.", 403)
+  const { prompt } = calendarAgentPrompt.parse(value)
+  const operations = await listLearningOperations(actor)
+  const candidates = operations.recommendations.map((recommendation) => ({
+    recommendation,
+    score: textScore(prompt, [recommendation.skillName, recommendation.courseTitle, recommendation.jobTitle, recommendation.department, recommendation.category])
+      + (recommendation.priority === "High" ? 2 : recommendation.priority === "Medium" ? 1 : 0),
+  })).sort((left, right) => right.score - left.score || right.recommendation.employeesNeedingEvidence - left.recommendation.employeesNeedingEvidence)
+  const selected = candidates[0]?.recommendation
+  if (!selected) throw new PeopleError("No course is mapped to an unmet capability requirement. Review the capability mappings in Learning first.", 422)
+  const explicitlyNamed = candidates[0]?.score && candidates[0].score > (selected.priority === "High" ? 2 : selected.priority === "Medium" ? 1 : 0)
+  if (!explicitlyNamed && !/recommend|highest|priority|capability|skill|upskill|learning|course/i.test(prompt)) {
+    throw new PeopleError("Name a role, department, skill, or course, or ask for the highest-priority capability recommendation.", 422)
+  }
+  const dueDate = shiftDate(dateInTimeZone("America/Los_Angeles"), selected.priority === "High" ? 14 : 30)
+  return {
+    type: "learning_assignment" as const,
+    title: `Assign ${selected.courseTitle}`,
+    courseId: selected.courseId,
+    courseTitle: selected.courseTitle,
+    skillName: selected.skillName,
+    targetType: selected.targetType,
+    targetValue: selected.targetValue,
+    targetLabel: `${selected.jobTitle} · ${selected.department}`,
+    dueDate,
+    hours: operations.courses.find((course) => course.id === selected.courseId)?.defaultHours ?? 1,
+    note: `Capability plan: ${selected.skillName}. Confirm relevance and access with each employee.`,
+    recipientCount: selected.employeesNeedingEvidence,
+    alreadyCompleted: selected.completedEvidence,
+    openRequisitions: selected.openRequisitions,
+    evidence: selected.reason,
+    recommendationId: selected.id,
+    requiresConfirmation: true,
+  }
+}
+
+function cleanModelJson(value: string): string {
+  return value.replace(/^```(?:json)?\s*/i, "").replace(/\s*```$/, "").trim()
+}
+
+async function classifyWorkflow(prompt: string): Promise<"calendar_invite" | "learning_assignment" | "hiring_requisition" | "retention_review" | null> {
+  const output = await synthesizeWithAzureResponses({
+    system: "Classify an HR workflow request. Return JSON only with one key named type. Allowed values: calendar_invite, learning_assignment, hiring_requisition, retention_review. Choose hiring_requisition for new position or headcount requests; learning_assignment for courses, skills, training, or upskilling; retention_review for a governed department attrition or retention review; calendar_invite for meetings or calendar events. Do not add fields or prose.",
+    user: prompt,
+  }).catch(() => null)
+  if (!output) return null
+  try {
+    const type = (JSON.parse(cleanModelJson(output)) as { type?: string }).type
+    return ["calendar_invite", "learning_assignment", "hiring_requisition", "retention_review"].includes(type ?? "")
+      ? type as "calendar_invite" | "learning_assignment" | "hiring_requisition" | "retention_review"
+      : null
+  } catch { return null }
+}
+
+function phraseAfter(prompt: string, marker: RegExp): string | null {
+  const match = prompt.match(marker)?.[1]?.trim()
+  return match ? match.replace(/[.;]+$/, "").trim() : null
+}
+
+async function planAiHiringWorkflow(value: unknown, actor: RequestActor) {
+  if (!["admin", "hr", "manager"].includes(actor.role)) throw new PeopleError("Your role cannot request a position.", 403)
+  const { prompt } = calendarAgentPrompt.parse(value)
+  const db = await database()
+  const [departmentResult, locationResult] = await Promise.all([
+    db.prepare("SELECT DISTINCT department FROM employee_directory_view WHERE archived_at IS NULL AND department <> '' ORDER BY department").all<{ department: string }>(),
+    db.prepare("SELECT DISTINCT location FROM employee_directory_view WHERE archived_at IS NULL AND location <> '' ORDER BY location").all<{ location: string }>(),
+  ])
+  const lower = prompt.toLowerCase()
+  const department = (departmentResult.results ?? []).map((row) => row.department).find((value) => lower.includes(value.toLowerCase()))
+  const location = (locationResult.results ?? []).map((row) => row.location).find((value) => lower.includes(value.toLowerCase()))
+  if (!department || !location) throw new PeopleError("Include the department and work location for the position request.", 422)
+  const rawPosition = phraseAfter(prompt, /(?:request|open|hire|recruit|onboard)\s+(?:a|an|the)?\s*([^,.;]+?)(?=\s+(?:in|for|at)\s+|[,.;]|$)/i)
+  const position = rawPosition?.replace(/\b(?:full[- ]time|part[- ]time|contract|temporary|intern)\b/ig, "").trim()
+  if (!position || position.length < 2) throw new PeopleError("Name the position you want to request.", 422)
+  const justification = phraseAfter(prompt, /\b(?:because|justification(?:\s+is)?|business need(?:\s+is)?|to support)\s+(.+)$/i)
+  if (!justification || justification.length < 10) throw new PeopleError("Include a short business justification using “because” or “to support”.", 422)
+  const employmentType = /part[- ]time/i.test(prompt) ? "Part-time" as const
+    : /\bcontract(?:or)?\b/i.test(prompt) ? "Contract" as const
+      : /\bintern(?:ship)?\b/i.test(prompt) ? "Intern" as const
+        : /\btemporary\b/i.test(prompt) ? "Temporary" as const : "Full-time" as const
+  const existing = await db.prepare(`SELECT id, recruitment_status FROM hiring_requisitions_view
+    WHERE LOWER(position)=LOWER(?) AND LOWER(department)=LOWER(?) AND LOWER(location)=LOWER(?)
+      AND LOWER(recruitment_status) IN ('requested','open','offer')`)
+    .bind(position, department, location).all<{ id: string; recruitment_status: string }>()
+  if ((existing.results ?? []).length) throw new PeopleError(`An active ${position} requisition already exists for ${department} in ${location}. Review it in Onboarding before creating another.`, 409)
+  const activeEmployees = await db.prepare(`SELECT COUNT(*)::int AS count FROM employee_directory_view
+    WHERE archived_at IS NULL AND LOWER(employment_status) IN ('active','on leave') AND department=?`).bind(department).first<{ count: number }>()
+  const departmentHeadcount = Number(activeEmployees?.count ?? 0)
+  return {
+    type: "hiring_requisition" as const,
+    title: `Request ${position}`,
+    position,
+    department,
+    location,
+    employmentType,
+    justification,
+    activeEmployees: departmentHeadcount,
+    evidence: `${departmentHeadcount} active employee${departmentHeadcount === 1 ? " is" : "s are"} recorded in ${department}; no matching active requisition was found for ${position} in ${location}.`,
+    requiresConfirmation: true,
+  }
+}
+
+async function planAiRetentionWorkflow(value: unknown, actor: RequestActor) {
+  if (!["admin", "hr"].includes(actor.role)) throw new PeopleError("Only HR can create a retention review.", 403)
+  const { prompt } = calendarAgentPrompt.parse(value)
+  const intelligence = await getRetentionIntelligence()
+  const lower = prompt.toLowerCase()
+  const selected = intelligence.cohortAlerts.find((cohort) => lower.includes(cohort.department.toLowerCase()))
+    ?? intelligence.cohortAlerts.find((cohort) => cohort.priority === "Priority")
+    ?? intelligence.cohortAlerts[0]
+  if (!selected) throw new PeopleError("No department currently meets the governed minimum population for a retention review.", 422)
+  return {
+    type: "retention_review" as const,
+    title: `Review ${selected.department} retention evidence`,
+    department: selected.department,
+    population: selected.population,
+    recordedAttritionRate: selected.recordedAttritionRate,
+    aboveThresholdShare: selected.aboveThresholdShare,
+    leadingExitReason: selected.leadingExitReason,
+    priority: selected.priority,
+    currentReviewStatus: selected.reviewStatus,
+    evidence: `${selected.recordedAttritionRate}% recorded attrition, ${selected.aboveThresholdShare}% above the model review threshold, and ${selected.leadingExitReason} is the leading recorded exit reason.`,
+    requiresConfirmation: true,
+  }
+}
+
+export async function planAiWorkflow(value: unknown, actor: RequestActor) {
+  const parsed = calendarAgentPrompt.parse(value)
+  const modelType = await classifyWorkflow(parsed.prompt)
+  const type = modelType ?? (/learn|course|training|skill|upskill|capability|certif/i.test(parsed.prompt)
+    ? "learning_assignment"
+    : /request|requisition|headcount|open (?:a|an) role|hire (?:a|an)/i.test(parsed.prompt) ? "hiring_requisition"
+      : /retention|attrition|stay review/i.test(parsed.prompt) ? "retention_review" : "calendar_invite")
+  if (type === "learning_assignment") return planAiLearningWorkflow(parsed, actor)
+  if (type === "hiring_requisition") return planAiHiringWorkflow(parsed, actor)
+  if (type === "retention_review") return planAiRetentionWorkflow(parsed, actor)
+  return planAiCalendarWorkflow(parsed, actor)
 }
 
 function calendarDate(value: string): string {
@@ -321,19 +494,42 @@ export async function createAiWorkflowDraft(value: unknown, actor: RequestActor)
   }
 
   const db = await database()
-  const employees = await eligibleEmployees(db, actor, input.employeeIds)
+  const employees = input.type === "calendar_invite" || input.type === "employee_email"
+    ? await eligibleEmployees(db, actor, input.employeeIds)
+    : []
+  const learningRecipientIds = input.type === "learning_assignment"
+    ? (await db.prepare(`SELECT e.employee_id FROM employee_directory_view e
+        WHERE e.archived_at IS NULL AND LOWER(e.employment_status) IN ('active','preboarding','on leave')
+          AND CASE ?
+            WHEN 'department' THEN e.department=?
+            WHEN 'job_title' THEN e.job_title=?
+            WHEN 'job_level' THEN e.job_level=?
+            WHEN 'job_profile' THEN e.job_profile_id=?
+            ELSE FALSE
+          END
+        ORDER BY e.employee_id LIMIT 500`)
+      .bind(input.targetType, input.targetValue, input.targetValue, input.targetValue, input.targetValue)
+      .all<{ employee_id: string }>()).results?.map((row) => row.employee_id) ?? []
+    : []
   const id = `AIW-${crypto.randomUUID().toUpperCase()}`
-  const title = input.type === "calendar_invite" ? input.title : input.subject
-  const launchUrl = input.type === "calendar_invite" ? calendarUrl(input, employees) : emailUrl(input, employees)
+  const course = input.type === "learning_assignment"
+    ? await db.prepare("SELECT title, default_duration_hours FROM learning_courses WHERE id=? AND LOWER(status)='active'").bind(input.courseId).first<{ title: string; default_duration_hours: number }>()
+    : null
+  if (input.type === "learning_assignment" && !course) throw new PeopleError("The selected course is no longer active.", 409)
+  const title = input.type === "calendar_invite" ? input.title : input.type === "employee_email" ? input.subject : input.type === "learning_assignment" ? `Assign ${course?.title}` : input.type === "hiring_requisition" ? `Request ${input.position}` : `${input.department} retention review`
+  const launchUrl = input.type === "calendar_invite" ? calendarUrl(input, employees) : input.type === "employee_email" ? emailUrl(input, employees) : null
   const summary = input.type === "calendar_invite"
     ? `${input.start.replace("T", " ")} · ${input.timezone}`
-    : `${employees.length} employee${employees.length === 1 ? "" : "s"}`
+    : input.type === "employee_email" ? `${employees.length} employee${employees.length === 1 ? "" : "s"}` : input.type === "learning_assignment" ? `${input.targetType.replaceAll("_", " ")} · due ${input.dueDate}` : input.type === "hiring_requisition" ? `${input.department} · ${input.location}` : input.department
   const details = input.type === "calendar_invite"
     ? { start: input.start, end: input.end, timezone: input.timezone, location: input.location, agenda: input.agenda, summary }
-    : { subject: input.subject, message: input.message, summary }
+    : input.type === "employee_email" ? { subject: input.subject, message: input.message, summary }
+      : input.type === "learning_assignment" ? { targetType: input.targetType, targetValue: input.targetValue, courseId: input.courseId, dueDate: input.dueDate, hours: input.hours ?? course?.default_duration_hours, note: input.note, recommendationId: input.recommendationId, summary }
+        : input.type === "hiring_requisition" ? { position: input.position, department: input.department, location: input.location, employmentType: input.employmentType, justification: input.justification, summary }
+          : { department: input.department, summary }
 
   await db.prepare("INSERT INTO ai_workflow_drafts(id, type, title, status, employee_ids_json, details_json, created_by_email) VALUES (?, ?, ?, 'ready', ?, ?, ?)")
-    .bind(id, input.type, title, JSON.stringify(employees.map((employee) => employee.employee_id)), JSON.stringify(details), actor.email)
+    .bind(id, input.type, title, JSON.stringify(input.type === "learning_assignment" ? learningRecipientIds : employees.map((employee) => employee.employee_id)), JSON.stringify(details), actor.email)
     .run()
 
   return {
@@ -342,7 +538,7 @@ export async function createAiWorkflowDraft(value: unknown, actor: RequestActor)
       type: input.type,
       title,
       status: "ready",
-      recipientCount: employees.length,
+      recipientCount: input.type === "learning_assignment" ? learningRecipientIds.length : employees.length,
       recipients: employees.map((employee) => ({ employeeId: employee.employee_id, name: employee.display_name, email: employee.work_email })),
       summary,
       createdAt: new Date().toISOString(),
@@ -350,7 +546,7 @@ export async function createAiWorkflowDraft(value: unknown, actor: RequestActor)
     launchUrl,
     confirmation: input.type === "calendar_invite"
       ? "Review the event in Google Calendar, then save it to send invitations."
-      : "Review the message in Gmail, then send it when ready.",
+      : input.type === "employee_email" ? "Review the message in Gmail, then send it when ready." : input.type === "learning_assignment" ? "Review the capability, cohort, course, and due date before creating assignments." : input.type === "hiring_requisition" ? "Review the role, location, employment type, and business justification before submitting the requisition." : "Review the department evidence before creating a governed retention work item.",
   }
 }
 
@@ -367,46 +563,87 @@ export async function markAiWorkflowOpened(id: string, actor: RequestActor) {
   return { ...publicDraft({ ...row, status: "opened", opened_at: new Date().toISOString() }), status: "opened" }
 }
 
-export async function executeAiCalendarWorkflow(id: string, actor: RequestActor, request: Request) {
-  if (!["admin", "hr", "manager"].includes(actor.role)) throw new PeopleError("Your role cannot schedule employee meetings.", 403)
+export async function executeAiWorkflow(id: string, actor: RequestActor, request: Request) {
+  if (!["admin", "hr", "manager"].includes(actor.role)) throw new PeopleError("Your role cannot execute HR workflows.", 403)
   const db = await database()
   const row = await db.prepare("SELECT * FROM ai_workflow_drafts WHERE id=?").bind(id).first<DraftRow>()
   if (!row) throw new PeopleError("Prepared workflow not found.", 404)
-  if (row.type !== "calendar_invite") throw new PeopleError("This workflow is not a calendar event.", 422)
   if (row.created_by_email.toLowerCase() !== actor.email.toLowerCase() && !["admin", "hr"].includes(actor.role)) {
     throw new PeopleError("You cannot execute this workflow.", 403)
   }
-  if (row.status === "sent") throw new PeopleError("This calendar event has already been created.", 409)
+  if (["sent", "completed"].includes(row.status)) throw new PeopleError("This workflow has already been completed.", 409)
+  const claimed = await db.prepare(`UPDATE ai_workflow_drafts SET status='executing', updated_at=CURRENT_TIMESTAMP
+    WHERE id=? AND (status IN ('ready','opened') OR (status='executing' AND updated_at::timestamptz < CURRENT_TIMESTAMP - INTERVAL '15 minutes'))
+    RETURNING id`).bind(id).first<{ id: string }>()
+  if (!claimed) throw new PeopleError("This workflow is already being executed.", 409)
 
-  const details = parseJson<Record<string, unknown>>(row.details_json, {})
-  const input = draftSchema.parse({
-    type: "calendar_invite",
-    employeeIds: parseJson<string[]>(row.employee_ids_json, []),
-    title: row.title,
-    start: details.start,
-    end: details.end,
-    timezone: details.timezone,
-    location: details.location ?? "",
-    agenda: details.agenda,
-  })
-  if (input.type !== "calendar_invite") throw new PeopleError("Invalid calendar workflow.", 422)
-  const employees = await eligibleEmployees(db, actor, input.employeeIds)
-  const event = await createGoogleCalendarEvent(request, {
-    title: input.title,
-    start: input.start,
-    end: input.end,
-    timezone: input.timezone,
-    location: input.location,
-    agenda: input.agenda,
-    attendees: employees.map((employee) => ({ email: employee.work_email, name: employee.display_name })),
-  })
-  await db.prepare("UPDATE ai_workflow_drafts SET status='sent', opened_at=CURRENT_TIMESTAMP, details_json=?, updated_at=CURRENT_TIMESTAMP WHERE id=?")
-    .bind(JSON.stringify({ ...details, eventId: event.eventId, eventUrl: event.eventUrl }), id)
-    .run()
-  return {
-    id,
-    status: "sent",
-    eventUrl: event.eventUrl,
-    message: `Calendar event created and ${employees.length} invitation${employees.length === 1 ? "" : "s"} sent.`,
+  try {
+    const details = parseJson<Record<string, unknown>>(row.details_json, {})
+    if (row.type === "learning_assignment") {
+      const result = await assignLearningCourse({
+        targetType: details.targetType,
+        targetValue: details.targetValue,
+        courseId: details.courseId,
+        dueDate: details.dueDate,
+        hours: details.hours,
+        note: details.note,
+      }, actor)
+      await db.prepare("UPDATE ai_workflow_drafts SET status='completed', opened_at=CURRENT_TIMESTAMP, details_json=?, updated_at=CURRENT_TIMESTAMP WHERE id=?")
+        .bind(JSON.stringify({ ...details, campaignId: result.id, assigned: result.assigned, skipped: result.skipped }), id).run()
+      return { id, status: "completed", message: result.message, campaignId: result.id }
+    }
+    if (row.type === "hiring_requisition") {
+      const result = await createWorkflow({
+        type: "hiring",
+        position: details.position,
+        department: details.department,
+        location: details.location,
+        employmentType: details.employmentType,
+        justification: details.justification,
+      }, actor)
+      await db.prepare("UPDATE ai_workflow_drafts SET status='completed', opened_at=CURRENT_TIMESTAMP, details_json=?, updated_at=CURRENT_TIMESTAMP WHERE id=?")
+        .bind(JSON.stringify({ ...details, requisitionId: result.id }), id).run()
+      return { id, status: "completed", message: result.message, requisitionId: result.id }
+    }
+    if (row.type === "retention_review") {
+      const result = await createRetentionReview(String(details.department ?? ""), actor)
+      await db.prepare("UPDATE ai_workflow_drafts SET status='completed', opened_at=CURRENT_TIMESTAMP, details_json=?, updated_at=CURRENT_TIMESTAMP WHERE id=?")
+        .bind(JSON.stringify({ ...details, retentionReviewId: result.id, retentionReviewStatus: result.status }), id).run()
+      return { id, status: "completed", message: `Retention review ${result.status === "pending" ? "created" : "available"}.`, retentionReviewId: result.id }
+    }
+    if (row.type !== "calendar_invite") throw new PeopleError("This workflow cannot be executed automatically.", 422)
+    const input = draftSchema.parse({
+      type: "calendar_invite",
+      employeeIds: parseJson<string[]>(row.employee_ids_json, []),
+      title: row.title,
+      start: details.start,
+      end: details.end,
+      timezone: details.timezone,
+      location: details.location ?? "",
+      agenda: details.agenda,
+    })
+    if (input.type !== "calendar_invite") throw new PeopleError("Invalid calendar workflow.", 422)
+    const employees = await eligibleEmployees(db, actor, input.employeeIds)
+    const event = await createGoogleCalendarEvent(request, {
+      title: input.title,
+      start: input.start,
+      end: input.end,
+      timezone: input.timezone,
+      location: input.location,
+      agenda: input.agenda,
+      attendees: employees.map((employee) => ({ email: employee.work_email, name: employee.display_name })),
+    })
+    await db.prepare("UPDATE ai_workflow_drafts SET status='sent', opened_at=CURRENT_TIMESTAMP, details_json=?, updated_at=CURRENT_TIMESTAMP WHERE id=?")
+      .bind(JSON.stringify({ ...details, eventId: event.eventId, eventUrl: event.eventUrl }), id)
+      .run()
+    return {
+      id,
+      status: "sent",
+      eventUrl: event.eventUrl,
+      message: `Calendar event created and ${employees.length} invitation${employees.length === 1 ? "" : "s"} sent.`,
+    }
+  } catch (error) {
+    await db.prepare("UPDATE ai_workflow_drafts SET status='ready', updated_at=CURRENT_TIMESTAMP WHERE id=? AND status='executing'").bind(id).run().catch(() => undefined)
+    throw error
   }
 }

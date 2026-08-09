@@ -8,9 +8,9 @@ Every analytics response must identify its source mode. `demo` means the domain 
 
 Active headcount includes employee records with an Active employment status. On-leave and preboarding records are reported separately. Department, location, job title, employment type, tenure, and manager span are descriptive dimensions. Counts describe the current database view and do not establish employee performance.
 
-## Hiring
+## Onboarding and talent acquisition
 
-Completed hires use records with a Hired recruitment status. Average time to hire is calculated only from completed hires with a recorded duration. Source performance combines completed-hire volume and average hiring speed; source volume alone is not a quality-of-hire measure.
+Preboarding employees and submitted onboarding profiles are persisted separately from recruiting records. Talent acquisition covers headcount approval, candidates, interviews, offers, and the handoff that creates a preboarding employee. Completed hires use records with a Hired recruitment status. Average time to hire is calculated only from completed hires with a recorded duration. Source performance combines completed-hire volume and average hiring speed; source volume alone is not a quality-of-hire measure.
 
 ## Attrition and model risk
 
@@ -26,7 +26,9 @@ Leave totals and trends are calculated from persisted leave requests. Pending re
 
 ## Learning and compliance
 
-Training completion is based on persisted assignments. Mandatory gaps include incomplete security, privacy, safety, compliance, or phishing programmes. An incomplete assignment is a follow-up item; it is not evidence of poor performance without additional context.
+Training completion is based on persisted assignments. Mandatory gaps are incomplete assignments whose persisted course record is marked mandatory; course-title keywords are not used as a proxy. An incomplete assignment is a follow-up item, not evidence of poor performance without additional context.
+
+Capability recommendations are an internal planning calculation. They join job-profile skill requirements, role headcount, open matching requisitions, course-to-skill mappings, and completed assignments. They do not claim to represent the external labor market unless a governed external skills feed is added. Cohort execution must use preview, explicit confirmation, duplicate suppression, a durable learning campaign, employee Inbox assignments, and completion evidence.
 
 ## Promotions and mobility
 
@@ -38,4 +40,4 @@ Manager exit concentration counts recorded exits under the same manager during t
 
 ## Workflow actions
 
-LaidbackHR.AI may plan a calendar event using active operational employee records with work email addresses. The plan resolves named employees or supported cohorts from persisted employee and promotion records, then shows the participants, timing, agenda, and evidence before execution. Only after the signed-in HR user explicitly confirms may the app create the event in that user's Google Calendar and send attendee invitations. Synthetic IBM-linked demo profiles cannot be used as recipients. The assistant never approves leave or makes employment decisions on its own.
+LaidbackHR.AI may plan a calendar event using active operational employee records with work email addresses, prepare a capability-based learning campaign from approved role and course mappings, submit a position requisition, or create a governed department retention review. Azure OpenAI performs constrained intent classification; PostgreSQL and domain services determine affected records and enforce permissions, duplicate checks, confirmation, and audit history. Every workflow shows the affected cohort or business record and evidence before execution. Synthetic IBM-linked demo profiles cannot receive external invitations. The assistant never approves leave, changes compensation, or makes employment decisions on its own.

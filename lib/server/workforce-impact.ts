@@ -9,6 +9,7 @@ import type {
 } from "@/lib/hr-types"
 
 type ImpactInput = {
+  workforceEmployees: EmployeeRecord[]
   activeEmployees: EmployeeRecord[]
   attrition: AttritionRecord[]
   hired: HiringRecord[]
@@ -88,6 +89,7 @@ export function buildWorkforceImpact(input: ImpactInput): WorkforceAnalytics["de
   const activeIds = new Set(input.activeEmployees.map((employee) => employee.employee_id))
   const activeModelEmployees = input.modelEmployees.filter((employee) => activeIds.has(employee.employeeId))
   const allModelByEmployee = new Map(input.modelEmployees.map((employee) => [employee.employeeId, employee]))
+  const workforceByEmployee = new Map(input.workforceEmployees.map((employee) => [employee.employee_id, employee]))
   const modelByEmployee = new Map(activeModelEmployees.map((employee) => [employee.employeeId, employee]))
   const reviewedEmployees = activeModelEmployees.filter((employee) => employee.riskLevel === "high")
 
@@ -119,9 +121,9 @@ export function buildWorkforceImpact(input: ImpactInput): WorkforceAnalytics["de
   }
   const exitsByRole = new Map<string, number>()
   for (const event of input.attrition) {
-    const employee = allModelByEmployee.get(event.employee_id)
+    const employee = workforceByEmployee.get(event.employee_id)
     if (!employee) continue
-    const key = roleKey(employee.department, employee.jobTitle)
+    const key = roleKey(employee.department, employee.job_title)
     exitsByRole.set(key, (exitsByRole.get(key) ?? 0) + 1)
   }
   const hiresByRole = new Map<string, number>()
@@ -259,10 +261,10 @@ export function buildWorkforceImpact(input: ImpactInput): WorkforceAnalytics["de
 
   const payDataCoverage = percent(input.activeEmployees.filter((employee) => (input.annualPayByEmployee.get(employee.employee_id) ?? 0) > 0).length, input.activeEmployees.length)
   const recordedExitCosts = input.attrition.map((event) => {
-    const model = allModelByEmployee.get(event.employee_id)
+    const employee = workforceByEmployee.get(event.employee_id)
     const annualPay = input.annualPayByEmployee.get(event.employee_id) ?? 0
-    if (!model || !annualPay) return 0
-    const refill = refillFor(model.department, model.jobTitle)
+    if (!employee || !annualPay) return 0
+    const refill = refillFor(employee.department, employee.job_title)
     return replacementCost(annualPay, refill.days, input.assumptions).total
   }).filter((value) => value > 0)
   const reviewWeightedExposure = employees.reduce((sum, employee) => sum + employee.reviewWeightedExposure, 0)

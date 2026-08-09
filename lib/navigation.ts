@@ -22,13 +22,14 @@ export function returnDestinationLabel(href: string): string {
   const labels: Record<string, string> = {
     "/people": "People",
     "/inbox": "Inbox",
-    "/hiring": "Hiring",
+    "/hiring": "Onboarding",
+    "/onboarding": "Onboarding",
     "/leaves": "Leaves",
-    "/courses": "Assign courses",
+    "/courses": "Learning",
     "/insights": "Insights",
-    "/attrition": "Attrition risk",
+    "/attrition": "Retention risk",
     "/assistant": "AI assistant",
-    "/imports": "Import / export data",
+    "/imports": "Data exchange",
     "/access": "Access",
   }
   return labels[path] ?? "previous page"

@@ -8,9 +8,9 @@ Home is a prioritized view of persisted workflow requests. Inbox is the complete
 
 People is the employee system of record. Directory summaries should describe active records, filters, data completeness, or employee-linked service work. A page label such as “People” is navigation context, not a request to search for employees whose titles contain “People.” Employee-level facts require the employee directory tool; pending onboarding, reimbursement, and employee-service records require the work-queue tool.
 
-## Hiring operations
+## Onboarding and talent acquisition
 
-Hiring combines headcount approvals, active requisitions, candidates, interviews, and offers. A decision or exception summary should use persisted hiring workflow records and identify requisitions awaiting approval, overdue follow-ups, accountable owners, and the next recorded action. Aggregate source performance is appropriate only when the user asks about recruiting volume, speed, or sources.
+Onboarding is the employee-lifecycle workspace. New joiners are persisted preboarding employees, and submitted employment profiles are verified through actor-scoped workflow records. Talent acquisition is a stage inside the workspace and retains separate requisition, candidate, interview, offer, and hiring records. A decision or exception summary should identify new-joiner verification work as well as recruiting approvals and overdue follow-ups. Aggregate source performance is appropriate only when the user asks about recruiting volume, speed, or sources.
 
 ## Leave operations
 
@@ -19,6 +19,10 @@ Leave decisions come from pending persisted requests. Summaries should identify 
 ## Learning operations
 
 Learning work comes from persisted course assignments. Exception summaries should identify incomplete mandatory work, overdue assignments, the responsible employee or owner, and the next action. Course completion alone is not a performance or retention conclusion.
+
+Capability recommendations are calculated from approved job-profile requirements, active employees in the role, current matching requisitions, completed course-to-skill evidence, and the active course catalog. They describe internal workforce demand, not external market demand. A recommendation may prepare a role cohort and course assignment, but it must be reviewed before the existing learning campaign service creates assignments.
+
+The workflow agent uses Azure OpenAI only to classify a request into an allowed workflow. It then resolves people, courses, job profiles, departments, locations, retention cohorts, and duplicate records from PostgreSQL. Calendar invitations, cohort learning assignments, position requisitions, and governed retention reviews require a visible preview and explicit confirmation before the audited domain service runs.
 
 ## Insights and retention
 

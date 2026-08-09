@@ -22,33 +22,33 @@ type NavigationItem = {
 
 const navigationGroups: Array<{ label: string; items: NavigationItem[] }> = [
   {
-    label: "Workspace",
+    label: "Work",
     items: [
       { href: "/", label: "Home" },
       { href: "/people", label: "People" },
-      { href: "/inbox", label: "Inbox" },
+      { href: "/inbox", label: "Work queue" },
     ],
   },
   {
-    label: "Operations",
+    label: "Lifecycle",
     items: [
-      { href: "/hiring", label: "Hiring" },
+      { href: "/onboarding", label: "Onboarding" },
       { href: "/leaves", label: "Leaves" },
-      { href: "/courses", label: "Assign courses" },
+      { href: "/courses", label: "Learning" },
     ],
   },
   {
-    label: "Reporting",
+    label: "Intelligence",
     items: [
       { href: "/insights", label: "Insights" },
-      { href: "/attrition", label: "Attrition risk" },
+      { href: "/attrition", label: "Retention risk" },
       { href: "/assistant", label: "AI assistant" },
     ],
   },
   {
-    label: "Administration",
+    label: "System",
     items: [
-      { href: "/imports", label: "Import / export data" },
+      { href: "/imports", label: "Data exchange" },
       { href: "/access", label: "Access", adminOnly: true },
     ],
   },
@@ -56,6 +56,7 @@ const navigationGroups: Array<{ label: string; items: NavigationItem[] }> = [
 
 function isActive(pathname: string, item: NavigationItem): boolean {
   if (pathname === "/risk-review") return item.href === "/attrition"
+  if (pathname === "/hiring") return item.href === "/onboarding"
   if (item.href === "/") return pathname === "/"
   return pathname === item.href || pathname.startsWith(`${item.href}/`)
 }

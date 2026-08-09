@@ -151,6 +151,7 @@ export type TrainingRecord = {
   department: string
   is_mandatory: number | boolean
   data_source: string
+  updated_at?: string | null
   due_date?: string | null
   requested_by_email?: string | null
   assigned_at?: string | null
@@ -176,6 +177,13 @@ export type DomainStatus = {
 
 export type WorkforceAnalytics = {
   generatedAt: string
+  calculationBasis: {
+    asOfDate: string
+    reportingWindow: string
+    headcount: string
+    eventMetrics: string
+    costMetrics: string
+  }
   filters: Required<Pick<HrFilters, "period">> & Omit<HrFilters, "period">
   dimensions: { departments: string[]; jobTitles: string[]; locations: string[]; leaveTypes: string[] }
   status: DomainStatus[]

@@ -3,7 +3,7 @@ import { runtimeEnv } from "@/lib/server/runtime-env"
 
 const roles = ["admin", "hr", "manager", "viewer", "employee"] as const
 export type AppRole = (typeof roles)[number]
-export type AccessUser = { email: string; display_name: string; role: AppRole; status: "active" | "disabled"; created_at: string; updated_at: string; last_login_at: string | null }
+type AccessUser = { email: string; display_name: string; role: AppRole; status: "active" | "disabled"; created_at: string; updated_at: string; last_login_at: string | null }
 const ownerEmail = runtimeEnv.BOOTSTRAP_ADMIN_EMAIL?.trim().toLowerCase() ?? ""
 
 function normalizedEmail(value: string) { return value.trim().toLowerCase() }

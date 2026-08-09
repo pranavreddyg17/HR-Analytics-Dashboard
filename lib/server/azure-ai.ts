@@ -1,6 +1,23 @@
 import { runtimeEnv } from "@/lib/server/runtime-env"
 
 type SearchDocument = { source?: string; section?: string; content?: string; "@search.score"?: number }
+type KnowledgeResult = Array<{ source: string; section: string; content: string }>
+
+const KNOWLEDGE_CACHE_TTL_MS = 5 * 60 * 1000
+const KNOWLEDGE_CACHE_LIMIT = 100
+const knowledgeCache = new Map<string, { expiresAt: number; value: KnowledgeResult }>()
+
+function cacheKey(query: string, limit: number): string {
+  return `${limit}:${query.trim().toLowerCase().replace(/\s+/g, " ")}`
+}
+
+function cacheKnowledge(key: string, value: KnowledgeResult): void {
+  if (knowledgeCache.size >= KNOWLEDGE_CACHE_LIMIT) {
+    const oldest = knowledgeCache.keys().next().value
+    if (oldest) knowledgeCache.delete(oldest)
+  }
+  knowledgeCache.set(key, { expiresAt: Date.now() + KNOWLEDGE_CACHE_TTL_MS, value })
+}
 
 function configured(name: string): string | null {
   const value = runtimeEnv[name]?.trim()
@@ -26,14 +43,18 @@ async function createAzureEmbedding(input: string): Promise<number[] | null> {
     method: "POST",
     headers: { "content-type": "application/json", "api-key": apiKey },
     body: JSON.stringify({ model: runtimeEnv.AZURE_OPENAI_EMBEDDING_MODEL ?? "text-embedding-3-small", input }),
-    signal: AbortSignal.timeout(12_000),
+    signal: AbortSignal.timeout(5_000),
   })
   if (!response.ok) return null
   const body = await response.json() as { data?: Array<{ embedding?: number[] }> }
   return body.data?.[0]?.embedding ?? null
 }
 
-export async function searchAzureKnowledge(query: string, limit = 4): Promise<Array<{ source: string; section: string; content: string }>> {
+export async function searchAzureKnowledge(query: string, limit = 4): Promise<KnowledgeResult> {
+  const key = cacheKey(query, limit)
+  const cached = knowledgeCache.get(key)
+  if (cached && cached.expiresAt > Date.now()) return cached.value
+  if (cached) knowledgeCache.delete(key)
   const endpoint = configured("AZURE_AI_SEARCH_ENDPOINT")
   const apiKey = configured("AZURE_AI_SEARCH_API_KEY")
   const index = configured("AZURE_AI_SEARCH_INDEX")
@@ -53,13 +74,15 @@ export async function searchAzureKnowledge(query: string, limit = 4): Promise<Ar
     method: "POST",
     headers: { "content-type": "application/json", "api-key": apiKey },
     body: JSON.stringify(body),
-    signal: AbortSignal.timeout(8_000),
+    signal: AbortSignal.timeout(6_000),
   })
   if (!response.ok) return []
   const result = await response.json() as { value?: SearchDocument[] }
-  return (result.value ?? []).flatMap((item) => item.content
+  const matches = (result.value ?? []).flatMap((item) => item.content
     ? [{ source: `Azure AI Search · ${item.source || "LaidbackHR knowledge"}`, section: item.section || "Workspace guidance", content: item.content }]
     : [])
+  cacheKnowledge(key, matches)
+  return matches
 }
 
 export async function synthesizeWithAzureResponses(input: { system: string; user: string }): Promise<string | null> {

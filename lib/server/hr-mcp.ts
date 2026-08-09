@@ -11,6 +11,9 @@ import { getInboxOperations } from "@/lib/server/inbox"
 import { getHomeSnapshot } from "@/lib/server/home"
 import type { RequestActor } from "@/lib/server/request-user"
 import type { InboxItem } from "@/lib/people-types"
+import { listLearningOperations } from "@/lib/server/learning"
+import { listHiringOperations } from "@/lib/server/hiring"
+import { listOnboardingOperations } from "@/lib/server/onboarding"
 
 const filtersShape = {
   from: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional().describe("Start date in YYYY-MM-DD format"),
@@ -161,6 +164,16 @@ const mcpToolCatalog = [
     title: "Find employee records",
     description: "Search the current employee directory and return limited HR profile context.",
   },
+  {
+    name: "review_onboarding_readiness",
+    title: "Review onboarding readiness",
+    description: "New-joiner verification, manager and start-date readiness, and the recruiting-to-onboarding handoff from persisted records.",
+  },
+  {
+    name: "review_capability_plan",
+    title: "Review workforce capabilities",
+    description: "Role-based capability requirements, learning evidence, course mappings, and internal hiring demand for a governed cohort.",
+  },
 ] as const
 
 type WorkQueue = "my_work" | "decisions" | "overdue" | "managers" | "employees" | "open" | "completed"
@@ -181,7 +194,7 @@ function inQueue(item: InboxItem, queue: WorkQueue, actor: RequestActor): boolea
 }
 
 function inPageScope(item: InboxItem, scope: WorkScope): boolean {
-  if (scope === "hiring") return item.type === "hiring"
+  if (scope === "hiring") return item.type === "hiring" || item.type === "onboarding"
   if (scope === "leaves") return item.type === "leave"
   if (scope === "courses") return item.type === "training"
   if (scope === "insights") return item.type === "insight"
@@ -191,7 +204,7 @@ function inPageScope(item: InboxItem, scope: WorkScope): boolean {
 
 export function createHrMcpServer(actor?: RequestActor): McpServer {
   const server = new McpServer(
-    { name: "LaidbackHR.AI Workforce Analytics", version: "3.0.0" },
+    { name: "LaidbackHR.AI Workforce Analytics", version: "4.0.0" },
     { capabilities: { tools: {}, resources: {} } },
   )
 
@@ -485,13 +498,15 @@ export function createHrMcpServer(actor?: RequestActor): McpServer {
     }
 
     if (domain === "training") {
+      if (!actor) throw new Error("Authenticated actor context is required for learning recommendations.")
+      const learningOperations = await listLearningOperations(actor, { department: filters.department, location: filters.location })
       const selectedIds = new Set(employeeIds)
       const selectedEmployeeLearningContext = analytics.training.rows
         .filter((row) => selectedIds.has(row.employee_id))
         .slice(0, 40)
         .map((row) => ({ employeeId: row.employee_id, program: row.training_program, status: row.completion_status, dueDate: row.due_date ?? null }))
       const mandatory = analytics.training.rows
-        .filter((row) => /incomplete/i.test(row.completion_status) && /security|privacy|safety|compliance|phishing|mandatory/i.test(row.training_program))
+        .filter((row) => /incomplete/i.test(row.completion_status) && row.is_mandatory)
         .slice(0, 25)
         .map((row) => ({ employeeId: row.employee_id, program: row.training_program, department: row.department, dueDate: row.due_date ?? null }))
       return result({
@@ -507,6 +522,8 @@ export function createHrMcpServer(actor?: RequestActor): McpServer {
         byDepartment: analytics.training.byDepartment,
         trend: analytics.training.trend,
         selectedEmployeeLearningContext,
+        capabilityRecommendations: learningOperations.recommendations,
+        recommendationBasis: "Approved job-profile capability requirements, active role populations, open requisitions, completed mapped courses, and the active course catalog.",
       })
     }
 
@@ -525,6 +542,82 @@ export function createHrMcpServer(actor?: RequestActor): McpServer {
       byDepartment: analytics.promotions.byDepartment,
       trend: analytics.promotions.trend,
       guardrail: "This is a mobility-review cohort, not a determination that anyone should be promoted. Check performance evidence, role levels, lateral moves, career ladders, employee preference, and data completeness.",
+    })
+  })
+
+  server.registerTool("review_onboarding_readiness", {
+    title: mcpToolCatalog[6].title,
+    description: mcpToolCatalog[6].description,
+    inputSchema: {
+      department: z.string().trim().max(120).optional(),
+      location: z.string().trim().max(120).optional(),
+      includeRecruitingHandoff: z.boolean().optional(),
+      limit: z.number().int().min(1).max(20).optional(),
+    },
+    annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false },
+  }, async ({ department, location, includeRecruitingHandoff = true, limit = 10 }: { department?: string; location?: string; includeRecruitingHandoff?: boolean; limit?: number }) => {
+    if (!actor) throw new Error("Authenticated actor context is required for onboarding readiness.")
+    const [onboarding, hiring] = await Promise.all([
+      listOnboardingOperations(actor),
+      includeRecruitingHandoff ? listHiringOperations(actor) : Promise.resolve(null),
+    ])
+    const joiners = onboarding.joiners.filter((row) => (!department || row.department === department) && (!location || row.location === location))
+    const requisitions = hiring?.requisitions.filter((row) => (!department || row.department === department) && (!location || row.location === location)) ?? []
+    const candidates = hiring?.candidates.filter((row) => (!department || row.department === department) && (!location || row.location === location)) ?? []
+    const today = new Date().toISOString().slice(0, 10)
+    const horizon = new Date(`${today}T12:00:00Z`)
+    horizon.setUTCDate(horizon.getUTCDate() + 30)
+    const horizonDate = horizon.toISOString().slice(0, 10)
+    return result({
+      generatedAt: onboarding.generatedAt,
+      dataMode: "imported/operational",
+      recordScope: "Authenticated onboarding and recruiting operations",
+      filters: { department: department ?? null, location: location ?? null },
+      summary: {
+        preboarding: joiners.length,
+        awaitingVerification: joiners.filter((row) => row.verificationStatus === "Verification").length,
+        missingManager: joiners.filter((row) => !row.managerId).length,
+        startingNext30Days: joiners.filter((row) => row.startDate >= today && row.startDate <= horizonDate).length,
+        openRequisitions: requisitions.filter((row) => ["requested", "open", "offer"].includes(row.status.toLowerCase())).length,
+        candidatesAtOffer: candidates.filter((row) => row.stage === "Offer").length,
+      },
+      joiners: joiners.slice(0, limit),
+      recruitingHandoff: includeRecruitingHandoff ? {
+        requisitions: requisitions.slice(0, limit).map((row) => ({ id: row.id, role: row.position, department: row.department, location: row.location, status: row.status, owner: row.ownerName, nextAction: row.nextAction, dueDate: row.dueDate })),
+        offerCandidates: candidates.filter((row) => row.stage === "Offer").slice(0, limit).map((row) => ({ id: row.id, name: row.fullName, role: row.requisitionTitle, owner: row.ownerName, nextStep: row.nextStep, dueDate: row.nextStepDueAt })),
+      } : null,
+    })
+  })
+
+  server.registerTool("review_capability_plan", {
+    title: mcpToolCatalog[7].title,
+    description: mcpToolCatalog[7].description,
+    inputSchema: {
+      department: z.string().trim().max(120).optional(),
+      location: z.string().trim().max(120).optional(),
+      jobTitle: z.string().trim().max(160).optional(),
+      limit: z.number().int().min(1).max(20).optional(),
+    },
+    annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false },
+  }, async ({ department, location, jobTitle, limit = 10 }: { department?: string; location?: string; jobTitle?: string; limit?: number }) => {
+    if (!actor) throw new Error("Authenticated actor context is required for capability planning.")
+    const learning = await listLearningOperations(actor, { department, location })
+    const recommendations = learning.recommendations.filter((row) => !jobTitle || row.jobTitle === jobTitle)
+    const eligiblePeople = learning.people.filter((row) => (!jobTitle || row.jobTitle === jobTitle))
+    return result({
+      generatedAt: learning.generatedAt,
+      dataMode: "imported/operational",
+      recordScope: "Approved job profiles, role populations, course mappings, completed learning evidence, and open requisitions",
+      filters: { department: department ?? null, location: location ?? null, jobTitle: jobTitle ?? null },
+      summary: {
+        eligibleEmployees: eligiblePeople.length,
+        recommendations: recommendations.length,
+        highPriority: recommendations.filter((row) => row.priority === "High").length,
+        mandatoryGaps: learning.summary.mandatoryGaps,
+        overdueAssignments: learning.summary.overdue,
+      },
+      recommendations: recommendations.slice(0, limit),
+      guardrail: "These are internal capability-planning signals. Confirm role relevance, employee goals, access, and time before assignment; training is not a response to an attrition score by itself.",
     })
   })
 

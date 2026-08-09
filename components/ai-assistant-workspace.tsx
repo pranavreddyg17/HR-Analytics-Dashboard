@@ -6,7 +6,7 @@ import { AgentCopilot } from "@/components/agent-copilot"
 import { AgentWorkflows } from "@/components/agent-workflows"
 import { cn } from "@/lib/utils"
 
-type View = "chat" | "calendar"
+type View = "chat" | "workflows"
 
 export function AiAssistantWorkspace({ dataMode, canPrepare }: { dataMode: string; canPrepare: boolean }) {
   const [view, setView] = useState<View>("chat")
@@ -16,7 +16,7 @@ export function AiAssistantWorkspace({ dataMode, canPrepare }: { dataMode: strin
       <div className="flex min-h-12 items-end gap-1 border-b border-border px-3" role="tablist" aria-label="AI assistant tools">
         {[
           { id: "chat" as const, label: "Workforce chat" },
-          { id: "calendar" as const, label: "Schedule a meeting" },
+          { id: "workflows" as const, label: "Workflow agent" },
         ].map((item) => <button key={item.id} type="button" role="tab" aria-selected={view === item.id} onClick={() => setView(item.id)} className={cn("-mb-px h-12 border-b-2 px-3 font-semibold", view === item.id ? "border-primary text-foreground" : "border-transparent text-muted-foreground hover:text-foreground")}>{item.label}</button>)}
       </div>
 

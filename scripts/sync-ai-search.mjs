@@ -22,7 +22,7 @@ function chunks(markdown, source) {
   let body = []
   const flush = () => {
     const content = body.join("\n").trim()
-    if (content) result.push({ source, section, content })
+    if (content) result.push({ source, section, content, sequence: result.length })
     body = []
   }
   for (const line of markdown.split(/\r?\n/)) {
@@ -58,7 +58,15 @@ async function request(url, options) {
 
 // The index contains stable domain and operating guidance only. The private
 // system prompt remains in the application and is never copied into retrieval.
-const files = ["hr-workspace-context.md", "workspace-operations.md"]
+const files = [
+  "hr-workspace-context.md",
+  "workspace-operations.md",
+  "analytics-metric-contracts.md",
+  "lifecycle-operating-playbooks.md",
+  "capability-and-learning.md",
+  "assistant-retrieval-guide.md",
+  "data-governance-and-quality.md",
+]
 const documents = (await Promise.all(files.map(async (file) => chunks(await readFile(join(process.cwd(), "knowledge", file), "utf8"), basename(file))))).flat()
 const embeddingResponse = await request(embeddingUrl(), {
   method: "POST",
@@ -90,8 +98,10 @@ await request(endpoint(`/indexes/${encodeURIComponent(indexName)}`), {
 
 const indexedDocuments = documents.map((document, index) => ({
   "@search.action": "mergeOrUpload",
-  id: createHash("sha256").update(`${document.source}:${document.section}`).digest("hex"),
-  ...document,
+  id: createHash("sha256").update(`${document.source}:${document.section}:${document.sequence}`).digest("hex"),
+  source: document.source,
+  section: document.section,
+  content: document.content,
   contentVector: vectors.get(index),
 }))
 
@@ -116,4 +126,39 @@ if (stale.length) {
   })
 }
 
-console.log(JSON.stringify({ index: indexName, documents: documents.length, removed: stale.length, dimensions }))
+const qualityProbes = [
+  { query: "how is attrition rate calculated", expected: "analytics-metric-contracts.md" },
+  { query: "assign learning to a role cohort", expected: "capability-and-learning.md" },
+  { query: "new joiner verification readiness", expected: "lifecycle-operating-playbooks.md" },
+  { query: "employee data privacy access", expected: "data-governance-and-quality.md" },
+  { query: "which tool should answer a current page queue", expected: "assistant-retrieval-guide.md" },
+]
+
+async function runQualityProbes() {
+  const failures = []
+  for (const probe of qualityProbes) {
+    const response = await request(endpoint(`/indexes/${encodeURIComponent(indexName)}/docs/search`), {
+      method: "POST",
+      headers: { "content-type": "application/json", "api-key": searchKey },
+      body: JSON.stringify({ search: probe.query, queryType: "simple", searchMode: "any", select: "source,section", top: 5 }),
+    })
+    const sources = (response.value || []).map((document) => document.source)
+    if (!sources.includes(probe.expected)) failures.push({ ...probe, sources })
+  }
+  if (failures.length) throw new Error(`Azure AI Search quality probes failed: ${JSON.stringify(failures)}`)
+}
+
+let probeError
+for (let attempt = 1; attempt <= 3; attempt += 1) {
+  try {
+    await runQualityProbes()
+    probeError = undefined
+    break
+  } catch (error) {
+    probeError = error
+    if (attempt < 3) await new Promise((resolve) => setTimeout(resolve, attempt * 1500))
+  }
+}
+if (probeError) throw probeError
+
+console.log(JSON.stringify({ index: indexName, documents: documents.length, removed: stale.length, dimensions, qualityProbes: qualityProbes.length }))

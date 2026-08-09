@@ -269,6 +269,7 @@ resource "azurerm_linux_web_app" "web" {
     AZURE_OPENAI_EMBEDDING_API_KEY        = local.embedding_key_reference
     AZURE_OPENAI_EMBEDDING_MODEL          = "text-embedding-3-small"
     APPLICATIONINSIGHTS_CONNECTION_STRING = azurerm_application_insights.app.connection_string
+    OTEL_SERVICE_NAME                     = "laidbackhr-web"
   }
 }
 

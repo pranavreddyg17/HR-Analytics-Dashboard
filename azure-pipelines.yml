@@ -41,7 +41,22 @@ stages:
           - script: |
               set -euo pipefail
               corepack enable
+              pnpm config set store-dir $(Pipeline.Workspace)/.pnpm-store
+            displayName: Configure pnpm
+
+          - task: Cache@2
+            displayName: Cache pnpm packages
+            inputs:
+              key: 'pnpm | "$(Agent.OS)" | pnpm-lock.yaml'
+              restoreKeys: |
+                pnpm | "$(Agent.OS)"
+              path: $(Pipeline.Workspace)/.pnpm-store
+
+          - script: |
+              set -euo pipefail
+              corepack enable
               pnpm install --frozen-lockfile
+              pnpm test:knowledge
               pnpm lint
               pnpm exec tsc --noEmit
               pnpm build:azure

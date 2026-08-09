@@ -33,12 +33,14 @@ jobs:
       - uses: actions/setup-node@v6
         with:
           node-version: "22"
-          package-manager-cache: false
+          cache: pnpm
+          cache-dependency-path: pnpm-lock.yaml
       - name: Validate web application
         run: |
           set -euo pipefail
           corepack enable
           pnpm install --frozen-lockfile
+          pnpm test:knowledge
           pnpm lint
           pnpm exec tsc --noEmit
           pnpm build:azure
@@ -72,7 +74,8 @@ jobs:
       - uses: actions/setup-node@v6
         with:
           node-version: "22"
-          package-manager-cache: false
+          cache: pnpm
+          cache-dependency-path: pnpm-lock.yaml
       - name: Sign in to Azure with OIDC
         uses: azure/login@v3
         with:
@@ -95,12 +98,18 @@ jobs:
           az keyvault secret set --vault-name "$APP_KEY_VAULT" --name azure-openai-endpoint --value "$AZURE_OPENAI_ENDPOINT" --output none
           az keyvault secret set --vault-name "$APP_KEY_VAULT" --name azure-openai-embedding-key --value "$AZURE_EMBEDDING_KEY" --output none
           az keyvault secret set --vault-name "$APP_KEY_VAULT" --name azure-openai-embedding-endpoint --value "$AZURE_EMBEDDING_ENDPOINT" --output none
-      - name: Build and push application images
-        run: |
-          set -euo pipefail
-          az acr login --name "$ACR_NAME"
-          docker build --pull --tag "$ACR_LOGIN_SERVER/laidbackhr-web:$IMAGE_TAG" .
-          docker push "$ACR_LOGIN_SERVER/laidbackhr-web:$IMAGE_TAG"
+      - name: Sign in to Azure Container Registry
+        run: az acr login --name "$ACR_NAME"
+      - uses: docker/setup-buildx-action@v3
+      - name: Build and push application image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          pull: true
+          push: true
+          tags: ${{ env.ACR_LOGIN_SERVER }}/laidbackhr-web:${{ env.IMAGE_TAG }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
       - name: Apply Azure infrastructure
         run: |
           set -euo pipefail

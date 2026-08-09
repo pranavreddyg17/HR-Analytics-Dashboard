@@ -5,7 +5,7 @@ import { InMemoryTransport } from "@modelcontextprotocol/sdk/inMemory.js"
 import { buildHrSystemPrompt, type KnowledgeMatch } from "@/lib/server/hr-knowledge"
 import { resolveHrIntent, type AgentHistoryMessage, type ToolPlan } from "@/lib/server/hr-agent-intent"
 import { renderHrEvidence } from "@/lib/server/hr-agent-response"
-import { getWorkforceAnalytics } from "@/lib/server/hr-analytics"
+import { getWorkforceDimensions } from "@/lib/server/hr-analytics"
 import { createHrMcpServer } from "@/lib/server/hr-mcp"
 import { ensureHrDatabase } from "@/lib/server/hr-repository"
 import { runtimeEnv } from "@/lib/server/runtime-env"
@@ -34,7 +34,7 @@ type AgentAnswer = {
   groundedAt: string
 }
 
-export type AgentProgress =
+type AgentProgress =
   | { phase: "planning"; message: string }
   | { phase: "tool_started"; tool: string; iteration: number }
   | { phase: "tool_completed"; tool: string; iteration: number; durationMs: number }
@@ -204,7 +204,7 @@ export async function runHrAgent({ message, history = [], actor, conversationId,
   const safeHistory = history
     .filter((item): item is AgentHistoryMessage => Boolean(item) && (item.role === "user" || item.role === "assistant") && typeof item.content === "string")
     .slice(-12)
-  const dimensions = (await getWorkforceAnalytics()).dimensions
+  const dimensions = await getWorkforceDimensions()
   await onProgress?.({ phase: "planning", message: "Selecting workspace evidence" })
   const focus = agentId ? agentFocus[agentId] : undefined
   // Intent routing must reflect the user's objective, not the agent's role

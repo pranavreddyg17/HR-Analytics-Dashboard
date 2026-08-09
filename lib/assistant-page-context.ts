@@ -1,4 +1,4 @@
-export type AssistantPageKey =
+type AssistantPageKey =
   | "home"
   | "people"
   | "person"
@@ -23,12 +23,12 @@ const pageLabels: Record<Exclude<AssistantPageKey, "person" | "workspace">, stri
   home: "Home",
   people: "People",
   inbox: "Inbox",
-  hiring: "Hiring",
+  hiring: "Onboarding",
   leaves: "Leaves",
-  courses: "Assign courses",
+  courses: "Learning",
   insights: "Insights",
-  attrition: "Attrition risk",
-  imports: "Import / export data",
+  attrition: "Retention risk",
+  imports: "Data exchange",
   access: "Access",
 }
 
@@ -37,6 +37,7 @@ const routeKeys: Record<string, Exclude<AssistantPageKey, "person" | "workspace"
   "/people": "people",
   "/inbox": "inbox",
   "/hiring": "hiring",
+  "/onboarding": "hiring",
   "/leaves": "leaves",
   "/courses": "courses",
   "/insights": "insights",
@@ -97,9 +98,9 @@ export function assistantPagePrompts(context: AssistantPageContext): string[] {
     people: ["Summarize this directory and its data quality", "Which required directory fields are incomplete?"],
     person: ["Summarize this employee record", "What open HR work is linked to this employee?"],
     inbox: ["Summarize decisions and exceptions in this queue", "What should I act on first?"],
-    hiring: ["Summarize recruiting decisions and overdue follow-ups", "Which requisitions need action next?"],
+    hiring: ["Summarize onboarding and recruiting handoffs", "Which new joiners or requisitions need action next?"],
     leaves: ["Summarize pending leave decisions and coverage exceptions", "Which leave requests need action next?"],
-    courses: ["Summarize overdue and mandatory learning work", "Which assignments need follow-up next?"],
+    courses: ["Which capability gaps should HR review?", "Which learning cohorts need action next?"],
     insights: ["Summarize open workforce exceptions", "Which insight actions are overdue?"],
     attrition: ["Summarize the current retention signals", "Which cohort should HR review first?"],
     imports: ["Summarize data coverage and quality issues", "Which HR domain needs data attention?"],

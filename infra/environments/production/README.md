@@ -1,5 +1,22 @@
 # Production deployment
 
+## Resource naming and ownership
+
+All application resources are in the existing `Laidback.ai` resource group. Terraform applies the `application=laidbackhr`, `environment=production`, and `managed_by=terraform` tags to managed resources. The bootstrap deployment identity and Terraform-state account are tagged separately with their purposes.
+
+The stable suffix `f61hno` was generated once by Terraform to satisfy Azure's global-name requirements. It is not an environment or application version. Changing it would replace stateful resources, so use tags and Terraform outputs to identify purpose instead of renaming deployed resources.
+
+| Resource | Purpose |
+|---|---|
+| `laidbackhr-azdo-deploy` | Federated GitHub Actions and Azure DevOps deployment identity |
+| `laidbackhrtf7981312c` | Remote Terraform state; the numeric suffix identifies the subscription |
+| `laidbackhr-f61hno-web` and `laidbackhr-production-plan` | Next.js App Service and its cost-controlled Linux plan |
+| `laidbackhr-f61hno-pg` | PostgreSQL system of record |
+| `laidbackhr-f61hno-kv` | Runtime secrets and configuration references |
+| `laidbackhrf61hno` | Active `laidbackhr-web` container images and rollback tags |
+| `laidbackhrf61hnodocs` | Private employee-document blobs |
+| `laidbackhr-production-insights` and `laidbackhr-production-logs` | Sampled OpenTelemetry and its Log Analytics workspace |
+
 ## Employee portal DNS
 
 Create these records with the authoritative DNS provider for `laidbackhr.cloud` before enabling the Terraform hostname binding:

@@ -1,6 +1,6 @@
 import { z } from "zod"
 
-import type { LearningAssignment, LearningCourse, LearningOperations, LearningPerson } from "@/lib/learning-types"
+import type { LearningAssignment, LearningCourse, LearningOperations, LearningPerson, LearningRecommendation, LearningSkill } from "@/lib/learning-types"
 import { ensureHrDatabase, type Database } from "@/lib/server/hr-repository"
 import { PeopleError } from "@/lib/server/people"
 import type { RequestActor } from "@/lib/server/request-user"
@@ -8,7 +8,7 @@ import type { RequestActor } from "@/lib/server/request-user"
 const isoDate = z.string().regex(/^\d{4}-\d{2}-\d{2}$/)
 const assignmentSchema = z.object({
   employeeId: z.string().trim().min(2).max(80).optional(),
-  targetType: z.enum(["employee", "department", "job_title", "job_level", "manager_team"]).default("employee"),
+  targetType: z.enum(["employee", "department", "job_title", "job_level", "manager_team", "job_profile"]).default("employee"),
   targetValue: z.string().trim().max(160).optional(),
   courseId: z.string().trim().min(3).max(240),
   dueDate: isoDate,
@@ -24,6 +24,7 @@ const courseSchema = z.object({
   title: z.string().trim().min(2).max(160),
   defaultHours: z.number().positive().max(500),
   isMandatory: z.boolean().default(false),
+  skillIds: z.array(z.string().trim().min(3).max(120)).max(8).default([]),
 })
 
 type AssignmentRow = {
@@ -45,6 +46,21 @@ type AssignmentRow = {
   assessment_score: number | null
   requested_by_email: string | null
   completion_notes: string | null
+}
+
+type RecommendationRow = {
+  skill_id: string
+  skill_name: string
+  category: string
+  course_id: string
+  course_title: string
+  department: string
+  job_title: string
+  job_profile_id: string
+  requirement_priority: number
+  active_employees: number
+  open_requisitions: number
+  completed_evidence: number
 }
 
 async function database(): Promise<Database> {
@@ -94,12 +110,14 @@ export async function listLearningOperations(actor: RequestActor, filters: { dep
       COALESCE(a.due_date, '9999-12-31'), COALESCE(a.completed_at, a.assigned_at) DESC
     LIMIT 5000`).bind(...bindings).all<AssignmentRow>()
 
-  const [courseResult, peopleResult] = await Promise.all([
+  const [courseResult, peopleResult, skillResult] = await Promise.all([
     db.prepare("SELECT id, code, title, default_duration_hours, is_mandatory FROM learning_courses WHERE LOWER(status)='active' ORDER BY is_mandatory DESC, title")
       .all<{ id: string; code: string | null; title: string; default_duration_hours: number; is_mandatory: number }>(),
-    db.prepare(`SELECT e.employee_id, TRIM(COALESCE(NULLIF(e.preferred_name, ''), e.first_name) || ' ' || e.last_name) AS display_name, e.department, e.job_title, e.job_level, e.location
+    db.prepare(`SELECT e.employee_id, TRIM(COALESCE(NULLIF(e.preferred_name, ''), e.first_name) || ' ' || e.last_name) AS display_name, e.department, e.job_title, e.job_level, e.location, e.job_profile_id
       FROM employee_directory_view e WHERE e.archived_at IS NULL AND LOWER(e.employment_status) IN ('active','preboarding','on leave') AND ${scopeSql}
-      ORDER BY display_name LIMIT 5000`).bind(...(actor.role === "manager" && employeeId ? [employeeId, employeeId] : !["admin", "hr"].includes(actor.role) && employeeId ? [employeeId] : [])).all<{ employee_id: string; display_name: string; department: string; job_title: string; job_level: string; location: string }>(),
+      ORDER BY display_name LIMIT 5000`).bind(...(actor.role === "manager" && employeeId ? [employeeId, employeeId] : !["admin", "hr"].includes(actor.role) && employeeId ? [employeeId] : [])).all<{ employee_id: string; display_name: string; department: string; job_title: string; job_level: string; location: string; job_profile_id: string }>(),
+    db.prepare("SELECT id, name, category FROM capability_skills WHERE organization_id='org:laidbackhr' AND status='active' ORDER BY category, name")
+      .all<{ id: string; name: string; category: string }>(),
   ])
   const today = new Date().toISOString().slice(0, 10)
   const assignments: LearningAssignment[] = (assignmentResult.results ?? []).map((row) => ({
@@ -122,7 +140,8 @@ export async function listLearningOperations(actor: RequestActor, filters: { dep
     canComplete: ["admin", "hr"].includes(actor.role) || row.employee_email?.toLowerCase() === actor.email.toLowerCase(),
   }))
   const courses: LearningCourse[] = (courseResult.results ?? []).map((row) => ({ id: row.id, code: row.code, title: row.title, defaultHours: Number(row.default_duration_hours), isMandatory: Boolean(row.is_mandatory) }))
-  const people: LearningPerson[] = (peopleResult.results ?? []).map((row) => ({ employeeId: row.employee_id, displayName: row.display_name, department: row.department, jobTitle: row.job_title, jobLevel: row.job_level, location: row.location }))
+  const people: LearningPerson[] = (peopleResult.results ?? []).map((row) => ({ employeeId: row.employee_id, displayName: row.display_name, department: row.department, jobTitle: row.job_title, jobLevel: row.job_level, location: row.location, jobProfileId: row.job_profile_id }))
+  const skills: LearningSkill[] = (skillResult.results ?? []).map((row) => ({ id: row.id, name: row.name, category: row.category }))
   const completed = assignments.filter((row) => row.status.toLowerCase() === "completed").length
   const overdue = assignments.filter((row) => row.status.toLowerCase() !== "completed" && Boolean(row.dueDate && row.dueDate < today)).length
   const mandatoryGaps = assignments.filter((row) => row.isMandatory && row.status.toLowerCase() !== "completed").length
@@ -136,6 +155,73 @@ export async function listLearningOperations(actor: RequestActor, filters: { dep
   }
   const departmentCoverage = [...departmentMap.entries()].map(([department, values]) => ({ department, ...values, completionRate: values.assigned ? Math.round(values.completed / values.assigned * 100) : 0 }))
     .sort((left, right) => left.completionRate - right.completionRate || right.assigned - left.assigned)
+  const scopedIds = people.map((person) => person.employeeId)
+  let recommendations: LearningRecommendation[] = []
+  if (scopedIds.length) {
+    const recommendationResult = await db.prepare(`
+      WITH scoped_employees AS (
+        SELECT e.employee_id, e.department, e.job_title, e.job_profile_id
+        FROM employee_directory_view e
+        WHERE e.employee_id IN (${scopedIds.map(() => "?").join(",")})
+      ), role_population AS (
+        SELECT department, job_title, job_profile_id, COUNT(*)::int AS active_employees
+        FROM scoped_employees GROUP BY department, job_title, job_profile_id
+      ), open_roles AS (
+        SELECT department, position AS job_title, COUNT(*)::int AS open_requisitions
+        FROM hiring_requisitions_view
+        WHERE LOWER(recruitment_status) IN ('requested','open','offer')
+        GROUP BY department, position
+      ), completed_evidence AS (
+        SELECT se.job_profile_id, csc.skill_id, COUNT(DISTINCT ca.employee_id)::int AS completed_evidence
+        FROM scoped_employees se
+        JOIN course_assignments ca ON ca.employee_id=se.employee_id AND LOWER(ca.status)='completed'
+        JOIN course_skill_coverage csc ON csc.course_id=ca.course_id
+        GROUP BY se.job_profile_id, csc.skill_id
+      ), ranked_courses AS (
+        SELECT csc.skill_id, c.id AS course_id, c.title AS course_title,
+          ROW_NUMBER() OVER (PARTITION BY csc.skill_id ORDER BY csc.proficiency_level DESC, c.is_mandatory DESC, c.title) AS course_rank
+        FROM course_skill_coverage csc
+        JOIN learning_courses c ON c.id=csc.course_id AND LOWER(c.status)='active'
+      )
+      SELECT s.id AS skill_id, s.name AS skill_name, s.category, rc.course_id, rc.course_title,
+        rp.department, rp.job_title, rp.job_profile_id, req.priority AS requirement_priority, rp.active_employees,
+        COALESCE(o.open_requisitions, 0)::int AS open_requisitions,
+        COALESCE(ce.completed_evidence, 0)::int AS completed_evidence
+      FROM role_population rp
+      JOIN job_profile_skill_requirements req ON req.job_profile_id=rp.job_profile_id
+      JOIN capability_skills s ON s.id=req.skill_id AND s.status='active'
+      JOIN ranked_courses rc ON rc.skill_id=req.skill_id AND rc.course_rank=1
+      LEFT JOIN open_roles o ON LOWER(o.department)=LOWER(rp.department) AND LOWER(o.job_title)=LOWER(rp.job_title)
+      LEFT JOIN completed_evidence ce ON ce.job_profile_id=rp.job_profile_id AND ce.skill_id=req.skill_id
+      ORDER BY (req.priority * 100 + COALESCE(o.open_requisitions, 0) * 20 + GREATEST(rp.active_employees - COALESCE(ce.completed_evidence, 0), 0)) DESC,
+        rp.department, rp.job_title, s.name
+      LIMIT 12
+    `).bind(...scopedIds).all<RecommendationRow>()
+    recommendations = (recommendationResult.results ?? []).map((row) => {
+      const employeesNeedingEvidence = Math.max(0, Number(row.active_employees) - Number(row.completed_evidence))
+      const priority = Number(row.requirement_priority) >= 3 || Number(row.open_requisitions) > 0 && employeesNeedingEvidence > 0
+        ? "High" as const
+        : employeesNeedingEvidence >= Math.max(3, Number(row.active_employees) / 2) ? "Medium" as const : "Standard" as const
+      return {
+        id: `${row.skill_id}:${row.department}:${row.job_title}`,
+        skillId: row.skill_id,
+        skillName: row.skill_name,
+        category: row.category,
+        courseId: row.course_id,
+        courseTitle: row.course_title,
+        targetType: "job_profile" as const,
+        targetValue: row.job_profile_id,
+        jobTitle: row.job_title,
+        department: row.department,
+        activeEmployees: Number(row.active_employees),
+        openRequisitions: Number(row.open_requisitions),
+        completedEvidence: Number(row.completed_evidence),
+        employeesNeedingEvidence,
+        priority,
+        reason: `${employeesNeedingEvidence} of ${Number(row.active_employees)} active ${row.job_title} employees have no completed course mapped to ${row.skill_name}${Number(row.open_requisitions) ? `; ${Number(row.open_requisitions)} matching role${Number(row.open_requisitions) === 1 ? " is" : "s are"} open` : ""}.`,
+      }
+    }).filter((row) => row.employeesNeedingEvidence > 0)
+  }
   return {
     generatedAt: new Date().toISOString(),
     summary: { assignments: assignments.length, completed, completionRate: assignments.length ? Number((completed / assignments.length * 100).toFixed(1)) : 0, overdue, mandatoryGaps },
@@ -145,7 +231,7 @@ export async function listLearningOperations(actor: RequestActor, filters: { dep
       jobTitles: [...new Set(people.map((row) => row.jobTitle))].sort(),
       jobLevels: [...new Set(people.map((row) => row.jobLevel))].sort(),
     },
-    courses, people, assignments, departmentCoverage,
+    courses, skills, people, assignments, departmentCoverage, recommendations,
   }
 }
 
@@ -158,8 +244,15 @@ export async function createLearningCourse(value: unknown, actor: RequestActor):
     WHERE LOWER(title)=LOWER(?) OR LOWER(COALESCE(code, ''))=LOWER(?)`)
     .bind(input.title, input.code ?? "").first<{ id: string }>()
   if (duplicate) throw new PeopleError("A course with that title or code already exists.", 409)
-  await db.prepare("INSERT INTO learning_courses(id, code, title, default_duration_hours, is_mandatory, status, created_at, updated_at) VALUES (?, ?, ?, ?, ?, 'active', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)")
-    .bind(id, input.code ?? null, input.title, input.defaultHours, input.isMandatory ? 1 : 0).run()
+  const validSkills = input.skillIds.length
+    ? await db.prepare(`SELECT id FROM capability_skills WHERE organization_id='org:laidbackhr' AND status='active' AND id IN (${input.skillIds.map(() => "?").join(",")})`).bind(...input.skillIds).all<{ id: string }>()
+    : { results: [] as Array<{ id: string }> }
+  if ((validSkills.results ?? []).length !== new Set(input.skillIds).size) throw new PeopleError("Choose active capabilities from this workspace.", 422)
+  await db.batch([
+    db.prepare("INSERT INTO learning_courses(id, code, title, default_duration_hours, is_mandatory, status, created_at, updated_at) VALUES (?, ?, ?, ?, ?, 'active', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)")
+      .bind(id, input.code ?? null, input.title, input.defaultHours, input.isMandatory ? 1 : 0),
+    ...(validSkills.results ?? []).map((skill) => db.prepare("INSERT INTO course_skill_coverage(course_id, skill_id, proficiency_level) VALUES (?, ?, 2)").bind(id, skill.id)),
+  ])
   return { id, message: `${input.title} was added to the course catalog.` }
 }
 
@@ -181,6 +274,7 @@ export async function assignLearningCourse(value: unknown, actor: RequestActor):
   if (input.targetType === "department") { conditions.push("e.department=?"); bindings.push(targetValue) }
   if (input.targetType === "job_title") { conditions.push("e.job_title=?"); bindings.push(targetValue) }
   if (input.targetType === "job_level") { conditions.push("e.job_level=?"); bindings.push(targetValue) }
+  if (input.targetType === "job_profile") { conditions.push("e.job_profile_id=?"); bindings.push(targetValue) }
   if (input.targetType === "manager_team" && actor.role !== "manager") { conditions.push("e.manager_id=?"); bindings.push(targetValue) }
   const recipientsResult = await db.prepare(`SELECT e.employee_id, e.work_email, e.department FROM employee_directory_view e WHERE ${conditions.join(" AND ")} ORDER BY e.employee_id LIMIT 500`)
     .bind(...bindings).all<{ employee_id: string; work_email: string | null; department: string }>()

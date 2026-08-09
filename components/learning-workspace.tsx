@@ -1,11 +1,12 @@
 "use client"
 
-import { useEffect, useMemo, useState } from "react"
+import { useEffect, useMemo, useRef, useState } from "react"
 import { useRouter, useSearchParams } from "next/navigation"
 import { LoaderCircle, Plus, Search, X } from "lucide-react"
 
 import { SelectEmployee } from "@/components/workflow-creator"
 import { Button } from "@/components/ui/button"
+import { Badge } from "@/components/ui/badge"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { MetricStrip, WorkspaceHeader, WorkspacePage } from "@/components/workspace-ui"
 import type { LearningAssignment, LearningOperations } from "@/lib/learning-types"
@@ -42,7 +43,7 @@ function Modal({ title, description, onClose, children }: { title: string; descr
   </div>
 }
 
-export function LearningWorkspace({ actor }: { actor: WorkflowActorContext }) {
+export function LearningWorkspace({ actor, initialData }: { actor: WorkflowActorContext; initialData: LearningOperations }) {
   const router = useRouter()
   const searchParams = useSearchParams()
   const selectedAssignmentId = searchParams.get("assignment")
@@ -50,16 +51,17 @@ export function LearningWorkspace({ actor }: { actor: WorkflowActorContext }) {
   const [location, setLocation] = useState(searchParams.get("location") ?? "")
   const [query, setQuery] = useState(searchParams.get("q") ?? "")
   const [status, setStatus] = useState(selectedAssignmentId ? "all" : "attention")
-  const [data, setData] = useState<LearningOperations | null>(null)
-  const [loading, setLoading] = useState(true)
+  const [data, setData] = useState<LearningOperations | null>(initialData)
+  const [loading, setLoading] = useState(false)
   const [saving, setSaving] = useState(false)
   const [notice, setNotice] = useState("")
   const [error, setError] = useState("")
   const [dialog, setDialog] = useState<"assign" | "course" | "complete" | null>(searchParams.get("new") === "course" ? "assign" : null)
   const [selected, setSelected] = useState<LearningAssignment | null>(null)
   const [assignment, setAssignment] = useState({ targetType: "employee", targetValue: "", employeeId: "", courseId: "", dueDate: dateAfterToday(14), hours: "", note: "" })
-  const [course, setCourse] = useState({ code: "", title: "", defaultHours: "2", isMandatory: false })
+  const [course, setCourse] = useState({ code: "", title: "", defaultHours: "2", isMandatory: false, skillId: "" })
   const [completion, setCompletion] = useState({ score: "", note: "" })
+  const initialRequestQuery = useRef<string | null>(null)
 
   const requestQuery = useMemo(() => {
     const params = new URLSearchParams()
@@ -93,6 +95,10 @@ export function LearningWorkspace({ actor }: { actor: WorkflowActorContext }) {
   }
 
   useEffect(() => {
+    if (initialRequestQuery.current === null) {
+      initialRequestQuery.current = requestQuery
+      return
+    }
     const controller = new AbortController()
     fetch(`/api/v1/hr/learning${requestQuery ? `?${requestQuery}` : ""}`, { cache: "no-store", signal: controller.signal })
       .then(async (response) => {
@@ -135,12 +141,27 @@ export function LearningWorkspace({ actor }: { actor: WorkflowActorContext }) {
     if (assignment.targetType === "department") return person.department === assignment.targetValue
     if (assignment.targetType === "job_title") return person.jobTitle === assignment.targetValue
     if (assignment.targetType === "job_level") return person.jobLevel === assignment.targetValue
+    if (assignment.targetType === "job_profile") return person.jobProfileId === assignment.targetValue
     return actor.role === "manager"
   }).length, [actor.role, assignment.employeeId, assignment.targetType, assignment.targetValue, data?.people])
 
   function openAssign() {
     setError("")
     setAssignment((current) => ({ ...current, employeeId: current.employeeId || data?.people[0]?.employeeId || "", targetValue: current.targetType === "employee" ? (current.employeeId || data?.people[0]?.employeeId || "") : current.targetValue, courseId: current.courseId || data?.courses[0]?.id || "" }))
+    setDialog("assign")
+  }
+
+  function assignRecommendation(recommendation: LearningOperations["recommendations"][number]) {
+    setError("")
+    setAssignment({
+      targetType: recommendation.targetType,
+      targetValue: recommendation.targetValue,
+      employeeId: "",
+      courseId: recommendation.courseId,
+      dueDate: dateAfterToday(recommendation.priority === "High" ? 14 : 30),
+      hours: String(data?.courses.find((item) => item.id === recommendation.courseId)?.defaultHours ?? ""),
+      note: `Capability plan: ${recommendation.skillName}. Review relevance with the employee before completion.`,
+    })
     setDialog("assign")
   }
 
@@ -163,11 +184,11 @@ export function LearningWorkspace({ actor }: { actor: WorkflowActorContext }) {
     setSaving(true)
     setError("")
     try {
-      const response = await fetch("/api/v1/hr/learning/courses", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ code: course.code || undefined, title: course.title, defaultHours: Number(course.defaultHours), isMandatory: course.isMandatory }) })
+      const response = await fetch("/api/v1/hr/learning/courses", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ code: course.code || undefined, title: course.title, defaultHours: Number(course.defaultHours), isMandatory: course.isMandatory, skillIds: course.skillId ? [course.skillId] : [] }) })
       const result = await response.json() as { error?: string; message?: string }
       if (!response.ok) throw new Error(result.error || "The course could not be created.")
       setDialog(null)
-      setCourse({ code: "", title: "", defaultHours: "2", isMandatory: false })
+      setCourse({ code: "", title: "", defaultHours: "2", isMandatory: false, skillId: "" })
       await load(result.message || "Course created.")
     } catch (reason) { setError(reason instanceof Error ? reason.message : "The course could not be created.") } finally { setSaving(false) }
   }
@@ -192,13 +213,28 @@ export function LearningWorkspace({ actor }: { actor: WorkflowActorContext }) {
   if (!data) return <Card><CardContent className="p-6 text-body text-destructive">{error || "Learning operations could not be loaded."}</CardContent></Card>
 
   return <WorkspacePage>
-    <WorkspaceHeader title="Assign courses" description="Course assignments and completion." meta={<>{data.summary.assignments} assignments</>} actions={actor.canAssignTraining ? <>{["admin", "hr"].includes(actor.role) && <Button variant="outline" onClick={() => { setError(""); setDialog("course") }}>New course</Button>}<Button onClick={openAssign}><Plus className="size-3.5"/>Assign course</Button></> : undefined}/>
+    <WorkspaceHeader title="Learning" description="Capability recommendations, assignments, and completion evidence." meta={<>{data.summary.assignments} assignments</>} actions={actor.canAssignTraining ? <>{["admin", "hr"].includes(actor.role) && <Button variant="outline" onClick={() => { setError(""); setDialog("course") }}>New course</Button>}<Button onClick={openAssign}><Plus className="size-3.5"/>Assign course</Button></> : undefined}/>
     {(notice || error) && <div aria-live="polite" className={cn("rounded-md border px-4 py-3 text-meta", error ? "border-rose-200 bg-rose-50 text-rose-800" : "border-emerald-200 bg-emerald-50 text-emerald-800")}>{error || notice}</div>}
     <MetricStrip metrics={[
       { label: "Completion", value: `${data.summary.completionRate}%`, detail: `${data.summary.completed} of ${data.summary.assignments}` },
       { label: "Overdue", value: data.summary.overdue, detail: "Past due and incomplete" },
       { label: "Mandatory gaps", value: data.summary.mandatoryGaps, detail: "Required courses incomplete" },
     ]}/>
+    <Card className="gap-0 overflow-hidden py-0 shadow-none">
+      <CardHeader className="border-b border-border px-5 py-4">
+        <CardTitle>Capability recommendations</CardTitle>
+        <CardDescription>Ranked from approved role requirements, active headcount, open requisitions, and completed course evidence.</CardDescription>
+      </CardHeader>
+      <CardContent className="divide-y divide-border p-0">
+        {data.recommendations.slice(0, 6).map((recommendation) => <div key={recommendation.id} className="grid gap-3 px-5 py-3 lg:grid-cols-[minmax(180px,0.8fr)_minmax(260px,1.2fr)_minmax(220px,1fr)_auto] lg:items-center">
+          <div><p className="font-semibold">{recommendation.jobTitle}</p><p className="text-meta text-muted-foreground">{recommendation.department} · {recommendation.activeEmployees} employees</p></div>
+          <div><div className="flex items-center gap-2"><p className="font-semibold">{recommendation.skillName}</p><Badge variant={recommendation.priority === "High" ? "destructive" : "secondary"}>{recommendation.priority}</Badge></div><p className="text-meta text-muted-foreground">{recommendation.courseTitle}</p></div>
+          <p className="text-meta text-muted-foreground">{recommendation.reason}</p>
+          {actor.canAssignTraining ? <Button size="xs" variant="outline" onClick={() => assignRecommendation(recommendation)}>Review cohort</Button> : <span className="text-meta text-muted-foreground">View only</span>}
+        </div>)}
+        {!data.recommendations.length && <p className="px-5 py-8 text-center text-body text-muted-foreground">No mapped capability gaps are present. Add course-to-skill coverage or job-profile requirements to enable recommendations.</p>}
+      </CardContent>
+    </Card>
     <Card className="gap-0 overflow-hidden py-0 shadow-none">
       <CardHeader className="gap-3 border-b border-border px-5 py-4">
         <div><CardTitle>Assignment register</CardTitle><CardDescription>Deadlines and recorded completion evidence.</CardDescription></div>
@@ -231,16 +267,17 @@ export function LearningWorkspace({ actor }: { actor: WorkflowActorContext }) {
       </CardContent>
     </Card>
     {dialog === "assign" && <Modal title="Assign course" description="Create tracked assignments for one employee or a defined workforce group." onClose={() => !saving && setDialog(null)}><form onSubmit={submitAssignment} className="space-y-4 p-5">
-      <Field label="Assign to"><select value={assignment.targetType} onChange={(event) => { const targetType = event.target.value; const targetValue = targetType === "employee" ? (assignment.employeeId || data.people[0]?.employeeId || "") : targetType === "department" ? data.dimensions.departments[0] ?? "" : targetType === "job_title" ? data.dimensions.jobTitles[0] ?? "" : targetType === "job_level" ? data.dimensions.jobLevels[0] ?? "" : ""; setAssignment({ ...assignment, targetType, targetValue }) }} className={inputClass}><option value="employee">One employee</option>{actor.role === "manager" ? <option value="manager_team">My direct reports</option> : <><option value="department">Department</option><option value="job_title">Job title</option><option value="job_level">Job level</option></>}</select></Field>
+      <Field label="Assign to"><select value={assignment.targetType} onChange={(event) => { const targetType = event.target.value; const targetValue = targetType === "employee" ? (assignment.employeeId || data.people[0]?.employeeId || "") : targetType === "department" ? data.dimensions.departments[0] ?? "" : targetType === "job_title" ? data.dimensions.jobTitles[0] ?? "" : targetType === "job_level" ? data.dimensions.jobLevels[0] ?? "" : ""; setAssignment({ ...assignment, targetType, targetValue }) }} className={inputClass}><option value="employee">One employee</option>{assignment.targetType === "job_profile" && <option value="job_profile">Recommended role cohort</option>}{actor.role === "manager" ? <option value="manager_team">My direct reports</option> : <><option value="department">Department</option><option value="job_title">Job title</option><option value="job_level">Job level</option></>}</select></Field>
       {assignment.targetType === "employee" && (
         <SelectEmployee value={assignment.employeeId} people={employeeOptions} onChange={(employeeId) => setAssignment({ ...assignment, employeeId, targetValue: employeeId })}/>
       )}
       {assignment.targetType === "department" && <Field label="Department"><select value={assignment.targetValue} onChange={(event) => setAssignment({ ...assignment, targetValue: event.target.value })} className={inputClass}>{data.dimensions.departments.map((item) => <option key={item}>{item}</option>)}</select></Field>}
       {assignment.targetType === "job_title" && <Field label="Job title"><select value={assignment.targetValue} onChange={(event) => setAssignment({ ...assignment, targetValue: event.target.value })} className={inputClass}>{data.dimensions.jobTitles.map((item) => <option key={item}>{item}</option>)}</select></Field>}
       {assignment.targetType === "job_level" && <Field label="Job level"><select value={assignment.targetValue} onChange={(event) => setAssignment({ ...assignment, targetValue: event.target.value })} className={inputClass}>{data.dimensions.jobLevels.map((item) => <option key={item}>{item}</option>)}</select></Field>}
+      {assignment.targetType === "job_profile" && <p className="rounded-md border border-border px-3 py-2 text-body">{data.people.find((person) => person.jobProfileId === assignment.targetValue)?.jobTitle ?? "Recommended role"} · {data.people.find((person) => person.jobProfileId === assignment.targetValue)?.department ?? "Current scope"}</p>}
       <p className="rounded-md bg-muted/45 px-3 py-2 text-meta text-muted-foreground">{targetCount} eligible employee{targetCount === 1 ? "" : "s"}. Existing incomplete assignments for this course will be skipped.</p>
       <Field label="Course"><select required value={assignment.courseId} onChange={(event) => { const item = data.courses.find((courseItem) => courseItem.id === event.target.value); setAssignment({ ...assignment, courseId: event.target.value, hours: item ? String(item.defaultHours) : "" }) }} className={inputClass}>{data.courses.map((item) => <option key={item.id} value={item.id}>{item.title}{item.isMandatory ? " · Mandatory" : ""}</option>)}</select></Field><div className="grid gap-4 sm:grid-cols-2"><Field label="Due date"><input required type="date" min={today} value={assignment.dueDate} onChange={(event) => setAssignment({ ...assignment, dueDate: event.target.value })} className={inputClass}/></Field><Field label="Assigned hours"><input type="number" min="0.5" max="500" step="0.5" value={assignment.hours || selectedCourse?.defaultHours || ""} onChange={(event) => setAssignment({ ...assignment, hours: event.target.value })} className={inputClass}/></Field></div><Field label="Instructions"><textarea value={assignment.note} onChange={(event) => setAssignment({ ...assignment, note: event.target.value })} className={textareaClass} placeholder="Optional completion requirements or course link"/></Field>{error && <p className="text-meta text-destructive">{error}</p>}<div className="flex justify-end gap-2 border-t border-border pt-4"><Button type="button" variant="ghost" onClick={() => setDialog(null)} disabled={saving}>Cancel</Button><Button type="submit" disabled={saving || !targetCount || !assignment.courseId}>{saving && <LoaderCircle className="size-4 animate-spin"/>}Assign to {targetCount}</Button></div></form></Modal>}
-    {dialog === "course" && <Modal title="New course" description="Add a reusable course to the workspace catalog." onClose={() => !saving && setDialog(null)}><form onSubmit={submitCourse} className="space-y-4 p-5"><Field label="Course title"><input required value={course.title} onChange={(event) => setCourse({ ...course, title: event.target.value })} className={inputClass}/></Field><div className="grid gap-4 sm:grid-cols-2"><Field label="Course code"><input value={course.code} onChange={(event) => setCourse({ ...course, code: event.target.value })} className={inputClass} placeholder="Optional"/></Field><Field label="Default hours"><input required type="number" min="0.5" max="500" step="0.5" value={course.defaultHours} onChange={(event) => setCourse({ ...course, defaultHours: event.target.value })} className={inputClass}/></Field></div><label className="flex items-center gap-2 text-body"><input type="checkbox" checked={course.isMandatory} onChange={(event) => setCourse({ ...course, isMandatory: event.target.checked })}/>Required for assigned employees</label>{error && <p className="text-meta text-destructive">{error}</p>}<div className="flex justify-end gap-2 border-t border-border pt-4"><Button type="button" variant="ghost" onClick={() => setDialog(null)} disabled={saving}>Cancel</Button><Button type="submit" disabled={saving}>{saving && <LoaderCircle className="size-4 animate-spin"/>}Create course</Button></div></form></Modal>}
+    {dialog === "course" && <Modal title="New course" description="Add a reusable course and map it to a workforce capability." onClose={() => !saving && setDialog(null)}><form onSubmit={submitCourse} className="space-y-4 p-5"><Field label="Course title"><input required value={course.title} onChange={(event) => setCourse({ ...course, title: event.target.value })} className={inputClass}/></Field><div className="grid gap-4 sm:grid-cols-2"><Field label="Course code"><input value={course.code} onChange={(event) => setCourse({ ...course, code: event.target.value })} className={inputClass} placeholder="Optional"/></Field><Field label="Default hours"><input required type="number" min="0.5" max="500" step="0.5" value={course.defaultHours} onChange={(event) => setCourse({ ...course, defaultHours: event.target.value })} className={inputClass}/></Field></div><Field label="Capability"><select value={course.skillId} onChange={(event) => setCourse({ ...course, skillId: event.target.value })} className={inputClass}><option value="">Not mapped</option>{data.skills.map((skill) => <option key={skill.id} value={skill.id}>{skill.name} · {skill.category}</option>)}</select></Field><label className="flex items-center gap-2 text-body"><input type="checkbox" checked={course.isMandatory} onChange={(event) => setCourse({ ...course, isMandatory: event.target.checked })}/>Required for assigned employees</label>{error && <p className="text-meta text-destructive">{error}</p>}<div className="flex justify-end gap-2 border-t border-border pt-4"><Button type="button" variant="ghost" onClick={() => setDialog(null)} disabled={saving}>Cancel</Button><Button type="submit" disabled={saving}>{saving && <LoaderCircle className="size-4 animate-spin"/>}Create course</Button></div></form></Modal>}
     {dialog === "complete" && selected && <Modal title="Record completion" description={`${selected.courseTitle} · ${selected.employeeName}`} onClose={() => !saving && setDialog(null)}><form onSubmit={submitCompletion} className="space-y-4 p-5"><Field label="Assessment score"><input type="number" min="0" max="100" step="1" value={completion.score} onChange={(event) => setCompletion({ ...completion, score: event.target.value })} className={inputClass} placeholder="Optional"/></Field><Field label="Completion evidence or note"><textarea value={completion.note} onChange={(event) => setCompletion({ ...completion, note: event.target.value })} className={textareaClass} placeholder="Optional certificate, LMS reference, or reviewer note"/></Field>{error && <p className="text-meta text-destructive">{error}</p>}<div className="flex justify-end gap-2 border-t border-border pt-4"><Button type="button" variant="ghost" onClick={() => setDialog(null)} disabled={saving}>Cancel</Button><Button type="submit" disabled={saving}>{saving && <LoaderCircle className="size-4 animate-spin"/>}Save completion</Button></div></form></Modal>}
   </WorkspacePage>
 }

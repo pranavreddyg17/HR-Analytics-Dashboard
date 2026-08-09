@@ -1,5 +1,10 @@
 import systemPromptMarkdown from "@/knowledge/laidbackhr-system-prompt.md?raw"
+import analyticsMetricContractsMarkdown from "@/knowledge/analytics-metric-contracts.md?raw"
+import assistantRetrievalGuideMarkdown from "@/knowledge/assistant-retrieval-guide.md?raw"
+import capabilityLearningMarkdown from "@/knowledge/capability-and-learning.md?raw"
+import dataGovernanceMarkdown from "@/knowledge/data-governance-and-quality.md?raw"
 import workspaceContextMarkdown from "@/knowledge/hr-workspace-context.md?raw"
+import lifecyclePlaybooksMarkdown from "@/knowledge/lifecycle-operating-playbooks.md?raw"
 import workspaceOperationsMarkdown from "@/knowledge/workspace-operations.md?raw"
 import { searchAzureKnowledge } from "@/lib/server/azure-ai"
 
@@ -41,7 +46,7 @@ function chunksFromMarkdown(source: string, markdown: string): KnowledgeChunk[] 
   }
 
   for (const line of markdown.split(/\r?\n/)) {
-    const heading = line.match(/^##\s+(.+)$/)
+    const heading = line.match(/^#{2,3}\s+(.+)$/)
     if (heading) {
       flush()
       section = heading[1].trim()
@@ -56,6 +61,11 @@ function chunksFromMarkdown(source: string, markdown: string): KnowledgeChunk[] 
 const knowledgeChunks = [
   ...chunksFromMarkdown("HR workspace context", workspaceContextMarkdown),
   ...chunksFromMarkdown("Workspace operating context", workspaceOperationsMarkdown),
+  ...chunksFromMarkdown("Analytics metric contracts", analyticsMetricContractsMarkdown),
+  ...chunksFromMarkdown("Employee lifecycle playbooks", lifecyclePlaybooksMarkdown),
+  ...chunksFromMarkdown("Capability and learning guide", capabilityLearningMarkdown),
+  ...chunksFromMarkdown("Assistant retrieval guide", assistantRetrievalGuideMarkdown),
+  ...chunksFromMarkdown("Data governance and quality guide", dataGovernanceMarkdown),
 ]
 
 function retrieveHrContext(query: string, limit = 3): KnowledgeMatch[] {

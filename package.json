@@ -11,12 +11,14 @@
     "start:azure": "pnpm start",
     "lint": "eslint . --ignore-pattern dist --ignore-pattern .next",
     "test:backend": "cd backend && PYTHONPATH=. .venv/bin/python -m pytest -q",
+    "test:knowledge": "node scripts/evaluate-knowledge.mjs",
     "model:export": "cd backend && PYTHONPATH=. .venv/bin/python scripts/export_web_runtime.py",
     "test:live": "node --test tests/api-live.test.mjs",
     "ai:sync": "node scripts/sync-ai-search.mjs"
   },
   "dependencies": {
     "@azure/identity": "^4.13.1",
+    "@azure/monitor-opentelemetry": "^1.19.0",
     "@azure/storage-blob": "^12.33.0",
     "@base-ui/react": "^1.5.0",
     "@langchain/core": "^1.2.4",

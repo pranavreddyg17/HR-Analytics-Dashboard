@@ -395,7 +395,7 @@ function RequisitionDialog({ requisition, activity, busy, onClose, onDecision, o
   )
 }
 
-export function HiringWorkspace({ canRequestHiring }: { canRequestHiring: boolean }) {
+export function HiringWorkspace({ canRequestHiring, basePath = "/hiring", initialData }: { canRequestHiring: boolean; basePath?: string; initialData?: HiringOperations }) {
   const router = useRouter()
   const searchParams = useSearchParams()
   const selectedFromUrl = searchParams.get("requisition")
@@ -405,8 +405,8 @@ export function HiringWorkspace({ canRequestHiring }: { canRequestHiring: boolea
   const returnTo = safeReturnTo(searchParams.get("returnTo"))
   const initialStatus = searchParams.get("status")
   const initialCandidateFilter = searchParams.get("candidate") === "overdue" ? "overdue" : "active"
-  const [data, setData] = useState<HiringOperations | null>(null)
-  const [loading, setLoading] = useState(true)
+  const [data, setData] = useState<HiringOperations | null>(initialData ?? null)
+  const [loading, setLoading] = useState(!initialData)
   const [error, setError] = useState("")
   const [notice, setNotice] = useState("")
   const [busyId, setBusyId] = useState<string | null>(null)
@@ -422,6 +422,7 @@ export function HiringWorkspace({ canRequestHiring }: { canRequestHiring: boolea
 
   const listHref = useMemo(() => {
     const params = new URLSearchParams()
+    if (basePath === "/onboarding") params.set("view", "talent")
     if (query.trim()) params.set("q", query.trim())
     if (status !== "active") params.set("status", status)
     if (department) params.set("department", department)
@@ -429,14 +430,14 @@ export function HiringWorkspace({ canRequestHiring }: { canRequestHiring: boolea
     if (candidateQuery.trim()) params.set("candidateQ", candidateQuery.trim())
     if (candidateStage !== "active") params.set("candidate", candidateStage)
     if (returnTo) params.set("returnTo", returnTo)
-    return `/hiring${params.size ? `?${params.toString()}` : ""}`
-  }, [candidateQuery, candidateStage, department, location, query, returnTo, status])
+    return `${basePath}${params.size ? `?${params.toString()}` : ""}`
+  }, [basePath, candidateQuery, candidateStage, department, location, query, returnTo, status])
 
   useEffect(() => {
     if (selectedFromUrl || selectedCandidateId || showCandidateForm) return
-    const current = `/hiring${searchParams.size ? `?${searchParams.toString()}` : ""}`
+    const current = `${basePath}${searchParams.size ? `?${searchParams.toString()}` : ""}`
     if (current !== listHref) router.replace(listHref, { scroll: false })
-  }, [listHref, router, searchParams, selectedCandidateId, selectedFromUrl, showCandidateForm])
+  }, [basePath, listHref, router, searchParams, selectedCandidateId, selectedFromUrl, showCandidateForm])
 
   async function loadOperations(message = "") {
     setLoading(true)
@@ -457,6 +458,7 @@ export function HiringWorkspace({ canRequestHiring }: { canRequestHiring: boolea
   }
 
   useEffect(() => {
+    if (initialData) return
     const controller = new AbortController()
     fetch("/api/v1/hr/hiring", { cache: "no-store", signal: controller.signal })
       .then(async (response) => {
@@ -470,7 +472,7 @@ export function HiringWorkspace({ canRequestHiring }: { canRequestHiring: boolea
       })
       .finally(() => { if (!controller.signal.aborted) setLoading(false) })
     return () => controller.abort()
-  }, [])
+  }, [initialData])
 
   const departments = useMemo(() => data ? [...new Set(data.requisitions.map((item) => item.department))].sort() : [], [data])
   const locations = useMemo(() => data ? [...new Set(data.requisitions.map((item) => item.location))].sort() : [], [data])
@@ -511,20 +513,20 @@ export function HiringWorkspace({ canRequestHiring }: { canRequestHiring: boolea
     }
     const params = new URLSearchParams(listHref.split("?")[1] ?? "")
     params.set("requisition", id)
-    router.push(`/hiring?${params.toString()}`, { scroll: false })
+    router.push(`${basePath}?${params.toString()}`, { scroll: false })
   }
 
   function openCandidateForm(requisitionId: string) {
     const params = new URLSearchParams(listHref.split("?")[1] ?? "")
     params.set("newCandidate", "1")
     params.set("candidateRequisition", requisitionId)
-    router.push(`/hiring?${params.toString()}`, { scroll: false })
+    router.push(`${basePath}?${params.toString()}`, { scroll: false })
   }
 
   function openCandidateRecord(candidateId: string) {
     const params = new URLSearchParams(listHref.split("?")[1] ?? "")
     params.set("candidateRecord", candidateId)
-    router.push(`/hiring?${params.toString()}`, { scroll: false })
+    router.push(`${basePath}?${params.toString()}`, { scroll: false })
   }
 
   function closeRequisition() {
@@ -560,11 +562,16 @@ export function HiringWorkspace({ canRequestHiring }: { canRequestHiring: boolea
 
   return (
     <WorkspacePage>
-      <WorkspaceHeader title="Hiring" description="Requisitions and candidate pipeline." actions={
+      <WorkspaceHeader title={basePath === "/onboarding" ? "Onboarding" : "Talent acquisition"} description="Headcount approval and candidate handoff." actions={
           <>
-            {canRequestHiring && <Button nativeButton={false} variant="outline" render={<Link href="/inbox?new=hiring" />}><Plus className="size-4" />New requisition</Button>}
+            {canRequestHiring && <Button nativeButton={false} variant="outline" render={<Link href={`/inbox?new=hiring&returnTo=${encodeURIComponent(basePath === "/onboarding" ? "/onboarding?view=talent" : basePath)}`} />}><Plus className="size-4" />New requisition</Button>}
             <Button onClick={() => openCandidateForm(activeRequisitions[0]?.id ?? "")} disabled={!activeRequisitions.length}><Plus className="size-4" />Add candidate</Button>
           </>}/>
+
+      {basePath === "/onboarding" && <div className="flex border-b border-border" role="tablist" aria-label="Onboarding stages">
+        <Link href="/onboarding" className="-mb-px border-b-2 border-transparent px-4 py-2.5 font-semibold text-muted-foreground hover:text-foreground">New joiners</Link>
+        <Link href="/onboarding?view=talent" aria-current="page" className="-mb-px border-b-2 border-primary px-4 py-2.5 font-semibold">Talent acquisition</Link>
+      </div>}
 
       {(notice || error) && (
         <div aria-live="polite" className={cn("rounded-md border px-4 py-3 text-meta", error ? "border-rose-200 bg-rose-50 text-rose-800 dark:border-rose-900/40 dark:bg-rose-950/20 dark:text-rose-200" : "border-emerald-200 bg-emerald-50 text-emerald-800 dark:border-emerald-900/40 dark:bg-emerald-950/20 dark:text-emerald-200")}>
@@ -579,7 +586,7 @@ export function HiringWorkspace({ canRequestHiring }: { canRequestHiring: boolea
           { label: "Time to fill", value: `${data.summary.averageTimeToFill}d`, detail: "Recent hires" },
         ]}/>
 
-      <div className="flex border-b border-border" role="tablist" aria-label="Hiring views">
+      <div className="flex border-b border-border" role="tablist" aria-label="Talent acquisition views">
         <button type="button" role="tab" aria-selected={workspaceView === "requisitions"} onClick={() => setWorkspaceView("requisitions")} className={cn("-mb-px border-b-2 px-4 py-2.5 font-semibold", workspaceView === "requisitions" ? "border-primary text-foreground" : "border-transparent text-muted-foreground hover:text-foreground")}>Requisitions <span className="ml-1 text-meta tabular-nums">{visibleRequisitions.length}</span></button>
         <button type="button" role="tab" aria-selected={workspaceView === "candidates"} onClick={() => setWorkspaceView("candidates")} className={cn("-mb-px border-b-2 px-4 py-2.5 font-semibold", workspaceView === "candidates" ? "border-primary text-foreground" : "border-transparent text-muted-foreground hover:text-foreground")}>Candidates <span className="ml-1 text-meta tabular-nums">{visibleCandidates.length}</span></button>
       </div>

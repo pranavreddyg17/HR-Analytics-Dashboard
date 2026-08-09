@@ -30,7 +30,7 @@ function renderWorkQueue(plan: ToolPlan, data: Record<string, unknown>): string 
     people: "People operations linked to the directory",
     person: "Open work linked to this employee",
     inbox: "Inbox",
-    hiring: "Hiring operations",
+    hiring: "Talent acquisition",
     leaves: "Leave operations",
     courses: "Learning operations",
     insights: "Workforce exception actions",
@@ -275,6 +275,16 @@ function renderDepartmentComparison(data: Record<string, unknown>): string {
 function renderPeopleOperations(plan: ToolPlan, data: Record<string, unknown>): string {
   const domain = String(data.domain ?? "")
   const summary = object(data.summary)
+  if (plan.purpose === "capability_recommendations") {
+    const recommendations = records(data.capabilityRecommendations).slice(0, plan.limit)
+    if (!recommendations.length) return `${sourceLine(data)} No mapped capability gaps are present. Review job-profile requirements and course-to-skill mappings before asking the assistant to recommend learning.`
+    return [
+      sourceLine(data),
+      "Capability priorities",
+      ...recommendations.map((row, index) => `${index + 1}. ${String(row.jobTitle)} · ${String(row.department)} — ${String(row.skillName)}. ${Number(row.employeesNeedingEvidence)} of ${Number(row.activeEmployees)} active employees have no completed mapped course; ${Number(row.openRequisitions)} matching roles are open. Recommended course: ${String(row.courseTitle)}. Priority: ${String(row.priority)}.`),
+      "These recommendations use approved internal role requirements and completed learning evidence. They are not external labor-market forecasts. Review relevance with employees before creating a cohort assignment.",
+    ].join("\n")
+  }
   if (plan.purpose === "retention_mobility_context") {
     const rows = records(data.selectedEmployeePromotionContext).slice(0, plan.limit)
     if (!rows.length) return "Promotion context is unavailable for the selected cohort."
@@ -324,12 +334,41 @@ function renderEmployeeLookup(plan: ToolPlan, data: Record<string, unknown>): st
   return [sourceLine(data), `${matchCount} employee records match; showing ${rows.length}.`, ...rows.map((row) => `- ${String(row.name)} (${String(row.employeeId)}) — ${String(row.jobTitle)}, ${String(row.department)}, ${String(row.location)}; ${String(row.employmentStatus)}.`), "Only minimum profile fields are shown."].join("\n")
 }
 
+function renderOnboardingReadiness(plan: ToolPlan, data: Record<string, unknown>): string {
+  const summary = object(data.summary)
+  const joiners = records(data.joiners).slice(0, plan.limit)
+  const handoff = object(data.recruitingHandoff)
+  const offers = records(handoff.offerCandidates).slice(0, Math.min(5, plan.limit))
+  return [
+    sourceLine(data),
+    "Onboarding readiness",
+    `- ${number(summary, "preboarding")} people are preboarding; ${number(summary, "awaitingVerification")} await verification and ${number(summary, "missingManager")} are missing a manager.`,
+    `- ${number(summary, "openRequisitions")} active requisitions and ${number(summary, "candidatesAtOffer")} offer-stage candidates are in the recruiting handoff.`,
+    ...joiners.map((row) => `- ${String(row.name)} (${String(row.employeeId)}) — starts ${String(row.startDate)}; ${String(row.verificationStatus)}. Next: ${String(row.nextAction)}`),
+    ...offers.map((row) => `- Offer follow-up: ${String(row.name)} · ${String(row.role)}. ${String(row.nextStep)}${row.dueDate ? ` by ${String(row.dueDate)}` : ""}.`),
+  ].join("\n")
+}
+
+function renderCapabilityPlan(plan: ToolPlan, data: Record<string, unknown>): string {
+  const summary = object(data.summary)
+  const recommendations = records(data.recommendations).slice(0, plan.limit)
+  if (!recommendations.length) return `${sourceLine(data)} No governed capability recommendation matches this scope. Check job-profile requirements and course mappings before assigning learning.`
+  return [
+    sourceLine(data),
+    `Capability plan · ${number(summary, "eligibleEmployees")} eligible employees`,
+    ...recommendations.map((row, index) => `${index + 1}. ${String(row.jobTitle)} · ${String(row.department)} — ${String(row.skillName)}. ${Number(row.employeesNeedingEvidence)} of ${Number(row.activeEmployees)} employees need mapped evidence; ${Number(row.openRequisitions)} matching roles are open. Course: ${String(row.courseTitle)} (${String(row.priority)}).`),
+    "Preview the exact cohort and confirm relevance, access, and employee development goals before assignment.",
+  ].join("\n")
+}
+
 export function renderHrEvidence(plan: ToolPlan, data: Record<string, unknown>): string {
   if (plan.name === "review_work_queue") return renderWorkQueue(plan, data)
   if (plan.name === "workforce_overview") return renderWorkforce(plan, data)
   if (plan.name === "analyze_attrition_signals") return renderAttrition(plan, data)
   if (plan.name === "compare_departments") return renderDepartmentComparison(data)
   if (plan.name === "review_people_operations") return renderPeopleOperations(plan, data)
+  if (plan.name === "review_onboarding_readiness") return renderOnboardingReadiness(plan, data)
+  if (plan.name === "review_capability_plan") return renderCapabilityPlan(plan, data)
   if (plan.name === "find_employee_records") return renderEmployeeLookup(plan, data)
   return `${sourceLine(data)} The requested analysis completed.`
 }

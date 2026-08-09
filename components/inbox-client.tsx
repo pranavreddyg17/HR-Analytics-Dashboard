@@ -31,7 +31,7 @@ const queueOptions: Array<{ id: QueueView; label: string; count: keyof InboxOper
 const domainOptions: Array<{ id: DomainFilter; label: string }> = [
   { id: "all", label: "All domains" },
   { id: "leave", label: "Leave" },
-  { id: "hiring", label: "Hiring" },
+  { id: "hiring", label: "Talent acquisition" },
   { id: "training", label: "Learning" },
   { id: "insight", label: "Insights" },
   { id: "reimbursement", label: "Reimbursements" },
@@ -39,7 +39,7 @@ const domainOptions: Array<{ id: DomainFilter; label: string }> = [
   { id: "onboarding", label: "Onboarding" },
 ]
 
-const domainLabel: Record<InboxItem["type"], string> = { leave: "Leave", hiring: "Hiring", training: "Learning", insight: "Insights", reimbursement: "Reimbursement", case: "Employee request", onboarding: "Onboarding" }
+const domainLabel: Record<InboxItem["type"], string> = { leave: "Leave", hiring: "Talent acquisition", training: "Learning", insight: "Insights", reimbursement: "Reimbursement", case: "Employee request", onboarding: "Onboarding" }
 const PAGE_SIZE = 10
 const inputClass = "h-9 w-full rounded-md border border-border bg-background px-3 text-control outline-none focus:border-ring focus:ring-2 focus:ring-ring/20"
 const textareaClass = "min-h-20 w-full resize-y rounded-md border border-border bg-background px-3 py-2.5 text-control outline-none focus:border-ring focus:ring-2 focus:ring-ring/20"

@@ -6,6 +6,12 @@ export type LearningCourse = {
   isMandatory: boolean
 }
 
+export type LearningSkill = {
+  id: string
+  name: string
+  category: string
+}
+
 export type LearningPerson = {
   employeeId: string
   displayName: string
@@ -13,6 +19,26 @@ export type LearningPerson = {
   jobTitle: string
   jobLevel: string
   location: string
+  jobProfileId: string
+}
+
+export type LearningRecommendation = {
+  id: string
+  skillId: string
+  skillName: string
+  category: string
+  courseId: string
+  courseTitle: string
+  targetType: "job_profile"
+  targetValue: string
+  jobTitle: string
+  department: string
+  activeEmployees: number
+  openRequisitions: number
+  completedEvidence: number
+  employeesNeedingEvidence: number
+  priority: "High" | "Medium" | "Standard"
+  reason: string
 }
 
 export type LearningAssignment = {
@@ -46,7 +72,9 @@ export type LearningOperations = {
   }
   dimensions: { departments: string[]; locations: string[]; jobTitles: string[]; jobLevels: string[] }
   courses: LearningCourse[]
+  skills: LearningSkill[]
   people: LearningPerson[]
   assignments: LearningAssignment[]
   departmentCoverage: Array<{ department: string; assigned: number; completed: number; overdue: number; completionRate: number }>
+  recommendations: LearningRecommendation[]
 }

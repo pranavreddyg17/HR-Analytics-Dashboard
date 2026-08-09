@@ -28,7 +28,7 @@ async function database(): Promise<Database> {
   return db
 }
 
-export type EmployeeOnboardingState = {
+type EmployeeOnboardingState = {
   required: boolean
   status: "required" | "submitted" | "complete"
   submission: Record<string, unknown> | null

@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useMemo, useState } from "react"
+import { useEffect, useMemo, useRef, useState } from "react"
 import Link from "next/link"
 import { useRouter, useSearchParams } from "next/navigation"
 import {
@@ -299,7 +299,7 @@ function EmployeeImpactPanel({ data }: { data: WorkforceAnalytics }) {
   const selected = employees.find((employee) => employee.employeeId === employeeId) ?? employees[0]
   if (!selected) return <Card className="shadow-none"><CardHeader><CardTitle>Employee impact scenario</CardTitle><CardDescription>No active model-review employees match this scope.</CardDescription></CardHeader></Card>
   const courseHref = `/courses?department=${encodeURIComponent(selected.department)}&q=${encodeURIComponent(selected.employeeId)}`
-  const hiringHref = `/hiring?department=${encodeURIComponent(selected.department)}&q=${encodeURIComponent(selected.jobTitle)}`
+  const hiringHref = `/onboarding?view=talent&department=${encodeURIComponent(selected.department)}&q=${encodeURIComponent(selected.jobTitle)}`
   return <Card className="gap-0 overflow-hidden py-0 shadow-none">
     <CardHeader className="gap-3 border-b border-border px-5 py-4 sm:flex-row sm:items-end sm:justify-between">
       <div><CardTitle>Employee impact scenario</CardTitle><CardDescription>Continuity and replacement economics for one review profile.</CardDescription></div>
@@ -329,7 +329,7 @@ function RoleContinuityTable({ data }: { data: WorkforceAnalytics }) {
   const rows = data.decisionSupport.workforceImpact.roles.filter((row) => row.continuityStatus !== "Covered").slice(0, 12)
   return <Card className="gap-0 overflow-hidden py-0 shadow-none">
     <CardHeader className="border-b border-border px-5 py-4"><CardTitle>Role continuity</CardTitle><CardDescription>Roles where observed movement, model-review concentration, or refill time warrants coverage planning.</CardDescription></CardHeader>
-      <CardContent className="p-0"><div className="overflow-x-auto"><table className="w-full min-w-[980px] text-left text-body"><thead className="bg-muted/40 text-label font-semibold text-muted-foreground"><tr>{["Role", "Status", "Coverage", "Movement", "Refill", "Replacement scenario", "Open"].map((heading) => <th key={heading} className="px-4 py-2.5">{heading}</th>)}</tr></thead><tbody>{rows.map((row) => <tr key={`${row.department}-${row.jobTitle}`} className="border-t border-border/70"><td className="px-4 py-3"><p className="font-semibold">{row.jobTitle}</p><p className="text-meta text-muted-foreground">{row.department}</p></td><td className="px-4 py-3"><Badge variant={row.continuityStatus === "Critical" ? "destructive" : "secondary"}>{row.continuityStatus}</Badge></td><td className="px-4 py-3"><p>{row.activeEmployees} active · {row.reviewProfiles} in review</p><p className="text-meta text-muted-foreground">{row.reviewShare}% review share</p></td><td className="px-4 py-3"><p>{row.recordedExits} exits · {row.completedHires} hires</p><p className="text-meta text-muted-foreground">{row.openRequisitions} open requisitions</p></td><td className="px-4 py-3"><p>{row.refillDays} days</p><p className="text-meta text-muted-foreground">{row.refillBasis} history</p></td><td className="px-4 py-3"><p className="font-semibold tabular-nums">{currency(row.replacementCostPerExit)}</p><p className="text-meta text-muted-foreground">{currency(row.reviewWeightedExposure)} weighted exposure</p></td><td className="px-4 py-3"><Link className={actionLinkClass} href={`/hiring?department=${encodeURIComponent(row.department)}&q=${encodeURIComponent(row.jobTitle)}`}>Hiring</Link></td></tr>)}</tbody></table></div>{!rows.length && <p className="p-8 text-center text-body text-muted-foreground">No roles require a continuity review in this scope.</p>}</CardContent>
+      <CardContent className="p-0"><div className="overflow-x-auto"><table className="w-full min-w-[980px] text-left text-body"><thead className="bg-muted/40 text-label font-semibold text-muted-foreground"><tr>{["Role", "Status", "Coverage", "Movement", "Refill", "Replacement scenario", "Open"].map((heading) => <th key={heading} className="px-4 py-2.5">{heading}</th>)}</tr></thead><tbody>{rows.map((row) => <tr key={`${row.department}-${row.jobTitle}`} className="border-t border-border/70"><td className="px-4 py-3"><p className="font-semibold">{row.jobTitle}</p><p className="text-meta text-muted-foreground">{row.department}</p></td><td className="px-4 py-3"><Badge variant={row.continuityStatus === "Critical" ? "destructive" : "secondary"}>{row.continuityStatus}</Badge></td><td className="px-4 py-3"><p>{row.activeEmployees} active · {row.reviewProfiles} in review</p><p className="text-meta text-muted-foreground">{row.reviewShare}% review share</p></td><td className="px-4 py-3"><p>{row.recordedExits} exits · {row.completedHires} hires</p><p className="text-meta text-muted-foreground">{row.openRequisitions} open requisitions</p></td><td className="px-4 py-3"><p>{row.refillDays} days</p><p className="text-meta text-muted-foreground">{row.refillBasis} history</p></td><td className="px-4 py-3"><p className="font-semibold tabular-nums">{currency(row.replacementCostPerExit)}</p><p className="text-meta text-muted-foreground">{currency(row.reviewWeightedExposure)} weighted exposure</p></td><td className="px-4 py-3"><Link className={actionLinkClass} href={`/onboarding?view=talent&department=${encodeURIComponent(row.department)}&q=${encodeURIComponent(row.jobTitle)}`}>Talent</Link></td></tr>)}</tbody></table></div>{!rows.length && <p className="p-8 text-center text-body text-muted-foreground">No roles require a continuity review in this scope.</p>}</CardContent>
   </Card>
 }
 
@@ -352,12 +352,13 @@ function Filter({ label, children }: { label: string; children: React.ReactNode 
   )
 }
 
-export function InsightsWorkspace() {
+export function InsightsWorkspace({ initialData }: { initialData: WorkforceAnalytics }) {
   const router = useRouter()
   const searchParams = useSearchParams()
   const [filters, setFilters] = useState<Filters>(() => initialFilters(searchParams))
-  const [data, setData] = useState<WorkforceAnalytics | null>(null)
-  const [loadedQuery, setLoadedQuery] = useState<string | null>(null)
+  const [data, setData] = useState<WorkforceAnalytics | null>(initialData)
+  const [loadedQuery, setLoadedQuery] = useState<string | null>(() => queryFor(initialFilters(searchParams)))
+  const lastRequestKey = useRef(`${queryFor(initialFilters(searchParams))}:0`)
   const [refreshVersion, setRefreshVersion] = useState(0)
   const [error, setError] = useState("")
   const requestedView = searchParams.get("view")
@@ -388,6 +389,9 @@ export function InsightsWorkspace() {
   const actions = useMemo(() => data?.decisionSupport.actions.slice(0, 6) ?? [], [data])
 
   useEffect(() => {
+    const requestKey = `${requestQuery}:${refreshVersion}`
+    if (lastRequestKey.current === requestKey) return
+    lastRequestKey.current = requestKey
     const controller = new AbortController()
     fetch(`/api/v1/workforce?${requestQuery}`, { cache: "no-store", signal: controller.signal })
       .then(async (workforceResponse) => {
@@ -447,6 +451,7 @@ export function InsightsWorkspace() {
           <Filter label="Interval"><select value={filters.period} onChange={(event) => setFilters({ ...filters, period: event.target.value as Filters["period"] })}><option value="month">Monthly</option><option value="quarter">Quarterly</option><option value="year">Yearly</option></select></Filter>
         </div>
         {loading && <div className="h-1 overflow-hidden rounded-full bg-muted"><div className="h-full w-2/3 animate-pulse rounded-full bg-primary" /></div>}
+        <p className="text-meta text-muted-foreground">Headcount and open roles are current snapshots. Hires, exits, leave, learning, and promotions use persisted dates in this range. Cost values are scenarios.</p>
       </Card>
 
       {error && <div className="rounded-md border border-rose-200 bg-rose-50 px-4 py-3 text-meta text-rose-800 dark:border-rose-900/40 dark:bg-rose-950/20 dark:text-rose-200">{error}</div>}

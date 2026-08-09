@@ -20,7 +20,10 @@ function statusVariant(status: "Priority" | "Watch" | "Stable") {
 }
 
 export default async function AttritionPage() {
-  const workforce = await getWorkforceAnalytics()
+  const to = new Date().toISOString().slice(0, 10)
+  const fromDate = new Date(`${to}T12:00:00Z`)
+  fromDate.setUTCFullYear(fromDate.getUTCFullYear() - 1)
+  const workforce = await getWorkforceAnalytics({ from: fromDate.toISOString().slice(0, 10), to, period: "quarter" })
   const [retention, dashboard] = await Promise.all([
     getRetentionIntelligence(workforce),
     Promise.resolve(getDashboard()),
@@ -39,7 +42,8 @@ export default async function AttritionPage() {
     <WorkspacePage>
       <WorkspaceHeader
         title="Attrition and retention"
-        description="Review department retention signals and assign follow-up."
+        description="Review 12-month retention signals and assign follow-up."
+        meta={<>{workforce.calculationBasis.reportingWindow}</>}
         actions={(
           <Button nativeButton={false} render={<Link href={withReturnTo("/risk-review", "/attrition")} />}>
             Review model records

@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useMemo, useState } from "react"
+import { useEffect, useMemo, useRef, useState } from "react"
 import Link from "next/link"
 import { useRouter, useSearchParams } from "next/navigation"
 import { LoaderCircle, Plus, Search, X } from "lucide-react"
@@ -34,7 +34,7 @@ function Schedule({ title, rows }: { title: string; rows: LeaveOperationRecord[]
   return <Card className="gap-0 overflow-hidden py-0 shadow-none"><CardHeader className="border-b border-border px-5 py-4"><CardTitle>{title}</CardTitle></CardHeader><CardContent className="p-0">{rows.length ? <div className="divide-y divide-border/70">{rows.slice(0, 6).map((row) => <div key={row.id} className="flex items-center justify-between gap-4 px-5 py-3"><div className="min-w-0"><p className="truncate font-semibold">{row.employeeName}</p><p className="text-meta text-muted-foreground">{row.leaveType} · {row.department}</p></div><div className="text-right"><p className="whitespace-nowrap">{dateLabel(row.startDate)}</p><p className="text-meta text-muted-foreground">{row.leaveDays} day{row.leaveDays === 1 ? "" : "s"}</p></div></div>)}</div> : <p className="p-8 text-center text-body text-muted-foreground">No leave is scheduled.</p>}</CardContent></Card>
 }
 
-export function TimeOffWorkspace({ canRequestLeave }: { canRequestLeave: boolean }) {
+export function TimeOffWorkspace({ canRequestLeave, initialData }: { canRequestLeave: boolean; initialData: LeaveOperations }) {
   const router = useRouter()
   const searchParams = useSearchParams()
   const returnTo = safeReturnTo(searchParams.get("returnTo"))
@@ -42,13 +42,19 @@ export function TimeOffWorkspace({ canRequestLeave }: { canRequestLeave: boolean
   const [filters, setFilters] = useState({ from: searchParams.get("from") ?? "", to: searchParams.get("to") ?? "", department: searchParams.get("department") ?? "", location: searchParams.get("location") ?? "", leaveType: searchParams.get("leaveType") ?? "" })
   const [status, setStatus] = useState("")
   const [query, setQuery] = useState("")
-  const [data, setData] = useState<LeaveOperations | null>(null)
-  const [loading, setLoading] = useState(true)
+  const [data, setData] = useState<LeaveOperations | null>(initialData)
+  const [loading, setLoading] = useState(false)
   const [busy, setBusy] = useState(false)
   const [notice, setNotice] = useState("")
   const [error, setError] = useState("")
   const [decision, setDecision] = useState<{ row: LeaveOperationRecord; value: "Approved" | "Rejected" } | null>(null)
   const [decisionNote, setDecisionNote] = useState("")
+  const [initialRequestQuery] = useState(() => {
+    const params = new URLSearchParams()
+    for (const [key, value] of Object.entries(filters)) if (value) params.set(key, value)
+    return params.toString()
+  })
+  const skippedInitialLoad = useRef(false)
 
   const requestQuery = useMemo(() => {
     const params = new URLSearchParams()
@@ -76,6 +82,10 @@ export function TimeOffWorkspace({ canRequestLeave }: { canRequestLeave: boolean
   }
 
   useEffect(() => {
+    if (!skippedInitialLoad.current) {
+      skippedInitialLoad.current = true
+      if (requestQuery === initialRequestQuery) return
+    }
     const controller = new AbortController()
     fetch(`/api/v1/hr/leave${requestQuery ? `?${requestQuery}` : ""}`, { cache: "no-store", signal: controller.signal })
       .then(async (response) => {
@@ -87,7 +97,7 @@ export function TimeOffWorkspace({ canRequestLeave }: { canRequestLeave: boolean
       .catch((reason: unknown) => { if ((reason as { name?: string })?.name !== "AbortError") setError(reason instanceof Error ? reason.message : "Leave operations could not be loaded.") })
       .finally(() => { if (!controller.signal.aborted) setLoading(false) })
     return () => controller.abort()
-  }, [requestQuery])
+  }, [initialRequestQuery, requestQuery])
 
   const visible = useMemo(() => {
     const normalized = query.trim().toLowerCase()

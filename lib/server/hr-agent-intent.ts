@@ -1,7 +1,7 @@
 import type { HrFilters } from "@/lib/hr-types"
 import type { AssistantPageContext } from "@/lib/assistant-page-context"
 
-type HrToolName = "workforce_overview" | "compare_departments" | "analyze_attrition_signals" | "review_people_operations" | "find_employee_records" | "review_work_queue"
+type HrToolName = "workforce_overview" | "compare_departments" | "analyze_attrition_signals" | "review_people_operations" | "find_employee_records" | "review_work_queue" | "review_onboarding_readiness" | "review_capability_plan"
 
 type StoredToolContext = {
   tool: string
@@ -37,6 +37,8 @@ type PlanPurpose =
   | "employee_lookup"
   | "work_queue_review"
   | "directory_summary"
+  | "capability_recommendations"
+  | "onboarding_readiness"
 
 export type ToolPlan = {
   name: HrToolName
@@ -60,16 +62,16 @@ type ResolvedHrIntent = {
   contextQuery: string
 }
 
-const scopePattern = /employee|people|workforce|headcount|department|location|manager|hire|hiring|recruit|attrition|turnover|exit|retention|risk|leave|pto|absence|vacation|training|learning|course|mandatory|promotion|career|mobility|data quality|demo|import|summary|brief|company|status|replacement|coverage/i
+const scopePattern = /employee|people|workforce|headcount|department|location|manager|hire|hiring|onboard|new joiner|recruit|attrition|turnover|exit|retention|risk|leave|pto|absence|vacation|training|learning|course|skill|capabilit|upskill|mandatory|promotion|career|mobility|data quality|demo|import|summary|brief|company|status|replacement|coverage/i
 
 function directTopic(message: string): Topic | null {
   if (/manager/i.test(message) && /exit|attrition|turnover|retention/i.test(message)) return "manager_exits"
   if (/replacement/i.test(message) && /coverage|gap|pipeline|hiring/i.test(message)) return "replacement"
   if (/promotion|promote|career progression|mobility/i.test(message)) return "promotions"
   if (/attrition|turnover|exit|retention|risk/i.test(message)) return "attrition"
-  if (/hire|hiring|recruit|candidate|requisition|offer/i.test(message)) return "hiring"
+  if (/hire|hiring|onboard|new joiner|preboard|recruit|candidate|requisition|offer/i.test(message)) return "hiring"
   if (/leave|pto|absence|vacation|sick/i.test(message)) return "leave"
-  if (/training|learning|course|assessment|mandatory|compliance|phishing|safety/i.test(message)) return "training"
+  if (/training|learning|course|skill|capabilit|upskill|assessment|mandatory|compliance|phishing|safety/i.test(message)) return "training"
   if (/employee|people|person|profile|directory/i.test(message)) return "employee"
   if (/workforce|headcount|company|open hr work|executive summary|executive brief/i.test(message)) return "workforce"
   return null
@@ -89,6 +91,8 @@ function priorState(history: AgentHistoryMessage[]): { topic: Topic | null; inpu
   if (trace.tool === "analyze_attrition_signals") return { topic: "attrition", input: trace.input ?? {}, ...shared }
   if (trace.tool === "workforce_overview") return { topic: "workforce", input: trace.input ?? {}, ...shared }
   if (trace.tool === "find_employee_records") return { topic: "employee", input: trace.input ?? {}, ...shared }
+  if (trace.tool === "review_onboarding_readiness") return { topic: "hiring", input: trace.input ?? {}, ...shared }
+  if (trace.tool === "review_capability_plan") return { topic: "training", input: trace.input ?? {}, ...shared }
   if (trace.tool === "review_people_operations") {
     const domain = trace.input?.domain
     const topic = domain === "hiring" || domain === "leave" || domain === "training" || domain === "promotions" ? domain : null
@@ -186,6 +190,12 @@ function pageWorkPlan(query: string, context?: AssistantPageContext): ToolPlan |
       purpose: "directory_summary",
       limit: 10,
     }
+  }
+  if (context.key === "courses" && /capabilit|skill|upskill|recommend|market|grow|development need/i.test(query)) {
+    return { name: "review_capability_plan", input: { department: context.filters.department, location: context.filters.location, limit: 8 }, purpose: "capability_recommendations", limit: 8 }
+  }
+  if (context.key === "hiring" && /summarize|onboard|new joiner|readiness|handoff|need action|what should/i.test(query)) {
+    return { name: "review_onboarding_readiness", input: { department: context.filters.department, location: context.filters.location, includeRecruitingHandoff: true, limit: 10 }, purpose: "onboarding_readiness", limit: 10 }
   }
   const asksForPageWork = /\bdecisions?\b|\bapprovals?\b|\bexceptions?\b|\boverdue\b|\bpriorit(?:y|ies|ize)\b|\bwhat should (?:i|we|hr) (?:review|act on|do) (?:first|next|today)?\b|\bneeds? (?:action|attention|follow-up)\b/i.test(query)
     || /\bsummarize\b/i.test(query) && ["home", "inbox"].includes(context.key)
@@ -303,7 +313,14 @@ export function resolveHrIntent(message: string, history: AgentHistoryMessage[],
     const compare = /compare|which departments?|highest|lowest|by department|break ?down/i.test(query)
       && !(topic === "promotions" && /employees?|mobility|career/i.test(query))
     if (compare) return { plans: [{ name: "compare_departments", input: { ...filters, metric: comparisonMetric(topic) }, purpose: "department_comparison", limit }], inScope, isFollowUp: followUp, contextQuery }
-    return { plans: [{ name: "review_people_operations", input: { ...filters, domain: topic }, purpose: "people_operations", limit }], inScope, isFollowUp: followUp, contextQuery }
+    if (topic === "hiring" && /onboard|new joiner|preboard|readiness|handoff|starting/i.test(query)) {
+      return { plans: [{ name: "review_onboarding_readiness", input: { ...filters, includeRecruitingHandoff: true, limit }, purpose: "onboarding_readiness", limit }], inScope, isFollowUp: followUp, contextQuery }
+    }
+    if (topic === "training" && /capabilit|skill|upskill|recommend|market|grow|development need/i.test(query)) {
+      return { plans: [{ name: "review_capability_plan", input: { ...filters, limit }, purpose: "capability_recommendations", limit }], inScope, isFollowUp: followUp, contextQuery }
+    }
+    const purpose = "people_operations"
+    return { plans: [{ name: "review_people_operations", input: { ...filters, domain: topic }, purpose, limit }], inScope, isFollowUp: followUp, contextQuery }
   }
 
   if (topic === "employee") {

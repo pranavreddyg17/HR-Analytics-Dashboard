@@ -5,6 +5,7 @@ import learningAssignmentDatesMigration from "@/db/postgres/0002_learning_assign
 import employeeExperienceMigration from "@/db/postgres/0003_employee_experience.sql?raw"
 import correlatedEmployeeExperienceMigration from "@/db/postgres/0004_correlated_employee_experience.sql?raw"
 import operatingModelMigration from "@/db/postgres/0005_operating_model.sql?raw"
+import onboardingAndCapabilityMigration from "@/db/postgres/0006_onboarding_and_capability.sql?raw"
 import type { Database, Statement } from "@/lib/server/hr-repository"
 import { runtimeEnv } from "@/lib/server/runtime-env"
 
@@ -47,7 +48,7 @@ function placeholders(sql: string): string {
 }
 
 /** Translate the repository's driver-neutral placeholders to PostgreSQL positions. */
-export function postgresSql(input: string): string {
+function postgresSql(input: string): string {
   const sql = placeholders(input.trim().replace(/;\s*$/, ""))
   return sql || "SELECT 1"
 }
@@ -121,6 +122,7 @@ async function initialize(pool: Pool): Promise<void> {
       { id: "0003_employee_experience", sql: employeeExperienceMigration },
       { id: "0004_correlated_employee_experience", sql: correlatedEmployeeExperienceMigration },
       { id: "0005_operating_model", sql: operatingModelMigration },
+      { id: "0006_onboarding_and_capability", sql: onboardingAndCapabilityMigration },
     ]
     for (const migration of migrations) {
       const applied = await client.query<QueryResultRow>("SELECT id FROM schema_migrations WHERE id=$1", [migration.id])

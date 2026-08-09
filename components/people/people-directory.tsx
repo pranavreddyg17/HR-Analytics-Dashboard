@@ -2,7 +2,7 @@
 
 import Link from "next/link"
 import { useRouter, useSearchParams } from "next/navigation"
-import { useCallback, useEffect, useMemo, useState } from "react"
+import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { Archive, FilterX, Plus, Search, SlidersHorizontal } from "lucide-react"
 import { Cell, Pie, PieChart, ResponsiveContainer } from "recharts"
 
@@ -40,7 +40,7 @@ function validTenure(value: string | null): string {
   return tenureOptions.some((option) => option.value === value) ? value ?? "" : ""
 }
 
-export function PeopleDirectory() {
+export function PeopleDirectory({ initialData, initialManagerPool }: { initialData: EmployeeDirectoryResponse; initialManagerPool: ManagedEmployee[] }) {
   const router = useRouter()
   const searchParams = useSearchParams()
   const initialQuery = searchParams.get("q") ?? ""
@@ -54,11 +54,23 @@ export function PeopleDirectory() {
     tenure: validTenure(searchParams.get("tenure")),
     includeArchived: searchParams.get("archived") === "1",
   }))
-  const [data, setData] = useState<EmployeeDirectoryResponse | null>(null)
-  const [managerPool, setManagerPool] = useState<ManagedEmployee[]>([])
-  const [loadedRequest, setLoadedRequest] = useState<string | null>(null)
-  const [retry, setRetry] = useState(0)
   const [page, setPage] = useState(() => Math.max(0, (Number(searchParams.get("page") ?? "1") || 1) - 1))
+  const [data, setData] = useState<EmployeeDirectoryResponse | null>(initialData)
+  const [managerPool] = useState<ManagedEmployee[]>(initialManagerPool)
+  const [initialSearchString] = useState(() => {
+    const params = new URLSearchParams({ limit: String(PAGE_SIZE), offset: String(page * PAGE_SIZE) })
+    if (initialQuery.trim()) params.set("search", initialQuery.trim())
+    if (filters.department) params.set("department", filters.department)
+    if (filters.location) params.set("location", filters.location)
+    if (filters.status) params.set("status", filters.status)
+    if (filters.employmentType) params.set("employmentType", filters.employmentType)
+    if (filters.tenure) params.set("tenure", filters.tenure)
+    if (filters.includeArchived) params.set("includeArchived", "true")
+    return params.toString()
+  })
+  const [loadedRequest, setLoadedRequest] = useState<string | null>(`${initialSearchString}:0`)
+  const skippedInitialLoad = useRef(false)
+  const [retry, setRetry] = useState(0)
   const [error, setError] = useState("")
   const drawerOpen = searchParams.get("new") === "employee"
   const [showFilters, setShowFilters] = useState(() => ["department", "location", "status", "employmentType", "tenure", "archived"].some((key) => Boolean(searchParams.get(key))))
@@ -104,6 +116,10 @@ export function PeopleDirectory() {
   }, [directoryHref, drawerOpen, router, searchParams])
 
   useEffect(() => {
+    if (!skippedInitialLoad.current) {
+      skippedInitialLoad.current = true
+      if (searchString === initialSearchString && retry === 0) return
+    }
     const controller = new AbortController()
     const requestKey = `${searchString}:${retry}`
     fetch(`/api/v1/hr/people?${searchString}`, { cache: "no-store", signal: controller.signal })
@@ -116,16 +132,7 @@ export function PeopleDirectory() {
       .catch((reason: unknown) => { if ((reason as { name?: string }).name !== "AbortError") setError(reason instanceof Error ? reason.message : "The people directory is unavailable.") })
       .finally(() => { if (!controller.signal.aborted) setLoadedRequest(requestKey) })
     return () => controller.abort()
-  }, [retry, searchString])
-
-  useEffect(() => {
-    const controller = new AbortController()
-    fetch("/api/v1/hr/people?limit=250", { cache: "no-store", signal: controller.signal })
-      .then(async (response) => response.ok ? response.json() as Promise<EmployeeDirectoryResponse> : null)
-      .then((body) => { if (body) setManagerPool(body.items) })
-      .catch(() => undefined)
-    return () => controller.abort()
-  }, [])
+  }, [initialSearchString, retry, searchString])
 
   const dimensions = data?.dimensions
   const loading = loadedRequest !== `${searchString}:${retry}`

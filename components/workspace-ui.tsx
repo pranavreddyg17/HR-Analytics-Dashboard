@@ -29,7 +29,7 @@ export function WorkspaceHeader({
   )
 }
 
-export type WorkspaceMetric = {
+type WorkspaceMetric = {
   label: string
   value: ReactNode
   detail?: ReactNode

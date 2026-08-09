@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server"
 
-import { getWorkforceAnalytics } from "@/lib/server/hr-analytics"
+import { getWorkspaceDomainStatus } from "@/lib/server/hr-analytics"
 import { getDataImportJobs, getDataImportSummary } from "@/lib/server/hr-repository"
 import { requireRole } from "@/lib/server/request-user"
 
@@ -9,13 +9,13 @@ export const dynamic = "force-dynamic"
 export async function GET(request: NextRequest) {
   try {
     await requireRole(request, ["admin", "hr"])
-    const [analytics, imports, importSummary] = await Promise.all([getWorkforceAnalytics(), getDataImportJobs(), getDataImportSummary()])
+    const [domainStatus, imports, importSummary] = await Promise.all([getWorkspaceDomainStatus(), getDataImportJobs(), getDataImportSummary()])
     return NextResponse.json({
-      generatedAt: analytics.generatedAt,
-      status: analytics.status,
+      generatedAt: new Date().toISOString(),
+      status: domainStatus,
       imports,
       summary: {
-        totalRecords: analytics.status.reduce((sum, item) => sum + item.count, 0),
+        totalRecords: domainStatus.reduce((sum, item) => sum + item.count, 0),
         completedImports: importSummary.completedImports,
         failedImports: importSummary.failedImports,
         lastCompletedAt: importSummary.lastCompletedAt,
