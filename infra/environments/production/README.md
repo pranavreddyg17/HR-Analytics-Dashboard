@@ -15,7 +15,7 @@ The stable suffix `f61hno` was generated once by Terraform to satisfy Azure's gl
 | `laidbackhr-f61hno-kv` | Runtime secrets and configuration references |
 | `laidbackhrf61hno` | Active `laidbackhr-web` container images and rollback tags |
 | `laidbackhrf61hnodocs` | Private employee-document blobs |
-| `laidbackhr-production-insights` and `laidbackhr-production-logs` | Sampled OpenTelemetry and its Log Analytics workspace |
+| `laidbackhr-production-insights` and `laidbackhr-production-logs` | App Service-managed Node.js telemetry and its Log Analytics workspace |
 
 ## Employee portal DNS
 

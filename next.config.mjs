@@ -1,7 +1,6 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   output: "standalone",
-  serverExternalPackages: ["@azure/monitor-opentelemetry"],
   images: {
     unoptimized: true,
   },

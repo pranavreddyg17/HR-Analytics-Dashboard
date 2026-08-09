@@ -13,7 +13,7 @@ All runtime resources are provisioned in the existing `Laidback.ai` resource gro
 - Azure AI Search indexes the curated Markdown knowledge base for hybrid/vector retrieval.
 - Azure OpenAI provides grounded synthesis when a chat deployment is configured. The assistant retains a deterministic, evidence-only fallback if generation is unavailable.
 - Azure Container Registry stores immutable web images. The validated prediction artifact runs inside the web application; the Python package remains a test and retraining reference, not a second production service.
-- Application Insights and Log Analytics collect sampled server, HTTP, PostgreSQL, and Azure SDK telemetry through the Azure Monitor OpenTelemetry distribution. Live metrics and console capture are disabled to control ingestion cost.
+- Application Insights and Log Analytics collect server request, dependency, exception, and trace telemetry through the App Service-managed Node.js agent. The agent starts before the Next.js server and is patched by Azure.
 - Terraform owns the Azure resources and GitHub Actions is the only deployment pipeline. Azure DevOps validates the mirrored `main` commit and verifies that the same immutable SHA is live; it does not perform a competing deployment.
 
 Production demo seeding is disabled. Existing PostgreSQL records are preserved; new migrations add structures without replacing operational rows.

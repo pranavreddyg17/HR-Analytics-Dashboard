@@ -243,33 +243,34 @@ resource "azurerm_linux_web_app" "web" {
   }
 
   app_settings = {
-    WEBSITES_PORT                         = "8080"
-    APP_VERSION                           = var.image_tag
-    DATABASE_URL                          = local.key_vault_database_reference
-    AUTH_SECRET                           = local.key_vault_auth_reference
-    GOOGLE_CLIENT_ID                      = local.key_vault_google_id_reference
-    GOOGLE_CLIENT_SECRET                  = local.key_vault_google_secret_reference
-    AUTH_URL                              = var.application_base_url
-    AUTH_TRUST_HOST                       = "true"
-    NEXTAUTH_URL                          = var.application_base_url
-    AUTH_COOKIE_DOMAIN                    = ".laidbackhr.cloud"
-    BOOTSTRAP_ADMIN_EMAIL                 = var.bootstrap_admin_email
-    BOOTSTRAP_ADMIN_NAME                  = var.bootstrap_admin_name
-    DATABASE_POOL_MAX                     = "10"
-    SEED_DEMO_DATA                        = "false"
-    EMPLOYEE_DOCUMENTS_ACCOUNT_URL        = azurerm_storage_account.employee_documents.primary_blob_endpoint
-    EMPLOYEE_DOCUMENTS_CONTAINER          = azurerm_storage_container.employee_documents.name
-    AZURE_AI_SEARCH_ENDPOINT              = local.ai_search_endpoint_reference
-    AZURE_AI_SEARCH_API_KEY               = local.ai_search_key_reference
-    AZURE_AI_SEARCH_INDEX                 = var.azure_ai_search_index
-    AZURE_OPENAI_ENDPOINT                 = local.azure_openai_endpoint_reference
-    AZURE_OPENAI_API_KEY                  = local.azure_openai_key_reference
-    AZURE_OPENAI_MODEL                    = var.azure_openai_model
-    AZURE_OPENAI_EMBEDDING_ENDPOINT       = local.embedding_endpoint_reference
-    AZURE_OPENAI_EMBEDDING_API_KEY        = local.embedding_key_reference
-    AZURE_OPENAI_EMBEDDING_MODEL          = "text-embedding-3-small"
-    APPLICATIONINSIGHTS_CONNECTION_STRING = azurerm_application_insights.app.connection_string
-    OTEL_SERVICE_NAME                     = "laidbackhr-web"
+    WEBSITES_PORT                              = "8080"
+    APP_VERSION                                = var.image_tag
+    DATABASE_URL                               = local.key_vault_database_reference
+    AUTH_SECRET                                = local.key_vault_auth_reference
+    GOOGLE_CLIENT_ID                           = local.key_vault_google_id_reference
+    GOOGLE_CLIENT_SECRET                       = local.key_vault_google_secret_reference
+    AUTH_URL                                   = var.application_base_url
+    AUTH_TRUST_HOST                            = "true"
+    NEXTAUTH_URL                               = var.application_base_url
+    AUTH_COOKIE_DOMAIN                         = ".laidbackhr.cloud"
+    BOOTSTRAP_ADMIN_EMAIL                      = var.bootstrap_admin_email
+    BOOTSTRAP_ADMIN_NAME                       = var.bootstrap_admin_name
+    DATABASE_POOL_MAX                          = "10"
+    SEED_DEMO_DATA                             = "false"
+    EMPLOYEE_DOCUMENTS_ACCOUNT_URL             = azurerm_storage_account.employee_documents.primary_blob_endpoint
+    EMPLOYEE_DOCUMENTS_CONTAINER               = azurerm_storage_container.employee_documents.name
+    AZURE_AI_SEARCH_ENDPOINT                   = local.ai_search_endpoint_reference
+    AZURE_AI_SEARCH_API_KEY                    = local.ai_search_key_reference
+    AZURE_AI_SEARCH_INDEX                      = var.azure_ai_search_index
+    AZURE_OPENAI_ENDPOINT                      = local.azure_openai_endpoint_reference
+    AZURE_OPENAI_API_KEY                       = local.azure_openai_key_reference
+    AZURE_OPENAI_MODEL                         = var.azure_openai_model
+    AZURE_OPENAI_EMBEDDING_ENDPOINT            = local.embedding_endpoint_reference
+    AZURE_OPENAI_EMBEDDING_API_KEY             = local.embedding_key_reference
+    AZURE_OPENAI_EMBEDDING_MODEL               = "text-embedding-3-small"
+    APPLICATIONINSIGHTS_CONNECTION_STRING      = azurerm_application_insights.app.connection_string
+    ApplicationInsightsAgent_EXTENSION_VERSION = "~3"
+    OTEL_SERVICE_NAME                          = "laidbackhr-web"
   }
 }
 
