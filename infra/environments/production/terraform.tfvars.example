@@ -4,4 +4,5 @@ location                = "westus2"
 deployment_principal_id = "224ddf99-bc98-494b-b77d-2299dea6e8e3"
 application_base_url     = "https://www.laidbackhr.cloud"
 employee_portal_url      = "https://employee.laidbackhr.cloud"
+enable_employee_custom_domain = true
 azure_openai_model       = "gpt-5.2"
