@@ -3,7 +3,7 @@ import { z } from "zod"
 import type { AttritionModelProfile, AttritionRecord, LeaveRecord, PromotionRecord, TrainingRecord } from "@/lib/hr-types"
 import type { EmployeeActivity, EmployeeDirectoryResponse, EmployeeInput, EmployeeProfileResponse, InboxItem, ManagedEmployee } from "@/lib/people-types"
 import type { RequestActor } from "@/lib/server/request-user"
-import { ensureHrDatabase, type Database } from "@/lib/server/hr-database"
+import { ensureHrDatabase, inferJobLevel, type Database } from "@/lib/server/hr-repository"
 
 export class PeopleError extends Error {
   constructor(message: string, public status = 400) { super(message) }
@@ -51,26 +51,19 @@ async function databaseOrThrow(): Promise<Database> {
   return database
 }
 
-function calculateTenure(hireDate: string): number {
-  const start = new Date(`${hireDate}T00:00:00Z`).getTime()
-  const now = new Date().getTime()
-  if (!Number.isFinite(start) || start > now) return 0
-  return Number(((now - start) / (365.25 * 86_400_000)).toFixed(1))
-}
-
 function cleanNullable(value: string | null | undefined): string | null {
   const clean = value?.trim()
   return clean ? clean : null
 }
 
-async function assertUniqueAndManager(database: Database, input: EmployeeInput, currentId?: string): Promise<{ managerName: string }> {
+async function assertUniqueAndManager(database: Database, input: EmployeeInput, currentId?: string): Promise<void> {
   if (input.work_email) {
     const duplicate = await database.prepare("SELECT employee_id FROM employee_directory_view WHERE LOWER(work_email) = LOWER(?) AND employee_id <> ? AND archived_at IS NULL")
       .bind(input.work_email, currentId ?? "")
       .first<{ employee_id: string }>()
     if (duplicate) throw new PeopleError("That work email is already assigned to another employee.", 409)
   }
-  if (!input.manager_id) return { managerName: "Not assigned" }
+  if (!input.manager_id) return
   if (input.manager_id === currentId) throw new PeopleError("An employee cannot be their own manager.")
   const manager = await database.prepare("SELECT employee_id, first_name, last_name, preferred_name, manager_id FROM employee_directory_view WHERE employee_id = ? AND archived_at IS NULL")
     .bind(input.manager_id)
@@ -84,7 +77,6 @@ async function assertUniqueAndManager(database: Database, input: EmployeeInput, 
       next = parent?.manager_id ?? null
     }
   }
-  return { managerName: `${manager.preferred_name || manager.first_name} ${manager.last_name}`.trim() }
 }
 
 export async function listPeople({
@@ -210,11 +202,22 @@ export async function createPerson(value: unknown, actor: RequestActor): Promise
   const exists = await database.prepare("SELECT employee_id FROM employee_directory_view WHERE employee_id = ?").bind(employeeId).first<{ employee_id: string }>()
   if (exists) throw new PeopleError("That employee ID already exists.", 409)
   const input: EmployeeInput = { ...parsed, employee_id: employeeId, preferred_name: cleanNullable(parsed.preferred_name), work_email: cleanNullable(parsed.work_email), phone: cleanNullable(parsed.phone), manager_id: cleanNullable(parsed.manager_id) }
-  const { managerName } = await assertUniqueAndManager(database, input)
+  await assertUniqueAndManager(database, input)
   const activityId = crypto.randomUUID()
+  const jobProfileId = `JOB-${crypto.randomUUID().slice(0, 12).toUpperCase()}`
+  const jobLevel = inferJobLevel(input.job_title)
   await database.batch([
-    database.prepare("INSERT INTO employees(employee_id, first_name, last_name, preferred_name, work_email, phone, department, job_title, location, manager, manager_id, hire_date, employment_type, employment_status, tenure_years, data_source, archived_at, version, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'imported', NULL, 1, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)")
-      .bind(employeeId, input.first_name, input.last_name, input.preferred_name, input.work_email, input.phone, input.department, input.job_title, input.location, managerName, input.manager_id, input.hire_date, input.employment_type, input.employment_status, calculateTenure(input.hire_date)),
+    database.prepare(`INSERT INTO job_profiles(id, organization_id, department_name, title, job_level)
+      VALUES (?, 'org:laidbackhr', ?, ?, ?)
+      ON CONFLICT(organization_id, department_name, title, job_level) DO NOTHING`)
+      .bind(jobProfileId, input.department, input.job_title, jobLevel),
+    database.prepare(`INSERT INTO employees(employee_id, first_name, last_name, preferred_name, work_email, phone,
+      location, manager_id, hire_date, employment_type, employment_status,
+      data_source, organization_id, job_profile_id, archived_at, version, created_at, updated_at)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'imported', 'org:laidbackhr',
+        (SELECT id FROM job_profiles WHERE organization_id='org:laidbackhr' AND department_name=? AND title=? AND job_level=? LIMIT 1),
+        NULL, 1, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)`)
+      .bind(employeeId, input.first_name, input.last_name, input.preferred_name, input.work_email, input.phone, input.location, input.manager_id, input.hire_date, input.employment_type, input.employment_status, input.department, input.job_title, jobLevel),
     database.prepare("INSERT INTO employee_activity(id, employee_id, event_type, summary, changes_json, actor_email, created_at) VALUES (?, ?, 'created', ?, ?, ?, CURRENT_TIMESTAMP)")
       .bind(activityId, employeeId, `${actor.displayName} created the employee profile`, JSON.stringify(input), actor.email),
   ])
@@ -228,13 +231,22 @@ export async function updatePerson(employeeId: string, value: unknown, actor: Re
   if (!current) throw new PeopleError("Employee not found.", 404)
   if (!parsed.version || parsed.version !== Number(current.version)) throw new PeopleError("This profile changed since you opened it. Refresh and try again.", 409)
   const input: EmployeeInput = { ...parsed, employee_id: employeeId, preferred_name: cleanNullable(parsed.preferred_name), work_email: cleanNullable(parsed.work_email), phone: cleanNullable(parsed.phone), manager_id: cleanNullable(parsed.manager_id) }
-  const { managerName } = await assertUniqueAndManager(database, input, employeeId)
+  await assertUniqueAndManager(database, input, employeeId)
   const tracked = ["first_name", "last_name", "preferred_name", "work_email", "phone", "department", "job_title", "location", "manager_id", "hire_date", "employment_type", "employment_status"] as const
   const changes = Object.fromEntries(tracked.filter((key) => (current[key] ?? null) !== (input[key] ?? null)).map((key) => [key, { from: current[key] ?? null, to: input[key] ?? null }]))
   if (!Object.keys(changes).length) return (await getPerson(employeeId)).employee
+  const jobProfileId = `JOB-${crypto.randomUUID().slice(0, 12).toUpperCase()}`
   await database.batch([
-    database.prepare("UPDATE employees SET first_name=?, last_name=?, preferred_name=?, work_email=?, phone=?, department=?, job_title=?, location=?, manager=?, manager_id=?, hire_date=?, employment_type=?, employment_status=?, tenure_years=?, version=version+1, updated_at=CURRENT_TIMESTAMP WHERE employee_id=? AND version=?")
-      .bind(input.first_name, input.last_name, input.preferred_name, input.work_email, input.phone, input.department, input.job_title, input.location, managerName, input.manager_id, input.hire_date, input.employment_type, input.employment_status, calculateTenure(input.hire_date), employeeId, parsed.version),
+    database.prepare(`INSERT INTO job_profiles(id, organization_id, department_name, title, job_level)
+      VALUES (?, 'org:laidbackhr', ?, ?, COALESCE((SELECT job_level FROM job_profiles WHERE id=?), 'Not specified'))
+      ON CONFLICT(organization_id, department_name, title, job_level) DO NOTHING`)
+      .bind(jobProfileId, input.department, input.job_title, current.job_profile_id ?? null),
+    database.prepare(`UPDATE employees SET first_name=?, last_name=?, preferred_name=?, work_email=?, phone=?,
+      location=?, manager_id=?, hire_date=?, employment_type=?, employment_status=?,
+      job_profile_id=(SELECT id FROM job_profiles WHERE organization_id='org:laidbackhr' AND department_name=? AND title=?
+        AND job_level=COALESCE((SELECT job_level FROM job_profiles WHERE id=employees.job_profile_id), 'Not specified') LIMIT 1),
+      version=version+1, updated_at=CURRENT_TIMESTAMP WHERE employee_id=? AND version=?`)
+      .bind(input.first_name, input.last_name, input.preferred_name, input.work_email, input.phone, input.location, input.manager_id, input.hire_date, input.employment_type, input.employment_status, input.department, input.job_title, employeeId, parsed.version),
     database.prepare("INSERT INTO employee_activity(id, employee_id, event_type, summary, changes_json, actor_email, created_at) VALUES (?, ?, 'updated', ?, ?, ?, CURRENT_TIMESTAMP)")
       .bind(crypto.randomUUID(), employeeId, `${actor.displayName} updated ${Object.keys(changes).length} profile field${Object.keys(changes).length === 1 ? "" : "s"}`, JSON.stringify(changes), actor.email),
   ])
@@ -283,6 +295,7 @@ export async function listInboxItems(actor?: RequestActor): Promise<InboxItem[]>
   }
   type InsightWorkflow = WorkflowPerson & { id: string; title: string; source_entity_id: string | null }
   type ServiceWorkflow = WorkflowPerson & { id: string; type: "reimbursement" | "employee_case"; title: string; employee_id: string; first_name?: string; last_name?: string; preferred_name?: string | null; work_email?: string | null; manager_id?: string | null; manager_email?: string | null }
+  type OnboardingWorkflow = WorkflowPerson & { id: string; title: string; employee_id: string; first_name: string; last_name: string; preferred_name: string | null; organization_name: string; department: string; job_title: string; job_level: string; location: string; manager_name: string | null; requested_annual_salary: number; salary_currency: string }
   const workflowColumns = `
     w.requested_by_email,
     w.details_json,
@@ -298,7 +311,7 @@ export async function listInboxItems(actor?: RequestActor): Promise<InboxItem[]>
     w.created_at AS workflow_created_at,
     w.updated_at AS workflow_updated_at,
     COALESCE(NULLIF(au.display_name, ''), NULLIF(TRIM(COALESCE(oe.preferred_name, oe.first_name, '') || ' ' || COALESCE(oe.last_name, '')), '')) AS owner_name`
-  const [leave, hiring, training, insight, services, actorEmployee] = await Promise.all([
+  const [leave, hiring, training, insight, services, onboarding, actorEmployee] = await Promise.all([
     database.prepare(`SELECT l.*, e.first_name, e.last_name, e.preferred_name, e.work_email, e.manager_id, m.work_email AS manager_email, ${workflowColumns}
       FROM leave_requests_view l
       JOIN workflow_requests w ON w.id=l.id AND w.type='leave'
@@ -338,6 +351,15 @@ export async function listInboxItems(actor?: RequestActor): Promise<InboxItem[]>
       LEFT JOIN employee_directory_view oe ON LOWER(oe.work_email)=LOWER(w.owner_email) AND oe.archived_at IS NULL
       WHERE w.type IN ('reimbursement', 'employee_case')
       ORDER BY COALESCE(w.completed_at, w.updated_at) DESC LIMIT 160`).all<ServiceWorkflow>(),
+    database.prepare(`SELECT w.id, w.title, w.employee_id, s.first_name, s.last_name, s.preferred_name,
+        s.organization_name, s.department, s.job_title, s.job_level, s.location, s.manager_name,
+        s.requested_annual_salary, s.salary_currency, ${workflowColumns}
+      FROM workflow_requests w
+      JOIN employee_onboarding_submissions s ON s.id=w.source_entity_id
+      LEFT JOIN app_users au ON LOWER(au.email)=LOWER(w.owner_email)
+      LEFT JOIN employee_directory_view oe ON LOWER(oe.work_email)=LOWER(w.owner_email) AND oe.archived_at IS NULL
+      WHERE w.type='employee_onboarding'
+      ORDER BY COALESCE(w.completed_at, w.updated_at) DESC LIMIT 160`).all<OnboardingWorkflow>(),
     actor ? database.prepare("SELECT employee_id FROM employee_directory_view WHERE LOWER(work_email)=LOWER(?) AND archived_at IS NULL").bind(actor.email).first<{ employee_id: string }>() : Promise.resolve(null),
   ])
   const personName = (row: { first_name?: string; last_name?: string; preferred_name?: string | null; employee_id: string }) => `${row.preferred_name || row.first_name || row.employee_id} ${row.last_name || ""}`.trim()
@@ -349,6 +371,7 @@ export async function listInboxItems(actor?: RequestActor): Promise<InboxItem[]>
   const visibleTraining = (training.results ?? []).filter((row) => isPeopleTeam || row.work_email?.toLowerCase() === ownEmail || actor?.role === "manager" && row.manager_id === employeeId)
   const visibleInsight = (insight.results ?? []).filter((row) => isPeopleTeam || row.owner_email?.toLowerCase() === ownEmail || row.requested_by_email?.toLowerCase() === ownEmail)
   const visibleServices = (services.results ?? []).filter((row) => isPeopleTeam || row.work_email?.toLowerCase() === ownEmail || row.owner_email?.toLowerCase() === ownEmail)
+  const visibleOnboarding = isPeopleTeam ? onboarding.results ?? [] : []
   const detailValue = (row: WorkflowPerson, field: string): string | null => {
     try { return String((JSON.parse(row.details_json ?? "{}") as Record<string, unknown>)[field] ?? "") || null } catch { return null }
   }
@@ -516,6 +539,35 @@ export async function listInboxItems(actor?: RequestActor): Promise<InboxItem[]>
         actionable: canAct, actions: canAct ? type === "reimbursement" ? ["reject", "approve"] : ["complete"] : [],
         reviewHref: reviewHref(type, row.id, isCompleted ? "completed" : type === "reimbursement" ? "decisions" : "my_work"),
         recordHref: reviewHref(type, row.id, isCompleted ? "completed" : type === "reimbursement" ? "decisions" : "my_work"),
+      }
+    }),
+    ...visibleOnboarding.map((row): InboxItem => {
+      const status = row.workflow_status || "Submitted"
+      const isCompleted = Boolean(row.completed_at) || ["approved", "rejected"].includes(status.toLowerCase())
+      const dueDate = row.due_at?.slice(0, 10) ?? null
+      const sla = slaStatus(dueDate, isCompleted)
+      const displayName = `${row.preferred_name || row.first_name} ${row.last_name}`.trim()
+      return {
+        id: row.id, type: "onboarding", title: row.title, detail: `${row.job_title} · ${row.department} · ${row.location}`,
+        person: displayName, employeeId: row.employee_id, dueDate, status, priority: priority(row, sla),
+        owner: ownerLabel(row, "People Operations"), ownerEmail: row.owner_email ?? null,
+        nextAction: row.next_action || "Verify organization, reporting line, job profile, and compensation.",
+        attentionReason: row.blocked_reason || (sla === "overdue" ? "The onboarding verification target has passed." : "Self-reported employment details require HR verification."),
+        completionEffect: "Approval activates the employee profile; rejection returns it for correction.",
+        requestContext: [
+          { label: "Organization", value: row.organization_name },
+          { label: "Role", value: `${row.job_title} · ${row.job_level}` },
+          { label: "Department and location", value: `${row.department} · ${row.location}` },
+          { label: "Manager", value: row.manager_name || "Not provided" },
+          { label: "Compensation submitted", value: `${row.salary_currency} ${Number(row.requested_annual_salary).toLocaleString()}` },
+        ],
+        assignedTo: "hr", requiresDecision: !isCompleted, isCompleted, slaStatus: sla,
+        timeInStatusDays: daysSince(row.assigned_at || row.workflow_updated_at || row.workflow_created_at),
+        createdAt: row.workflow_created_at || nowIso, completedAt: row.completed_at ?? null,
+        completionNotes: row.completion_notes ?? null, blockedReason: row.blocked_reason ?? null,
+        actionable: !isCompleted, actions: !isCompleted ? ["reject", "approve"] : [],
+        reviewHref: reviewHref("onboarding", row.id, isCompleted ? "completed" : "decisions"),
+        recordHref: `/people/${encodeURIComponent(row.employee_id)}`,
       }
     }),
   ].sort((left, right) => Number(left.isCompleted) - Number(right.isCompleted)

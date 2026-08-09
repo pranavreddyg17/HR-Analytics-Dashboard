@@ -36,9 +36,10 @@ const domainOptions: Array<{ id: DomainFilter; label: string }> = [
   { id: "insight", label: "Insights" },
   { id: "reimbursement", label: "Reimbursements" },
   { id: "case", label: "Employee requests" },
+  { id: "onboarding", label: "Onboarding" },
 ]
 
-const domainLabel: Record<InboxItem["type"], string> = { leave: "Leave", hiring: "Hiring", training: "Learning", insight: "Insights", reimbursement: "Reimbursement", case: "Employee request" }
+const domainLabel: Record<InboxItem["type"], string> = { leave: "Leave", hiring: "Hiring", training: "Learning", insight: "Insights", reimbursement: "Reimbursement", case: "Employee request", onboarding: "Onboarding" }
 const PAGE_SIZE = 10
 const inputClass = "h-9 w-full rounded-md border border-border bg-background px-3 text-control outline-none focus:border-ring focus:ring-2 focus:ring-ring/20"
 const textareaClass = "min-h-20 w-full resize-y rounded-md border border-border bg-background px-3 py-2.5 text-control outline-none focus:border-ring focus:ring-2 focus:ring-ring/20"
@@ -140,7 +141,7 @@ function ActionDialog({ pending, leave, note, score, busy, error, onActionChange
     <button type="button" aria-label="Close action" className="absolute inset-0 bg-slate-950/45" onClick={() => !busy && onClose()} />
     <form onSubmit={onSubmit} className="relative max-h-[92dvh] w-full max-w-lg overflow-y-auto rounded-lg border border-border bg-background shadow-xl">
       <header className="border-b border-border px-5 py-4 pr-14">
-        <h2 className="text-section font-semibold">{isDecision ? item.type === "leave" ? "Leave decision" : item.type === "reimbursement" ? "Reimbursement decision" : "Headcount decision" : item.type === "case" ? "Resolve employee request" : "Record course completion"}</h2>
+        <h2 className="text-section font-semibold">{isDecision ? item.type === "leave" ? "Leave decision" : item.type === "reimbursement" ? "Reimbursement decision" : item.type === "onboarding" ? "Onboarding verification" : "Headcount decision" : item.type === "case" ? "Resolve employee request" : "Record course completion"}</h2>
         <p className="mt-0.5 text-description text-muted-foreground">{item.title}{item.person ? ` · ${item.person}` : ""}</p>
       </header>
       <button type="button" aria-label="Close" onClick={onClose} className="absolute right-5 top-5 text-muted-foreground hover:text-foreground"><X className="size-4" /></button>

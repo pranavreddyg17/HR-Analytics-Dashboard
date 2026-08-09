@@ -1,7 +1,7 @@
 import { z } from "zod"
 
 import type { ManagedEmployee, WorkflowActorContext } from "@/lib/people-types"
-import { ensureHrDatabase, type Database } from "@/lib/server/hr-database"
+import { ensureHrDatabase, type Database } from "@/lib/server/hr-repository"
 import { PeopleError } from "@/lib/server/people"
 import type { RequestActor } from "@/lib/server/request-user"
 
@@ -24,19 +24,11 @@ const workflowSchema = z.discriminatedUnion("type", [
     employmentType: z.enum(["Full-time", "Part-time", "Contract", "Intern", "Temporary"]),
     justification: z.string().trim().min(10).max(800),
   }),
-  z.object({
-    type: z.literal("training"),
-    employeeId: z.string().trim().min(2).max(40),
-    program: z.string().trim().min(2).max(160),
-    dueDate: date,
-    hours: z.number().positive().max(500),
-    note: z.string().trim().max(600).optional().default(""),
-  }),
 ])
 
 const actionSchema = z.object({
   id: z.string().trim().min(2).max(100),
-  type: z.enum(["leave", "hiring", "training", "reimbursement", "case"]),
+  type: z.enum(["leave", "hiring", "training", "reimbursement", "case", "onboarding"]),
   action: z.enum(["approve", "reject", "complete"]),
   note: z.string().trim().max(600).optional().default(""),
 })
@@ -144,7 +136,7 @@ export async function createWorkflow(value: unknown, actor: RequestActor) {
     const dueAt = dateAfter(now, 3)
     const ownerEmail = ["admin", "hr"].includes(actor.role) ? actor.email : "talent@laidbackhr.cloud"
     await db.batch([
-      db.prepare("INSERT INTO hiring_records(id, position, department, application_date, hiring_date, hiring_source, time_to_hire_days, recruitment_status, location, data_source, updated_at) VALUES (?, ?, ?, ?, NULL, 'Manager request', NULL, 'Requested', ?, 'workflow', CURRENT_TIMESTAMP)")
+      db.prepare("INSERT INTO hiring_records(id, position, department, application_date, hiring_date, hiring_source, recruitment_status, location, data_source, updated_at) VALUES (?, ?, ?, ?, NULL, 'Manager request', 'Requested', ?, 'workflow', CURRENT_TIMESTAMP)")
         .bind(id, input.position, input.department, now, input.location),
       db.prepare("INSERT INTO workflow_requests(id, type, employee_id, title, status, details_json, requested_by_email, priority, owner_email, due_at, next_action, source_entity_type, source_entity_id, assigned_at, confidentiality_level) VALUES (?, 'hiring', NULL, ?, 'Requested', ?, ?, 'high', ?, ?, 'Approve or decline the requisition.', 'hiring_record', ?, CURRENT_TIMESTAMP, 'internal')")
         .bind(id, title, details, actor.email, ownerEmail, dueAt, id),
@@ -152,33 +144,44 @@ export async function createWorkflow(value: unknown, actor: RequestActor) {
     return { id, type: input.type, status: "Requested", message: "Hiring requisition sent to HR for approval." }
   }
 
-  if (!["admin", "hr", "manager"].includes(actor.role)) throw new PeopleError("Only managers and HR can assign training.", 403)
-  const employee = await employeeById(db, input.employeeId)
-  if (!employee) throw new PeopleError("Choose an active employee record.", 404)
-  if (actor.role === "manager") {
-    const manager = await employeeByEmail(db, actor.email)
-    if (!manager || employee.manager_id !== manager.employee_id) throw new PeopleError("Managers can only assign training to their direct reports.", 403)
-  }
-  const title = `${input.program} assignment`
-  const details = JSON.stringify({ program: input.program, dueDate: input.dueDate, hours: input.hours, note: input.note })
-  const ownerEmail = employee.work_email?.trim().toLowerCase() || actor.email
-  await db.batch([
-    db.prepare("INSERT INTO training_records(id, training_program, employee_id, completion_status, completion_date, training_hours, assessment_score, department, data_source, updated_at) VALUES (?, ?, ?, 'Incomplete', NULL, ?, NULL, ?, 'workflow', CURRENT_TIMESTAMP)")
-      .bind(id, input.program, employee.employee_id, input.hours, employee.department),
-    db.prepare("INSERT INTO workflow_requests(id, type, employee_id, title, status, details_json, requested_by_email, priority, owner_email, due_at, next_action, source_entity_type, source_entity_id, assigned_at, confidentiality_level) VALUES (?, 'training', ?, ?, 'Assigned', ?, ?, ?, ?, ?, 'Complete the assigned course and record completion.', 'training_record', ?, CURRENT_TIMESTAMP, 'internal')")
-      .bind(id, employee.employee_id, title, details, actor.email, priorityForDueDate(input.dueDate, now), ownerEmail, input.dueDate, id),
-    db.prepare("INSERT INTO employee_activity(id, employee_id, event_type, summary, changes_json, actor_email) VALUES (?, ?, 'training_assigned', ?, ?, ?)")
-      .bind(crypto.randomUUID(), employee.employee_id, `${actor.displayName} assigned ${input.program}`, details, actor.email),
-  ])
-  return { id, type: input.type, status: "Assigned", message: "Training assigned to the employee." }
+  throw new PeopleError("Unsupported workflow type.", 422)
 }
 
 export async function actOnWorkflow(value: unknown, actor: RequestActor) {
   const input = actionSchema.parse(value)
   const db = await database()
-  const persistedType = input.type === "case" ? "employee_case" : input.type
+  const persistedType = input.type === "case" ? "employee_case" : input.type === "onboarding" ? "employee_onboarding" : input.type
   const workflow = await db.prepare("SELECT * FROM workflow_requests WHERE id=? AND type=?").bind(input.id, persistedType).first<Record<string, string | null>>()
   if (!workflow) throw new PeopleError("Workflow request not found.", 404)
+
+  if (input.type === "onboarding") {
+    if (!["admin", "hr"].includes(actor.role)) throw new PeopleError("Only HR can verify employee onboarding.", 403)
+    if (!["approve", "reject"].includes(input.action)) throw new PeopleError("Choose approve or reject.", 422)
+    if (input.action === "reject" && input.note.length < 10) throw new PeopleError("Add a reason before rejecting the onboarding profile.", 422)
+    const submission = await db.prepare("SELECT id, employee_id, user_email, requested_annual_salary, salary_currency, hire_date FROM employee_onboarding_submissions WHERE id=? AND status='submitted'")
+      .bind(input.id).first<{ id: string; employee_id: string; user_email: string; requested_annual_salary: number; salary_currency: string; hire_date: string }>()
+    if (!submission) throw new PeopleError("This onboarding profile has already been reviewed.", 409)
+    if (input.action === "approve") {
+      await db.batch([
+        db.prepare("UPDATE employee_onboarding_submissions SET status='approved', reviewed_by_email=?, reviewed_at=CURRENT_TIMESTAMP, review_note=?, updated_at=CURRENT_TIMESTAMP WHERE id=?").bind(actor.email, input.note || null, input.id),
+        db.prepare("UPDATE employees SET employment_status='Active', updated_at=CURRENT_TIMESTAMP, version=version+1 WHERE employee_id=?").bind(submission.employee_id),
+        db.prepare(`INSERT INTO employee_compensation(id, employee_id, annual_salary, currency, pay_frequency, effective_from, created_by_email)
+          VALUES (?, ?, ?, ?, 'annual', ?, ?)
+          ON CONFLICT(id) DO NOTHING`).bind(`COMP-${submission.id}`, submission.employee_id, submission.requested_annual_salary, submission.salary_currency, submission.hire_date, actor.email),
+        db.prepare("UPDATE app_users SET onboarding_status='complete', updated_at=CURRENT_TIMESTAMP WHERE email=?").bind(submission.user_email),
+        db.prepare("UPDATE workflow_requests SET status='Approved', next_action='No further action.', resolved_by_email=?, resolved_at=CURRENT_TIMESTAMP, completed_at=CURRENT_TIMESTAMP, completion_notes=?, updated_at=CURRENT_TIMESTAMP WHERE id=?").bind(actor.email, input.note || `${actor.displayName} verified the onboarding profile.`, input.id),
+        db.prepare("INSERT INTO employee_activity(id, employee_id, event_type, summary, changes_json, actor_email) VALUES (?, ?, 'employee_onboarding_approved', 'Employee onboarding verified', ?, ?)").bind(crypto.randomUUID(), submission.employee_id, JSON.stringify({ submissionId: input.id }), actor.email),
+      ])
+      return { id: input.id, status: "Approved", message: "Employee onboarding verified and activated." }
+    }
+    await db.batch([
+      db.prepare("UPDATE employee_onboarding_submissions SET status='rejected', reviewed_by_email=?, reviewed_at=CURRENT_TIMESTAMP, review_note=?, updated_at=CURRENT_TIMESTAMP WHERE id=?").bind(actor.email, input.note, input.id),
+      db.prepare("UPDATE employees SET archived_at=CURRENT_TIMESTAMP, updated_at=CURRENT_TIMESTAMP, version=version+1 WHERE employee_id=?").bind(submission.employee_id),
+      db.prepare("UPDATE app_users SET employee_id=NULL, onboarding_status='required', updated_at=CURRENT_TIMESTAMP WHERE email=?").bind(submission.user_email),
+      db.prepare("UPDATE workflow_requests SET status='Rejected', next_action='Resubmit corrected employment details.', resolved_by_email=?, resolved_at=CURRENT_TIMESTAMP, completed_at=CURRENT_TIMESTAMP, completion_notes=?, updated_at=CURRENT_TIMESTAMP WHERE id=?").bind(actor.email, input.note, input.id),
+    ])
+    return { id: input.id, status: "Rejected", message: "Onboarding profile rejected. The employee can submit corrected details." }
+  }
 
   if (input.type === "leave") {
     if (!(["admin", "hr", "manager"] as string[]).includes(actor.role)) throw new PeopleError("Your role cannot approve leave.", 403)
@@ -209,8 +212,8 @@ export async function actOnWorkflow(value: unknown, actor: RequestActor) {
     if (input.action === "approve") {
       await db.batch([
         db.prepare("UPDATE hiring_records SET recruitment_status='Open', updated_at=CURRENT_TIMESTAMP WHERE id=?").bind(input.id),
-        db.prepare("UPDATE workflow_requests SET status='Open', owner_email=?, due_at=date('now', '+14 days'), next_action='Record recruiting progress or confirm the requisition remains active.', assigned_at=CURRENT_TIMESTAMP, resolved_by_email=?, resolved_at=CURRENT_TIMESTAMP, completed_at=NULL, completion_notes=NULL, updated_at=CURRENT_TIMESTAMP WHERE id=?")
-          .bind(actor.email, actor.email, input.id),
+        db.prepare("UPDATE workflow_requests SET status='Open', owner_email=?, due_at=?, next_action='Record recruiting progress or confirm the requisition remains active.', assigned_at=CURRENT_TIMESTAMP, resolved_by_email=?, resolved_at=CURRENT_TIMESTAMP, completed_at=NULL, completion_notes=NULL, updated_at=CURRENT_TIMESTAMP WHERE id=?")
+          .bind(actor.email, dateAfter(new Date().toISOString().slice(0, 10), 14), actor.email, input.id),
         db.prepare("INSERT INTO hiring_activity(id, entity_type, entity_id, requisition_id, action, from_status, to_status, detail, actor_email) VALUES (?, 'requisition', ?, ?, 'requisition_approved', 'Requested', 'Open', ?, ?)")
           .bind(crypto.randomUUID(), input.id, input.id, `${actor.displayName} approved and opened the hiring requisition.`, actor.email),
       ])
@@ -264,6 +267,7 @@ export async function actOnWorkflow(value: unknown, actor: RequestActor) {
   if (!canComplete || !employee) throw new PeopleError("Only the assigned employee or HR can complete this training.", 403)
   await db.batch([
     db.prepare("UPDATE training_records SET completion_status='Completed', completion_date=?, updated_at=CURRENT_TIMESTAMP WHERE id=?").bind(new Date().toISOString().slice(0, 10), input.id),
+    db.prepare("UPDATE course_assignments SET status='Completed', completed_at=?, updated_at=CURRENT_TIMESTAMP WHERE id=?").bind(new Date().toISOString().slice(0, 10), input.id),
     db.prepare("UPDATE workflow_requests SET status='Completed', next_action='No further action.', assigned_at=CURRENT_TIMESTAMP, resolved_by_email=?, resolved_at=CURRENT_TIMESTAMP, completed_at=CURRENT_TIMESTAMP, completion_notes=?, updated_at=CURRENT_TIMESTAMP WHERE id=?")
       .bind(actor.email, `${actor.displayName} recorded the training completion.`, input.id),
     db.prepare("INSERT INTO employee_activity(id, employee_id, event_type, summary, changes_json, actor_email) VALUES (?, ?, 'training_completed', ?, ?, ?)")

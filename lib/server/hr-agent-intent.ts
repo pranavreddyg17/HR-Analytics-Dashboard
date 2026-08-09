@@ -32,6 +32,7 @@ type PlanPurpose =
   | "retention_mobility_context"
   | "retention_learning_context"
   | "people_operations"
+  | "employee_count"
   | "employee_lookup"
 
 export type ToolPlan = {
@@ -254,7 +255,10 @@ export function resolveHrIntent(message: string, history: AgentHistoryMessage[],
   if (topic === "employee") {
     const identifier = employeeIdentifier(query)
     const status = /active employees/i.test(query) ? "Active" : undefined
-    return { plans: [{ name: "find_employee_records", input: { ...filters, query: identifier ?? query, ...(status ? { status } : {}), limit }, purpose: "employee_lookup", limit }], inScope, isFollowUp: followUp, contextQuery }
+    const countOnly = /\bhow many\b|\bcount\b|\bnumber of\b/i.test(query)
+    const hasDimensionFilter = Boolean(filters.department || filters.jobTitle || filters.location)
+    const searchQuery = identifier ?? (countOnly || hasDimensionFilter ? "" : query)
+    return { plans: [{ name: "find_employee_records", input: { ...filters, query: searchQuery, ...(status ? { status } : {}), limit }, purpose: countOnly ? "employee_count" : "employee_lookup", limit }], inScope, isFollowUp: followUp, contextQuery }
   }
 
   return { plans: [{ name: "workforce_overview", input: filters, purpose: "workforce_summary", limit }], inScope, isFollowUp: followUp, contextQuery }

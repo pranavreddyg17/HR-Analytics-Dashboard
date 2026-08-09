@@ -13,7 +13,6 @@ __v0_jsx-dev-runtime.ts
 node_modules
 .next/
 dist/
-.wrangler/
 output/
 outputs/
 *.tsbuildinfo

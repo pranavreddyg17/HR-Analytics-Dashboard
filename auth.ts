@@ -2,7 +2,7 @@ import NextAuth from "next-auth"
 import Credentials from "next-auth/providers/credentials"
 import Google from "next-auth/providers/google"
 
-import { findAccessUser, recordLogin } from "@/lib/server/access"
+import { ensureEmployeeAccessUser, findAccessUser, recordLogin } from "@/lib/server/access"
 import { verifyGoogleIdToken } from "@/lib/server/google-id-token"
 import { runtimeEnv } from "@/lib/server/runtime-env"
 
@@ -55,8 +55,8 @@ export const { handlers, auth } = NextAuth({
     async signIn({ profile, user }) {
       const email = (profile?.email ?? user.email)?.toLowerCase()
       if (!email || profile?.email_verified === false) return false
-      const access = await findAccessUser(email)
-      if (!access || access.status !== "active") return "/login?error=AccessDenied"
+      const access = await findAccessUser(email) ?? await ensureEmployeeAccessUser(email, profile?.name ?? user.name ?? "")
+      if (access.status !== "active") return "/login?error=AccessDenied"
       user.role = access.role
       await recordLogin(email, profile?.name ?? user.name ?? "")
       return true

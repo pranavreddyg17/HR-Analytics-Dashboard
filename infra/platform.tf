@@ -183,7 +183,6 @@ resource "azurerm_key_vault_secret" "auth_secret" {
 
 locals {
   web_name                          = "laidbackhr-${random_string.suffix.result}-web"
-  model_name                        = "laidbackhr-${random_string.suffix.result}-model"
   key_vault_database_reference      = "@Microsoft.KeyVault(SecretUri=${azurerm_key_vault_secret.database_url.versionless_id})"
   key_vault_auth_reference          = "@Microsoft.KeyVault(SecretUri=${azurerm_key_vault_secret.auth_secret.versionless_id})"
   key_vault_google_id_reference     = "@Microsoft.KeyVault(VaultName=${azurerm_key_vault.app.name};SecretName=google-client-id)"
@@ -194,42 +193,6 @@ locals {
   azure_openai_key_reference        = "@Microsoft.KeyVault(VaultName=${azurerm_key_vault.app.name};SecretName=azure-openai-key)"
   embedding_endpoint_reference      = "@Microsoft.KeyVault(VaultName=${azurerm_key_vault.app.name};SecretName=azure-openai-embedding-endpoint)"
   embedding_key_reference           = "@Microsoft.KeyVault(VaultName=${azurerm_key_vault.app.name};SecretName=azure-openai-embedding-key)"
-}
-
-resource "azurerm_linux_web_app" "model" {
-  name                                           = local.model_name
-  resource_group_name                            = local.resource_group_name
-  location                                       = local.location
-  service_plan_id                                = azurerm_service_plan.app.id
-  https_only                                     = true
-  public_network_access_enabled                  = true
-  ftp_publish_basic_authentication_enabled       = false
-  webdeploy_publish_basic_authentication_enabled = false
-  tags                                           = local.common_tags
-
-  identity { type = "SystemAssigned" }
-
-  site_config {
-    always_on                               = false
-    container_registry_use_managed_identity = true
-    minimum_tls_version                     = "1.2"
-    http2_enabled                           = true
-
-    application_stack {
-      docker_image_name   = "laidbackhr-model:${var.image_tag}"
-      docker_registry_url = "https://${azurerm_container_registry.app.login_server}"
-    }
-  }
-
-  app_settings = {
-    WEBSITES_PORT                         = "8000"
-    ALLOWED_ORIGINS                       = var.application_base_url
-    APPLICATIONINSIGHTS_CONNECTION_STRING = azurerm_application_insights.app.connection_string
-  }
-
-  lifecycle {
-    ignore_changes = [site_config[0].application_stack[0].docker_image_name]
-  }
 }
 
 resource "azurerm_linux_web_app" "web" {
@@ -271,6 +234,8 @@ resource "azurerm_linux_web_app" "web" {
     AUTH_TRUST_HOST                       = "true"
     NEXTAUTH_URL                          = var.application_base_url
     AUTH_COOKIE_DOMAIN                    = ".laidbackhr.cloud"
+    BOOTSTRAP_ADMIN_EMAIL                 = var.bootstrap_admin_email
+    BOOTSTRAP_ADMIN_NAME                  = var.bootstrap_admin_name
     DATABASE_POOL_MAX                     = "10"
     SEED_DEMO_DATA                        = "false"
     EMPLOYEE_DOCUMENTS_ACCOUNT_URL        = azurerm_storage_account.employee_documents.primary_blob_endpoint
@@ -292,14 +257,6 @@ resource "azurerm_role_assignment" "web_acr_pull" {
   scope                            = azurerm_container_registry.app.id
   role_definition_name             = "AcrPull"
   principal_id                     = azurerm_linux_web_app.web.identity[0].principal_id
-  principal_type                   = "ServicePrincipal"
-  skip_service_principal_aad_check = true
-}
-
-resource "azurerm_role_assignment" "model_acr_pull" {
-  scope                            = azurerm_container_registry.app.id
-  role_definition_name             = "AcrPull"
-  principal_id                     = azurerm_linux_web_app.model.identity[0].principal_id
   principal_type                   = "ServicePrincipal"
   skip_service_principal_aad_check = true
 }

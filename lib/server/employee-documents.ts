@@ -2,7 +2,7 @@ import { DefaultAzureCredential } from "@azure/identity"
 import { BlobServiceClient } from "@azure/storage-blob"
 import { z } from "zod"
 
-import { ensureHrDatabase, type Database } from "@/lib/server/hr-database"
+import { ensureHrDatabase, type Database } from "@/lib/server/hr-repository"
 import { PeopleError } from "@/lib/server/people"
 import type { RequestActor } from "@/lib/server/request-user"
 import { runtimeEnv } from "@/lib/server/runtime-env"

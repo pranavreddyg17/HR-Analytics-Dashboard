@@ -1,6 +1,6 @@
 import { z } from "zod"
 
-import { ensureHrDatabase, type Database } from "@/lib/server/hr-database"
+import { ensureHrDatabase, type Database } from "@/lib/server/hr-repository"
 import { createGoogleCalendarEvent } from "@/lib/server/google-calendar"
 import { PeopleError } from "@/lib/server/people"
 import type { RequestActor } from "@/lib/server/request-user"

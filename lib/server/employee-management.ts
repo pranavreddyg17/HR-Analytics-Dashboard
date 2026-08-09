@@ -2,7 +2,7 @@ import { z } from "zod"
 
 import { createAiWorkflowDraft } from "@/lib/server/ai-workflows"
 import { synthesizeWithAzureResponses } from "@/lib/server/azure-ai"
-import { ensureHrDatabase, type Database } from "@/lib/server/hr-database"
+import { ensureHrDatabase, type Database } from "@/lib/server/hr-repository"
 import { PeopleError } from "@/lib/server/people"
 import type { RequestActor } from "@/lib/server/request-user"
 

@@ -4,7 +4,7 @@ import { z } from "zod"
 import type { DomainStatus, HrFilters, WorkforceAnalytics } from "@/lib/hr-types"
 import type { PredictionInput } from "@/lib/types"
 import { getWorkforceAnalytics } from "@/lib/server/hr-analytics"
-import { ensureHrDatabase } from "@/lib/server/hr-database"
+import { ensureHrDatabase } from "@/lib/server/hr-repository"
 import { getRetentionIntelligence } from "@/lib/server/retention-intelligence"
 import { predict } from "@/lib/server/runtime"
 
@@ -78,7 +78,7 @@ function modelExplanation(record: WorkforceAnalytics["attrition"]["employeeRecor
   const explanation = predict(input)
   return {
     modelVersion: record.modelVersion,
-    method: "Local contributions from the deployed regularized logistic-regression model",
+    method: "Reference-profile sensitivity from the deployed compact gradient-boosting model",
     topDrivers: explanation.topDrivers,
     recommendedReview: explanation.recommendation,
     limits: "The contributors explain the model score, not the employee's intent and not a proven cause of future attrition.",

@@ -1,6 +1,6 @@
 import { z } from "zod"
 
-import { ensureHrDatabase, type Database } from "@/lib/server/hr-database"
+import { ensureHrDatabase, type Database } from "@/lib/server/hr-repository"
 import { PeopleError } from "@/lib/server/people"
 import type { RequestActor } from "@/lib/server/request-user"
 
@@ -150,7 +150,7 @@ export async function createExpenseClaim(value: unknown, actor: RequestActor) {
     `).bind(id, employee.employee_id, input.category, input.expenseDate, input.amount, input.currency, input.description, input.receiptDocumentId ?? null),
     db.prepare(`
       INSERT INTO workflow_requests(id, type, employee_id, title, status, details_json, requested_by_email, priority, owner_email, due_at, next_action, source_entity_type, source_entity_id, assigned_at, confidentiality_level)
-      VALUES (?, 'reimbursement', ?, 'Expense reimbursement', 'Submitted', ?, ?, 'medium', 'finance@laidbackhr.cloud', date('now', '+5 days'), 'Review the claim and receipt.', 'expense_claim', ?, CURRENT_TIMESTAMP, 'restricted')
+      VALUES (?, 'reimbursement', ?, 'Expense reimbursement', 'Submitted', ?, ?, 'medium', 'finance@laidbackhr.cloud', (CURRENT_DATE + INTERVAL '5 days')::date::text, 'Review the claim and receipt.', 'expense_claim', ?, CURRENT_TIMESTAMP, 'restricted')
     `).bind(id, employee.employee_id, details, actor.email, id),
     db.prepare("INSERT INTO employee_activity(id, employee_id, event_type, summary, changes_json, actor_email) VALUES (?, ?, 'expense_submitted', 'Expense reimbursement submitted', ?, ?)")
       .bind(crypto.randomUUID(), employee.employee_id, details, actor.email),
@@ -174,7 +174,7 @@ export async function createEmployeeCase(value: unknown, actor: RequestActor) {
     `).bind(id, employee.employee_id, input.category, input.subject, input.description, input.confidentiality, owner),
     db.prepare(`
       INSERT INTO workflow_requests(id, type, employee_id, title, status, details_json, requested_by_email, priority, owner_email, due_at, next_action, source_entity_type, source_entity_id, assigned_at, confidentiality_level)
-      VALUES (?, 'employee_case', ?, ?, 'Open', ?, ?, 'medium', ?, date('now', '+3 days'), 'Review the employee case and record the next step.', 'employee_case', ?, CURRENT_TIMESTAMP, ?)
+      VALUES (?, 'employee_case', ?, ?, 'Open', ?, ?, 'medium', ?, (CURRENT_DATE + INTERVAL '3 days')::date::text, 'Review the employee case and record the next step.', 'employee_case', ?, CURRENT_TIMESTAMP, ?)
     `).bind(id, employee.employee_id, input.subject, details, actor.email, owner, id, input.confidentiality === "restricted" ? "restricted" : "internal"),
   ])
   return { id, status: "open", message: "Request submitted to the appropriate owner." }

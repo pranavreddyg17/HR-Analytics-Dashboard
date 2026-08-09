@@ -18,7 +18,7 @@ function operationUrl(endpoint: string, operation: "embeddings" | "responses"): 
   return url.toString()
 }
 
-export async function createAzureEmbedding(input: string): Promise<number[] | null> {
+async function createAzureEmbedding(input: string): Promise<number[] | null> {
   const endpoint = configured("AZURE_OPENAI_EMBEDDING_ENDPOINT")
   const apiKey = configured("AZURE_OPENAI_EMBEDDING_API_KEY")
   if (!endpoint || !apiKey) return null

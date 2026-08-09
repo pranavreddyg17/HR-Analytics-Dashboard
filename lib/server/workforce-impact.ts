@@ -15,7 +15,13 @@ type ImpactInput = {
   openRequisitions: HiringRecord[]
   training: TrainingRecord[]
   modelEmployees: AttritionEmployeeRecord[]
+  annualPayByEmployee: Map<string, number>
   assumptions: WorkforceCostAssumptions
+  policy: {
+    fallbackRefillDays: number
+    criticalReviewShare: number
+    watchReviewShare: number
+  }
 }
 
 type RefillEstimate = {
@@ -69,12 +75,12 @@ function continuityStatus(input: {
   openRoles: number
   reviewShare: number
   refillDays: number
-}): "Critical" | "Watch" | "Covered" {
+}, policy: ImpactInput["policy"]): "Critical" | "Watch" | "Covered" {
   const uncoveredExits = Math.max(0, input.exits - input.hires - input.openRoles)
   if ((input.active <= 3 && input.reviewShare > 0)
-    || (uncoveredExits > 0 && input.reviewShare >= 15)
-    || input.reviewShare >= 30) return "Critical"
-  if (uncoveredExits > 0 || input.exits > input.hires || input.reviewShare >= 15 || input.refillDays >= 60) return "Watch"
+    || (uncoveredExits > 0 && input.reviewShare >= policy.watchReviewShare)
+    || input.reviewShare >= policy.criticalReviewShare) return "Critical"
+  if (uncoveredExits > 0 || input.exits > input.hires || input.reviewShare >= policy.watchReviewShare || input.refillDays >= 60) return "Watch"
   return "Covered"
 }
 
@@ -88,7 +94,7 @@ export function buildWorkforceImpact(input: ImpactInput): WorkforceAnalytics["de
   const completedFillDays = input.hired
     .map((record) => Number(record.time_to_hire_days))
     .filter((value) => Number.isFinite(value) && value > 0)
-  const companyFillDays = Math.round(average(completedFillDays) || 45)
+  const companyFillDays = Math.round(average(completedFillDays) || input.policy.fallbackRefillDays)
   const fillByRole = new Map<string, number[]>()
   const fillByDepartment = new Map<string, number[]>()
   for (const record of input.hired) {
@@ -134,12 +140,12 @@ export function buildWorkforceImpact(input: ImpactInput): WorkforceAnalytics["de
     const { department, job_title: jobTitle } = employees[0]
     const modelRows = employees.map((employee) => modelByEmployee.get(employee.employee_id)).filter((row): row is AttritionEmployeeRecord => Boolean(row))
     const reviewRows = modelRows.filter((employee) => employee.riskLevel === "high")
-    const annualPayRows = modelRows.map((employee) => employee.monthlyIncome * 12).filter((value) => value > 0)
+    const annualPayRows = employees.map((employee) => input.annualPayByEmployee.get(employee.employee_id) ?? 0).filter((value) => value > 0)
     const averageAnnualPay = average(annualPayRows)
     const refill = refillFor(department, jobTitle)
     const costs = replacementCost(averageAnnualPay, refill.days, input.assumptions)
     const reviewWeightedExposure = reviewRows.reduce((sum, employee) => {
-      const employeeCost = replacementCost(employee.monthlyIncome * 12, refill.days, input.assumptions).total
+      const employeeCost = replacementCost(input.annualPayByEmployee.get(employee.employeeId) ?? 0, refill.days, input.assumptions).total
       return sum + employeeCost * (employee.riskScore / 100)
     }, 0)
     const recordedExits = exitsByRole.get(key) ?? 0
@@ -165,7 +171,7 @@ export function buildWorkforceImpact(input: ImpactInput): WorkforceAnalytics["de
       onboardingCost: costs.onboarding,
       replacementCostPerExit: costs.total,
       reviewWeightedExposure: money(reviewWeightedExposure),
-      continuityStatus: continuityStatus({ active: employees.length, exits: recordedExits, hires: completedHires, openRoles: openRequisitions, reviewShare, refillDays: refill.days }),
+      continuityStatus: continuityStatus({ active: employees.length, exits: recordedExits, hires: completedHires, openRoles: openRequisitions, reviewShare, refillDays: refill.days }, input.policy),
     }
   }).sort((left, right) => statusRank[left.continuityStatus] - statusRank[right.continuityStatus]
     || right.reviewWeightedExposure - left.reviewWeightedExposure
@@ -185,7 +191,7 @@ export function buildWorkforceImpact(input: ImpactInput): WorkforceAnalytics["de
   const employees: WorkforceAnalytics["decisionSupport"]["workforceImpact"]["employees"] = reviewedEmployees.map((employee) => {
     const role = roleByKey.get(roleKey(employee.department, employee.jobTitle))
     const refill = refillFor(employee.department, employee.jobTitle)
-    const annualPay = employee.monthlyIncome * 12
+    const annualPay = input.annualPayByEmployee.get(employee.employeeId) ?? 0
     const costs = replacementCost(annualPay, refill.days, input.assumptions)
     const hourlyPay = annualPay / 2080
     const proposedLearningInvestment = money(input.assumptions.courseFeePerLearner + hourlyPay * input.assumptions.courseHoursPerLearner)
@@ -227,14 +233,14 @@ export function buildWorkforceImpact(input: ImpactInput): WorkforceAnalytics["de
     for (const assignment of assignments) programCounts.set(assignment.training_program, (programCounts.get(assignment.training_program) ?? 0) + 1)
     const proposedLearningInvestment = [...employeesWithGap].reduce((sum, employeeId) => {
       const model = modelByEmployee.get(employeeId)
-      const hourlyPay = model ? model.monthlyIncome * 12 / 2080 : 0
+      const hourlyPay = model ? (input.annualPayByEmployee.get(model.employeeId) ?? 0) / 2080 : 0
       return sum + input.assumptions.courseFeePerLearner + hourlyPay * input.assumptions.courseHoursPerLearner
     }, 0)
     const reviewWeightedExposure = [...employeesWithGap].reduce((sum, employeeId) => {
       const model = modelByEmployee.get(employeeId)
       if (!model) return sum
       const refill = refillFor(model.department, model.jobTitle)
-      return sum + replacementCost(model.monthlyIncome * 12, refill.days, input.assumptions).total * (model.riskScore / 100)
+      return sum + replacementCost(input.annualPayByEmployee.get(model.employeeId) ?? 0, refill.days, input.assumptions).total * (model.riskScore / 100)
     }, 0)
     const leadingProgram = [...programCounts.entries()].sort((left, right) => right[1] - left[1] || left[0].localeCompare(right[0]))[0]?.[0] ?? null
     return {
@@ -251,12 +257,13 @@ export function buildWorkforceImpact(input: ImpactInput): WorkforceAnalytics["de
     }
   }).sort((left, right) => right.reviewWeightedExposure - left.reviewWeightedExposure || left.department.localeCompare(right.department))
 
-  const payDataCoverage = percent(activeModelEmployees.filter((employee) => employee.monthlyIncome > 0).length, input.activeEmployees.length)
+  const payDataCoverage = percent(input.activeEmployees.filter((employee) => (input.annualPayByEmployee.get(employee.employee_id) ?? 0) > 0).length, input.activeEmployees.length)
   const recordedExitCosts = input.attrition.map((event) => {
     const model = allModelByEmployee.get(event.employee_id)
-    if (!model?.monthlyIncome) return 0
+    const annualPay = input.annualPayByEmployee.get(event.employee_id) ?? 0
+    if (!model || !annualPay) return 0
     const refill = refillFor(model.department, model.jobTitle)
-    return replacementCost(model.monthlyIncome * 12, refill.days, input.assumptions).total
+    return replacementCost(annualPay, refill.days, input.assumptions).total
   }).filter((value) => value > 0)
   const reviewWeightedExposure = employees.reduce((sum, employee) => sum + employee.reviewWeightedExposure, 0)
 

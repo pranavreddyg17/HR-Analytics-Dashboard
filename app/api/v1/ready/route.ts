@@ -1,4 +1,4 @@
-import { ensureHrDatabase } from "@/lib/server/hr-database"
+import { ensureHrDatabase } from "@/lib/server/hr-repository"
 import { azureAiConfiguration } from "@/lib/server/azure-ai"
 import { getModelMetadata } from "@/lib/server/runtime"
 
@@ -12,11 +12,12 @@ export async function GET() {
     return Response.json({
       status: "ready",
       version: process.env.APP_VERSION ?? "development",
-      database: { status: "ready", engine: database.dialect === "postgres" ? "postgresql" : "sqlite" },
+      database: { status: "ready", engine: "postgresql" },
       model: { status: "ready", runtime: "embedded", version: model.model_version },
       azureAi: azureAiConfiguration(),
     })
-  } catch {
+  } catch (error) {
+    console.error("Readiness check failed", error)
     return Response.json(
       { status: "unavailable", version: process.env.APP_VERSION ?? "development", database: { status: "unavailable" }, model: { status: "ready", runtime: "embedded" } },
       { status: 503 },

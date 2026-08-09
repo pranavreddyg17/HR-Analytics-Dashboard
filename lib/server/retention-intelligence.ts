@@ -1,6 +1,6 @@
 import type { HiringRecord, TrainingRecord, WorkforceAnalytics } from "@/lib/hr-types"
 import { getWorkforceAnalytics } from "@/lib/server/hr-analytics"
-import { ensureHrDatabase, readDomainRows } from "@/lib/server/hr-database"
+import { ensureHrDatabase, readDomainRows } from "@/lib/server/hr-repository"
 import type { RequestActor } from "@/lib/server/request-user"
 import { getDashboard, getModelMetadata } from "@/lib/server/runtime"
 
@@ -18,7 +18,7 @@ type RetentionWorkflow = {
   completedAt: string | null
 }
 
-export type RetentionCohort = {
+type RetentionCohort = {
   department: string
   population: number
   averageRisk: number
@@ -37,7 +37,7 @@ export type RetentionCohort = {
   reviewStatus: ReviewStatus
 }
 
-export type ContinuitySignal = {
+type ContinuitySignal = {
   department: string
   exposedEmployees: number
   leadingRole: string
@@ -48,7 +48,7 @@ export type ContinuitySignal = {
   action: string
 }
 
-export type RetentionPriority = {
+type RetentionPriority = {
   cohort: string
   evidence: string
   impact: string
@@ -396,7 +396,7 @@ export async function updateRetentionReview(
     await database.prepare(`
       UPDATE workflow_requests
       SET status='In progress', owner_email=?, assigned_at=CURRENT_TIMESTAMP,
-        details_json=json_set(CASE WHEN json_valid(details_json) THEN details_json ELSE '{}' END, '$.reviewPlan', ?),
+        details_json=(COALESCE(NULLIF(details_json, ''), '{}')::jsonb || jsonb_build_object('reviewPlan', ?::text))::text,
         next_action='Complete the agreed review action and record the outcome.', updated_at=CURRENT_TIMESTAMP
       WHERE id=? AND type='retention'
     `).bind(actor.email, note.trim(), reviewId).run()

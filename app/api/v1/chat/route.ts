@@ -5,13 +5,14 @@ import { requireRequestActor } from "@/lib/server/request-user"
 export async function POST(request: Request) {
   try {
     const actor = await requireRequestActor(request)
-    const body = await request.json() as { message?: unknown; conversationId?: unknown; stream?: unknown }
+    const body = await request.json() as { message?: unknown; conversationId?: unknown; stream?: unknown; pageContext?: unknown }
     if (body.conversationId !== undefined && (typeof body.conversationId !== "string" || body.conversationId.length > 100)) {
       return Response.json({ detail: "Invalid conversation." }, { status: 422 })
     }
     if (typeof body.message !== "string" || !body.message.trim() || body.message.length > 2000) {
       return Response.json({ detail: "message must contain between 1 and 2,000 characters." }, { status: 422 })
     }
+    if (body.pageContext !== undefined && (typeof body.pageContext !== "string" || body.pageContext.length > 200)) return Response.json({ detail: "Invalid page context." }, { status: 422 })
 
     const existingId = typeof body.conversationId === "string" && body.conversationId ? body.conversationId : null
     const history = existingId ? await getConversationContext(actor, existingId) : []
@@ -35,6 +36,7 @@ export async function POST(request: Request) {
                 history,
                 actorEmail: actor.email,
                 conversationId: conversation.id,
+                pageContext: typeof body.pageContext === "string" ? body.pageContext : undefined,
                 onProgress: (progress) => { controller.enqueue(event("progress", progress)) },
               })
               const chunks = answer.answer.match(/[\s\S]{1,72}/g) ?? [answer.answer]
@@ -75,7 +77,7 @@ export async function POST(request: Request) {
       })
     }
 
-    const answer = await runHrAgent({ message: body.message, history, actorEmail: actor.email, conversationId: conversation.id })
+    const answer = await runHrAgent({ message: body.message, history, actorEmail: actor.email, conversationId: conversation.id, pageContext: typeof body.pageContext === "string" ? body.pageContext : undefined })
     await appendConversationMessage(actor, conversation.id, {
       role: "assistant",
       content: answer.answer,

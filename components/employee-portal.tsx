@@ -49,7 +49,7 @@ function Status({ value }: { value: unknown }) {
 
 export function EmployeePortal({ initialData, user }: { initialData: PortalData; user: { name: string; email: string } }) {
   const [data, setData] = useState(initialData)
-  const [active, setActive] = useState<"overview" | "requests" | "reviews">("overview")
+  const [active, setActive] = useState<"overview" | "requests" | "learning" | "reviews">("overview")
   const [busy, setBusy] = useState(false)
   const [message, setMessage] = useState("")
 
@@ -177,6 +177,22 @@ export function EmployeePortal({ initialData, user }: { initialData: PortalData;
     if (saved) formElement.reset()
   }
 
+  async function completeCourse(assignmentId: string) {
+    setBusy(true); setMessage("")
+    try {
+      const response = await fetch(`/api/v1/hr/learning/assignments/${encodeURIComponent(assignmentId)}`, {
+        method: "PATCH",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ note: "Completion recorded through employee self-service." }),
+      })
+      const body = await response.json() as { message?: string; error?: string }
+      if (!response.ok) throw new Error(body.error || "Course completion could not be recorded.")
+      setMessage(body.message || "Course completed.")
+      await refresh()
+    } catch (error) { setMessage(error instanceof Error ? error.message : "Course completion could not be recorded.") }
+    finally { setBusy(false) }
+  }
+
   async function submitReview(event: React.FormEvent<HTMLFormElement>, reviewId: string) {
     event.preventDefault()
     const form = new FormData(event.currentTarget)
@@ -198,7 +214,7 @@ export function EmployeePortal({ initialData, user }: { initialData: PortalData;
       <div className="mx-auto flex min-h-14 max-w-[1280px] items-center gap-4 px-4 sm:px-6">
         <BrandLogo />
         <nav className="ml-4 flex min-w-0 flex-1 items-center gap-1" aria-label="Employee navigation">
-          {(["overview", "requests", "reviews"] as const).map((item) => <button key={item} onClick={() => setActive(item)} className={`h-9 rounded px-3 text-body capitalize ${active === item ? "bg-muted font-semibold" : "text-muted-foreground hover:bg-muted/60"}`}>{item}</button>)}
+          {(["overview", "requests", "learning", "reviews"] as const).map((item) => <button key={item} onClick={() => setActive(item)} className={`h-9 rounded px-3 text-body capitalize ${active === item ? "bg-muted font-semibold" : "text-muted-foreground hover:bg-muted/60"}`}>{item}</button>)}
         </nav>
         <div className="hidden text-right sm:block"><p className="text-card-title">{user.name}</p><p className="text-meta text-muted-foreground">{user.email}</p></div>
         <button className="text-button" onClick={() => signOut({ callbackUrl: "/login" })}>Sign out</button>
@@ -247,6 +263,14 @@ export function EmployeePortal({ initialData, user }: { initialData: PortalData;
         <form onSubmit={submitCase} className="surface-card p-5"><h2 className="text-section-title">Ask HR for help</h2><div className="mt-4 space-y-3"><label className="block text-label">Category<select name="category" className={fieldClass} defaultValue="payroll"><option value="payroll">Payroll</option><option value="benefits">Benefits</option><option value="workplace">Workplace</option><option value="equipment">Equipment</option><option value="access">Access</option><option value="policy">Policy</option><option value="other">Other</option></select></label><label className="block text-label">Subject<Input required name="subject" minLength={4} maxLength={160} className={fieldClass} /></label><label className="block text-label">Details<textarea required name="description" className={textAreaClass} minLength={10} maxLength={4000} /></label><label className="block text-label">Visible to<select name="confidentiality" className={fieldClass} defaultValue="hr"><option value="hr">HR</option><option value="manager">Manager and HR</option><option value="restricted">Restricted HR</option></select></label><Button disabled={busy} className="w-full">Submit request</Button></div></form>
         <section className="surface-card overflow-hidden xl:col-span-3"><div className="border-b border-border px-5 py-4"><h2 className="text-section-title">Request history</h2></div><div className="divide-y divide-border">{requestHistory.map((row) => <div key={`${row.kind}-${row.id}`} className="grid gap-2 px-5 py-3 sm:grid-cols-[120px_1fr_auto_auto] sm:items-center"><span className="text-meta text-muted-foreground">{row.kind}</span><span className="text-body font-semibold capitalize">{row.title}</span><Status value={row.status} /><span className="text-meta text-muted-foreground">{date(row.submitted)}</span></div>)}</div></section>
       </div>}
+
+      {active === "learning" && <section className="surface-card overflow-hidden">
+        <div className="border-b border-border px-5 py-4"><h2 className="text-section-title">Assigned learning</h2><p className="text-page-description text-muted-foreground">Courses assigned by HR or your manager.</p></div>
+        <div className="divide-y divide-border">{data.learning.length ? data.learning.map((assignment) => {
+          const completed = String(assignment.status).toLowerCase() === "completed"
+          return <div key={String(assignment.id)} className="grid gap-3 px-5 py-4 sm:grid-cols-[1fr_auto_auto] sm:items-center"><div><p className="text-card-title">{String(assignment.title)}</p><p className="text-meta text-muted-foreground">{completed ? `Completed ${date(assignment.completed_at)}` : `Due ${date(assignment.due_date)}`}</p></div><Status value={assignment.status}/>{!completed ? <Button size="sm" disabled={busy} onClick={() => void completeCourse(String(assignment.id))}>Mark complete</Button> : <span className="text-meta text-muted-foreground">Recorded</span>}</div>
+        }) : <p className="px-5 py-10 text-center text-body text-muted-foreground">No learning assignments.</p>}</div>
+      </section>}
 
       {active === "reviews" && <div className="grid gap-4 lg:grid-cols-2">
         <section className="surface-card overflow-hidden"><div className="border-b border-border px-5 py-4"><h2 className="text-section-title">Performance reviews</h2></div><div className="divide-y divide-border">{data.reviews.length ? data.reviews.map((review) => <div key={String(review.id)} className="px-5 py-4"><div className="flex items-center justify-between gap-3"><p className="text-card-title">{String(review.cycle_name)}</p><Status value={review.status} /></div><p className="mt-1 text-meta text-muted-foreground">{date(review.starts_on)} – {date(review.ends_on)}</p>{Boolean(review.manager_review) && <p className="mt-3 text-body">{String(review.manager_review)}</p>}{["not_started", "self_review"].includes(String(review.status)) && <form className="mt-4 space-y-3 border-t border-border pt-4" onSubmit={(event) => void submitReview(event, String(review.id))}><label className="block text-label">Self-review<textarea required name="selfReview" minLength={50} maxLength={10000} className={textAreaClass} placeholder="Summarize outcomes, challenges, development, and support needed." /></label><label className="block text-label">Self-rating<select required name="employeeRating" className={fieldClass} defaultValue=""><option value="" disabled>Select rating</option><option value="1">1 – Below expectations</option><option value="2">2 – Developing</option><option value="3">3 – Meets expectations</option><option value="4">4 – Exceeds expectations</option><option value="5">5 – Exceptional</option></select></label><Button disabled={busy}>Submit self-review</Button></form>}</div>) : <p className="px-5 py-8 text-center text-body text-muted-foreground">No review cycles assigned.</p>}</div></section>

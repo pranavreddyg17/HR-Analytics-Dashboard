@@ -15,7 +15,7 @@ import type {
   WorkforceAnalytics,
 } from "@/lib/hr-types"
 import { hrDomains } from "@/lib/hr-types"
-import { ensureHrDatabase, readAttritionModelProfiles, readDomainRows } from "@/lib/server/hr-database"
+import { ensureHrDatabase, readAttritionModelProfiles, readDomainRows } from "@/lib/server/hr-repository"
 import { buildWorkforceImpact } from "@/lib/server/workforce-impact"
 
 function inRange(date: string | null, filters: HrFilters): boolean {
@@ -105,7 +105,9 @@ async function getDomainStatus(rowsByDomain: Record<HrDomain, Array<Record<strin
 export async function getWorkforceAnalytics(filters: HrFilters = {}, options: { rowLimit?: number | null } = {}): Promise<WorkforceAnalytics> {
   const normalizedFilters: WorkforceAnalytics["filters"] = { ...filters, period: filters.period ?? "month" }
   const outputRows = <T>(rows: T[], defaultLimit: number): T[] => options.rowLimit === null ? rows : rows.slice(0, options.rowLimit ?? defaultLimit)
-  const [employeeRows, hiringRows, attritionRows, leaveRows, trainingRows, promotionRows, modelProfileRows] = await Promise.all([
+  const database = await ensureHrDatabase()
+  if (!database) throw new Error("DATABASE_UNAVAILABLE")
+  const [employeeRows, hiringRows, attritionRows, leaveRows, trainingRows, promotionRows, modelProfileRows, compensationResult, analyticsSettings] = await Promise.all([
     readDomainRows("employees"),
     readDomainRows("hiring"),
     readDomainRows("attrition"),
@@ -113,7 +115,21 @@ export async function getWorkforceAnalytics(filters: HrFilters = {}, options: { 
     readDomainRows("training"),
     readDomainRows("promotions"),
     readAttritionModelProfiles(),
+    database.prepare(`SELECT DISTINCT ON (employee_id) employee_id, annual_salary
+      FROM employee_compensation
+      ORDER BY employee_id, effective_from DESC, created_at DESC`).all<{ employee_id: string; annual_salary: number }>(),
+    database.prepare(`SELECT currency, recruiting_cost_per_hire, vacancy_productivity_percent, onboarding_days,
+      onboarding_productivity_percent, course_fee_per_learner, course_hours_per_learner,
+      fallback_refill_days, critical_review_share, watch_review_share
+      FROM workspace_analytics_settings WHERE organization_id='org:laidbackhr'`).first<{
+        currency: "USD"; recruiting_cost_per_hire: number; vacancy_productivity_percent: number;
+        onboarding_days: number; onboarding_productivity_percent: number; course_fee_per_learner: number;
+        course_hours_per_learner: number; fallback_refill_days: number; critical_review_share: number;
+        watch_review_share: number
+      }>(),
   ])
+  if (!analyticsSettings) throw new Error("WORKSPACE_ANALYTICS_SETTINGS_MISSING")
+  const annualPayByEmployee = new Map((compensationResult.results ?? []).map((row) => [row.employee_id, Number(row.annual_salary)]))
 
   const allEmployees = employeeRows as unknown as EmployeeRecord[]
   const allHiring = hiringRows as unknown as HiringRecord[]
@@ -156,7 +172,7 @@ export async function getWorkforceAnalytics(filters: HrFilters = {}, options: { 
   const currentlyAway = approvedLeave.filter((record) => record.start_date <= today && record.end_date >= today)
   const upcomingLeave = leave.filter((record) => ["approved", "pending"].includes(record.approval_status.toLowerCase()) && record.start_date >= today).sort((left, right) => left.start_date.localeCompare(right.start_date))
   const completedTraining = training.filter((record) => record.completion_status.toLowerCase() === "completed")
-  const activeEmployees = employees.filter((employee) => employee.employment_status.toLowerCase() !== "terminated")
+  const activeEmployees = employees.filter((employee) => ["active", "on leave"].includes(employee.employment_status.toLowerCase()))
   const attritionRate = percent(attrition.length, activeEmployees.length + attrition.length)
   const promotedIds = new Set(allPromotions.filter(isIncluded).map((promotion) => promotion.employee_id))
   const withoutPromotion = activeEmployees.filter((employee) => employee.tenure_years >= 3 && !promotedIds.has(employee.employee_id)).length
@@ -284,7 +300,7 @@ export async function getWorkforceAnalytics(filters: HrFilters = {}, options: { 
     ...training.map((record) => record.department),
     ...promotions.map((record) => record.department),
   ])
-  const mandatoryTraining = (record: TrainingRecord) => /security|safety/i.test(record.training_program)
+  const mandatoryTraining = (record: TrainingRecord) => Boolean(Number(record.is_mandatory))
   const departmentDecisionMetrics: WorkforceAnalytics["decisionSupport"]["departments"] = decisionDepartments.map((department) => {
     const activeCount = activeByDepartment.get(department) ?? 0
     const departmentHires = hired.filter((record) => record.department === department).length
@@ -359,14 +375,20 @@ export async function getWorkforceAnalytics(filters: HrFilters = {}, options: { 
     openRequisitions,
     training,
     modelEmployees: joinedModelRecords,
+    annualPayByEmployee,
     assumptions: {
-      currency: "USD",
-      recruitingCostPerHire: normalizedFilters.recruitingCostPerHire ?? 7_500,
-      vacancyProductivityPercent: normalizedFilters.vacancyProductivityPercent ?? 50,
-      onboardingDays: normalizedFilters.onboardingDays ?? 90,
-      onboardingProductivityPercent: normalizedFilters.onboardingProductivityPercent ?? 25,
-      courseFeePerLearner: normalizedFilters.courseFeePerLearner ?? 500,
-      courseHoursPerLearner: normalizedFilters.courseHoursPerLearner ?? 8,
+      currency: analyticsSettings.currency,
+      recruitingCostPerHire: normalizedFilters.recruitingCostPerHire ?? Number(analyticsSettings.recruiting_cost_per_hire),
+      vacancyProductivityPercent: normalizedFilters.vacancyProductivityPercent ?? Number(analyticsSettings.vacancy_productivity_percent),
+      onboardingDays: normalizedFilters.onboardingDays ?? Number(analyticsSettings.onboarding_days),
+      onboardingProductivityPercent: normalizedFilters.onboardingProductivityPercent ?? Number(analyticsSettings.onboarding_productivity_percent),
+      courseFeePerLearner: normalizedFilters.courseFeePerLearner ?? Number(analyticsSettings.course_fee_per_learner),
+      courseHoursPerLearner: normalizedFilters.courseHoursPerLearner ?? Number(analyticsSettings.course_hours_per_learner),
+    },
+    policy: {
+      fallbackRefillDays: Number(analyticsSettings.fallback_refill_days),
+      criticalReviewShare: Number(analyticsSettings.critical_review_share),
+      watchReviewShare: Number(analyticsSettings.watch_review_share),
     },
   })
 
@@ -402,7 +424,7 @@ export async function getWorkforceAnalytics(filters: HrFilters = {}, options: { 
       category: "mandatory_learning",
       severity: "high",
       title: "Mandatory learning incomplete",
-      evidence: `${row.mandatoryTrainingGaps} incomplete security or safety assignments`,
+      evidence: `${row.mandatoryTrainingGaps} incomplete mandatory learning assignments`,
       recommendedAction: "Confirm assignment ownership, access, and a completion date for each outstanding requirement.",
       target: "courses",
       rank: 200 + row.mandatoryTrainingGaps,
@@ -433,15 +455,12 @@ export async function getWorkforceAnalytics(filters: HrFilters = {}, options: { 
       rank: 500 + role.reviewWeightedExposure / 10_000,
     })
   }
-  const database = await ensureHrDatabase()
-  const insightWorkflowRows = database
-    ? await database.prepare(`
+  const insightWorkflowRows = await database.prepare(`
         SELECT id, source_entity_id, status, owner_email, due_at, created_at, completed_at
         FROM workflow_requests
         WHERE type='insight'
         ORDER BY created_at DESC, id DESC
       `).all<Record<string, string | null>>()
-    : { results: [] }
   const latestInsightWorkflow = new Map<string, Record<string, string | null>>()
   for (const workflow of insightWorkflowRows.results ?? []) {
     const sourceId = workflow.source_entity_id
@@ -581,6 +600,7 @@ export async function getWorkforceAnalytics(filters: HrFilters = {}, options: { 
       rows: outputRows(leave, 250),
     },
     training: {
+      totalAssignments: training.length,
       completionRate: percent(completedTraining.length, training.length),
       totalHours: Number(training.reduce((sum, record) => sum + record.training_hours, 0).toFixed(1)),
       averageScore: average(completedTraining.map((record) => record.assessment_score)),

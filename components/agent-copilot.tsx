@@ -30,7 +30,7 @@ const toolLabels: Record<string, string> = {
   find_employee_records: "Employee directory",
 }
 
-const suggestedPrompts = [
+const defaultSuggestedPrompts = [
   "Summarize the current workforce and open HR work",
   "Build a retention review plan for the top 5 attrition-risk records",
   "Where are exits concentrated by manager?",
@@ -45,7 +45,7 @@ function welcomeMessage(dataMode: string): ChatMessage {
   }
 }
 
-export function AgentCopilot({ dataMode }: { dataMode: string }) {
+export function AgentCopilot({ dataMode, pageContext, compact = false }: { dataMode: string; pageContext?: string; compact?: boolean }) {
   const [messages, setMessages] = useState<ChatMessage[]>([welcomeMessage(dataMode)])
   const [conversations, setConversations] = useState<ConversationSummary[]>([])
   const [conversationId, setConversationId] = useState("")
@@ -146,7 +146,7 @@ export function AgentCopilot({ dataMode }: { dataMode: string }) {
       const response = await fetch("/api/v1/chat", {
         method: "POST",
         headers: { "content-type": "application/json", accept: "text/event-stream" },
-        body: JSON.stringify({ message: trimmed, conversationId: activeConversationId || undefined, stream: true }),
+        body: JSON.stringify({ message: trimmed, conversationId: activeConversationId || undefined, stream: true, pageContext }),
       })
       if (!response.ok || !response.body) {
         const body = await response.json().catch(() => ({})) as { detail?: string }
@@ -184,7 +184,7 @@ export function AgentCopilot({ dataMode }: { dataMode: string }) {
             conversationIdRef.current = payload.conversationId
             setConversationId(payload.conversationId)
           }
-          if (eventName === "status" && payload.message) setStreamStatus(payload.message)
+          if (eventName === "progress" && payload.message) setStreamStatus(payload.message)
           if (eventName === "delta" && payload.text) {
             setMessages((current) => current.map((message) => message.id === streamMessageId
               ? { ...message, content: message.content + payload.text }
@@ -265,8 +265,11 @@ export function AgentCopilot({ dataMode }: { dataMode: string }) {
       </div>
 
       <div className="border-t border-border bg-card px-4 py-4">
-        <div className="mb-3 grid gap-1 sm:grid-cols-2">
-          {suggestedPrompts.map((prompt) => (
+        <div className={cn("mb-3 grid gap-1", !compact && "sm:grid-cols-2")}>
+          {(pageContext ? [
+            `Summarize the decisions and exceptions on ${pageContext}`,
+            `What should HR review next on ${pageContext}?`,
+          ] : defaultSuggestedPrompts).map((prompt) => (
             <button key={prompt} type="button" onClick={() => void send(prompt)} className="border-l-2 border-border px-2 py-1 text-left text-xs text-muted-foreground hover:border-primary hover:text-foreground">
               {prompt}
             </button>
@@ -283,7 +286,7 @@ export function AgentCopilot({ dataMode }: { dataMode: string }) {
                 void send(input)
               }
             }}
-            placeholder="Ask a workforce analytics question"
+            placeholder={pageContext ? `Ask about ${pageContext}` : "Ask a workforce analytics question"}
             className="max-h-32 min-h-9 flex-1 resize-none bg-transparent py-2 text-sm outline-none placeholder:text-muted-foreground"
           />
           <Button type="submit" size="icon" disabled={!input.trim() || thinking || loadingHistory} aria-label="Send question"><ArrowUp className="size-4" /></Button>

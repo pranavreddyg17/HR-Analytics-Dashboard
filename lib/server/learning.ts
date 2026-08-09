@@ -1,13 +1,15 @@
 import { z } from "zod"
 
 import type { LearningAssignment, LearningCourse, LearningOperations, LearningPerson } from "@/lib/learning-types"
-import { ensureHrDatabase, type Database } from "@/lib/server/hr-database"
+import { ensureHrDatabase, type Database } from "@/lib/server/hr-repository"
 import { PeopleError } from "@/lib/server/people"
 import type { RequestActor } from "@/lib/server/request-user"
 
 const isoDate = z.string().regex(/^\d{4}-\d{2}-\d{2}$/)
 const assignmentSchema = z.object({
-  employeeId: z.string().trim().min(2).max(40),
+  employeeId: z.string().trim().min(2).max(80).optional(),
+  targetType: z.enum(["employee", "department", "job_title", "job_level", "manager_team"]).default("employee"),
+  targetValue: z.string().trim().max(160).optional(),
   courseId: z.string().trim().min(3).max(240),
   dueDate: isoDate,
   hours: z.number().positive().max(500).optional(),
@@ -88,16 +90,16 @@ export async function listLearningOperations(actor: RequestActor, filters: { dep
     JOIN employee_directory_view e ON e.employee_id=a.employee_id
     LEFT JOIN workflow_requests w ON w.id=a.id AND w.type='training'
     WHERE ${where.join(" AND ")}
-    ORDER BY CASE WHEN LOWER(a.status) <> 'completed' AND a.due_date < date('now') THEN 0 WHEN LOWER(a.status) <> 'completed' THEN 1 ELSE 2 END,
+    ORDER BY CASE WHEN LOWER(a.status) <> 'completed' AND a.due_date < CURRENT_DATE::text THEN 0 WHEN LOWER(a.status) <> 'completed' THEN 1 ELSE 2 END,
       COALESCE(a.due_date, '9999-12-31'), COALESCE(a.completed_at, a.assigned_at) DESC
     LIMIT 5000`).bind(...bindings).all<AssignmentRow>()
 
   const [courseResult, peopleResult] = await Promise.all([
     db.prepare("SELECT id, code, title, default_duration_hours, is_mandatory FROM learning_courses WHERE LOWER(status)='active' ORDER BY is_mandatory DESC, title")
       .all<{ id: string; code: string | null; title: string; default_duration_hours: number; is_mandatory: number }>(),
-    db.prepare(`SELECT e.employee_id, TRIM(COALESCE(NULLIF(e.preferred_name, ''), e.first_name) || ' ' || e.last_name) AS display_name, e.department, e.job_title, e.location
+    db.prepare(`SELECT e.employee_id, TRIM(COALESCE(NULLIF(e.preferred_name, ''), e.first_name) || ' ' || e.last_name) AS display_name, e.department, e.job_title, e.job_level, e.location
       FROM employee_directory_view e WHERE e.archived_at IS NULL AND LOWER(e.employment_status) IN ('active','preboarding','on leave') AND ${scopeSql}
-      ORDER BY display_name LIMIT 5000`).bind(...(actor.role === "manager" && employeeId ? [employeeId, employeeId] : !["admin", "hr"].includes(actor.role) && employeeId ? [employeeId] : [])).all<{ employee_id: string; display_name: string; department: string; job_title: string; location: string }>(),
+      ORDER BY display_name LIMIT 5000`).bind(...(actor.role === "manager" && employeeId ? [employeeId, employeeId] : !["admin", "hr"].includes(actor.role) && employeeId ? [employeeId] : [])).all<{ employee_id: string; display_name: string; department: string; job_title: string; job_level: string; location: string }>(),
   ])
   const today = new Date().toISOString().slice(0, 10)
   const assignments: LearningAssignment[] = (assignmentResult.results ?? []).map((row) => ({
@@ -120,7 +122,7 @@ export async function listLearningOperations(actor: RequestActor, filters: { dep
     canComplete: ["admin", "hr"].includes(actor.role) || row.employee_email?.toLowerCase() === actor.email.toLowerCase(),
   }))
   const courses: LearningCourse[] = (courseResult.results ?? []).map((row) => ({ id: row.id, code: row.code, title: row.title, defaultHours: Number(row.default_duration_hours), isMandatory: Boolean(row.is_mandatory) }))
-  const people: LearningPerson[] = (peopleResult.results ?? []).map((row) => ({ employeeId: row.employee_id, displayName: row.display_name, department: row.department, jobTitle: row.job_title, location: row.location }))
+  const people: LearningPerson[] = (peopleResult.results ?? []).map((row) => ({ employeeId: row.employee_id, displayName: row.display_name, department: row.department, jobTitle: row.job_title, jobLevel: row.job_level, location: row.location }))
   const completed = assignments.filter((row) => row.status.toLowerCase() === "completed").length
   const overdue = assignments.filter((row) => row.status.toLowerCase() !== "completed" && Boolean(row.dueDate && row.dueDate < today)).length
   const mandatoryGaps = assignments.filter((row) => row.isMandatory && row.status.toLowerCase() !== "completed").length
@@ -137,7 +139,12 @@ export async function listLearningOperations(actor: RequestActor, filters: { dep
   return {
     generatedAt: new Date().toISOString(),
     summary: { assignments: assignments.length, completed, completionRate: assignments.length ? Number((completed / assignments.length * 100).toFixed(1)) : 0, overdue, mandatoryGaps },
-    dimensions: { departments: [...new Set(people.map((row) => row.department))].sort(), locations: [...new Set(people.map((row) => row.location))].sort() },
+    dimensions: {
+      departments: [...new Set(people.map((row) => row.department))].sort(),
+      locations: [...new Set(people.map((row) => row.location))].sort(),
+      jobTitles: [...new Set(people.map((row) => row.jobTitle))].sort(),
+      jobLevels: [...new Set(people.map((row) => row.jobLevel))].sort(),
+    },
     courses, people, assignments, departmentCoverage,
   }
 }
@@ -147,46 +154,68 @@ export async function createLearningCourse(value: unknown, actor: RequestActor):
   const input = courseSchema.parse(value)
   const db = await database()
   const id = courseId(input.title)
-  const duplicate = await db.prepare("SELECT id FROM learning_courses WHERE LOWER(title)=LOWER(?) OR (? IS NOT NULL AND LOWER(code)=LOWER(?))")
-    .bind(input.title, input.code ?? null, input.code ?? null).first<{ id: string }>()
+  const duplicate = await db.prepare(`SELECT id FROM learning_courses
+    WHERE LOWER(title)=LOWER(?) OR LOWER(COALESCE(code, ''))=LOWER(?)`)
+    .bind(input.title, input.code ?? "").first<{ id: string }>()
   if (duplicate) throw new PeopleError("A course with that title or code already exists.", 409)
   await db.prepare("INSERT INTO learning_courses(id, code, title, default_duration_hours, is_mandatory, status, created_at, updated_at) VALUES (?, ?, ?, ?, ?, 'active', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)")
     .bind(id, input.code ?? null, input.title, input.defaultHours, input.isMandatory ? 1 : 0).run()
   return { id, message: `${input.title} was added to the course catalog.` }
 }
 
-export async function assignLearningCourse(value: unknown, actor: RequestActor): Promise<{ id: string; message: string }> {
+export async function assignLearningCourse(value: unknown, actor: RequestActor): Promise<{ id: string; assigned: number; skipped: number; message: string }> {
   assertLearningEditor(actor)
   const input = assignmentSchema.parse(value)
   const db = await database()
-  const [course, employee, managerId] = await Promise.all([
-    db.prepare("SELECT id, title, default_duration_hours, is_mandatory FROM learning_courses WHERE id=? AND LOWER(status)='active'").bind(input.courseId).first<{ id: string; title: string; default_duration_hours: number; is_mandatory: number }>(),
-    db.prepare("SELECT employee_id, work_email, department FROM employee_directory_view WHERE employee_id=? AND archived_at IS NULL AND LOWER(employment_status) IN ('active','preboarding','on leave')").bind(input.employeeId).first<{ employee_id: string; work_email: string | null; department: string }>(),
-    actor.role === "manager" ? actorEmployeeId(db, actor) : Promise.resolve(null),
-  ])
+  const managerId = actor.role === "manager" ? await actorEmployeeId(db, actor) : null
+  const course = await db.prepare("SELECT id, title, default_duration_hours, is_mandatory FROM learning_courses WHERE id=? AND LOWER(status)='active'").bind(input.courseId).first<{ id: string; title: string; default_duration_hours: number; is_mandatory: number }>()
   if (!course) throw new PeopleError("Choose an active course from the catalog.", 404)
-  if (!employee) throw new PeopleError("Choose an active employee record.", 404)
-  if (actor.role === "manager") {
-    const report = await db.prepare("SELECT employee_id FROM employee_directory_view WHERE employee_id=? AND manager_id=? AND archived_at IS NULL").bind(input.employeeId, managerId ?? "").first<{ employee_id: string }>()
-    if (!report) throw new PeopleError("Managers can only assign courses to their direct reports.", 403)
-  }
-  const existing = await db.prepare("SELECT id FROM course_assignments WHERE employee_id=? AND course_id=? AND LOWER(status) <> 'completed'")
-    .bind(input.employeeId, input.courseId).first<{ id: string }>()
-  if (existing) throw new PeopleError("This employee already has an incomplete assignment for that course.", 409)
-  const id = `TRN-${crypto.randomUUID().slice(0, 12).toUpperCase()}`
+  if (actor.role === "manager" && !["employee", "manager_team"].includes(input.targetType)) throw new PeopleError("Managers can assign a direct report or their team.", 403)
+
+  const targetValue = input.targetType === "employee" ? input.employeeId : input.targetValue
+  if (input.targetType !== "manager_team" && !targetValue) throw new PeopleError("Choose who should receive the assignment.", 422)
+  const conditions = ["e.archived_at IS NULL", "LOWER(e.employment_status) IN ('active','preboarding','on leave')"]
+  const bindings: unknown[] = []
+  if (actor.role === "manager") { conditions.push("e.manager_id=?"); bindings.push(managerId ?? "") }
+  if (input.targetType === "employee") { conditions.push("e.employee_id=?"); bindings.push(targetValue) }
+  if (input.targetType === "department") { conditions.push("e.department=?"); bindings.push(targetValue) }
+  if (input.targetType === "job_title") { conditions.push("e.job_title=?"); bindings.push(targetValue) }
+  if (input.targetType === "job_level") { conditions.push("e.job_level=?"); bindings.push(targetValue) }
+  if (input.targetType === "manager_team" && actor.role !== "manager") { conditions.push("e.manager_id=?"); bindings.push(targetValue) }
+  const recipientsResult = await db.prepare(`SELECT e.employee_id, e.work_email, e.department FROM employee_directory_view e WHERE ${conditions.join(" AND ")} ORDER BY e.employee_id LIMIT 500`)
+    .bind(...bindings).all<{ employee_id: string; work_email: string | null; department: string }>()
+  const recipients = recipientsResult.results ?? []
+  if (!recipients.length) throw new PeopleError("No eligible employees match this assignment target.", 404)
+
+  const recipientIds = recipients.map((employee) => employee.employee_id)
+  const existingResult = await db.prepare(`SELECT employee_id FROM course_assignments WHERE course_id=? AND LOWER(status) <> 'completed' AND employee_id IN (${recipientIds.map(() => "?").join(",")})`)
+    .bind(input.courseId, ...recipientIds).all<{ employee_id: string }>()
+  const existingIds = new Set((existingResult.results ?? []).map((row) => row.employee_id))
+  const eligible = recipients.filter((employee) => !existingIds.has(employee.employee_id))
+  if (!eligible.length) throw new PeopleError("Every matching employee already has an incomplete assignment for this course.", 409)
+
+  const campaignId = `LC-${crypto.randomUUID().slice(0, 12).toUpperCase()}`
   const hours = input.hours ?? Number(course.default_duration_hours)
-  const ownerEmail = employee.work_email?.trim().toLowerCase() || actor.email
   const today = new Date().toISOString().slice(0, 10)
-  const details = JSON.stringify({ courseId: course.id, program: course.title, dueDate: input.dueDate, hours, note: input.note, isMandatory: Boolean(course.is_mandatory) })
-  await db.batch([
-    db.prepare("INSERT INTO training_records(id, training_program, employee_id, completion_status, completion_date, training_hours, assessment_score, department, data_source, updated_at) VALUES (?, ?, ?, 'Incomplete', NULL, ?, NULL, ?, 'workflow', CURRENT_TIMESTAMP)")
-      .bind(id, course.title, employee.employee_id, hours, employee.department),
-    db.prepare("INSERT INTO workflow_requests(id, type, employee_id, title, status, details_json, requested_by_email, priority, owner_email, due_at, next_action, source_entity_type, source_entity_id, assigned_at, confidentiality_level) VALUES (?, 'training', ?, ?, 'Assigned', ?, ?, ?, ?, ?, 'Complete the assigned course and record completion.', 'training_record', ?, CURRENT_TIMESTAMP, 'internal')")
-      .bind(id, employee.employee_id, `${course.title} assignment`, details, actor.email, input.dueDate <= today ? "high" : "medium", ownerEmail, input.dueDate, id),
-    db.prepare("INSERT INTO employee_activity(id, employee_id, event_type, summary, changes_json, actor_email, created_at) VALUES (?, ?, 'training_assigned', ?, ?, ?, CURRENT_TIMESTAMP)")
-      .bind(crypto.randomUUID(), employee.employee_id, `${actor.displayName} assigned ${course.title}`, details, actor.email),
-  ])
-  return { id, message: `${course.title} was assigned.` }
+  await db.prepare(`INSERT INTO learning_assignment_campaigns(id, organization_id, course_id, name, target_type, target_value, target_snapshot_json, due_date, assigned_hours, instructions, created_by_email)
+    VALUES (?, 'org:laidbackhr', ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
+    .bind(campaignId, course.id, `${course.title} · ${input.targetType.replaceAll("_", " ")}`, input.targetType, targetValue ?? null, JSON.stringify(recipientIds), input.dueDate, hours, input.note, actor.email).run()
+
+  const statements = eligible.flatMap((employee) => {
+    const id = `TRN-${crypto.randomUUID().slice(0, 12).toUpperCase()}`
+    const ownerEmail = employee.work_email?.trim().toLowerCase() || actor.email
+    const details = JSON.stringify({ campaignId, courseId: course.id, program: course.title, dueDate: input.dueDate, hours, note: input.note, isMandatory: Boolean(course.is_mandatory) })
+    return [
+      db.prepare("INSERT INTO course_assignments(id, course_id, employee_id, due_date, status, assigned_hours, data_source, campaign_id, updated_at) VALUES (?, ?, ?, ?, 'Incomplete', ?, 'workflow', ?, CURRENT_TIMESTAMP)")
+        .bind(id, course.id, employee.employee_id, input.dueDate, hours, campaignId),
+      db.prepare("INSERT INTO workflow_requests(id, type, employee_id, title, status, details_json, requested_by_email, priority, owner_email, due_at, next_action, source_entity_type, source_entity_id, assigned_at, confidentiality_level) VALUES (?, 'training', ?, ?, 'Assigned', ?, ?, ?, ?, ?, 'Complete the assigned course and record completion.', 'training_record', ?, CURRENT_TIMESTAMP, 'internal')")
+        .bind(id, employee.employee_id, `${course.title} assignment`, details, actor.email, input.dueDate <= today ? "high" : "medium", ownerEmail, input.dueDate, id),
+      db.prepare("INSERT INTO employee_activity(id, employee_id, event_type, summary, changes_json, actor_email, created_at) VALUES (?, ?, 'training_assigned', ?, ?, ?, CURRENT_TIMESTAMP)")
+        .bind(crypto.randomUUID(), employee.employee_id, `${actor.displayName} assigned ${course.title}`, details, actor.email),
+    ]
+  })
+  for (let index = 0; index < statements.length; index += 120) await db.batch(statements.slice(index, index + 120))
+  return { id: campaignId, assigned: eligible.length, skipped: existingIds.size, message: `${course.title} was assigned to ${eligible.length} employee${eligible.length === 1 ? "" : "s"}${existingIds.size ? `; ${existingIds.size} existing assignment${existingIds.size === 1 ? " was" : "s were"} skipped` : ""}.` }
 }
 
 export async function completeLearningAssignment(assignmentId: string, value: unknown, actor: RequestActor): Promise<{ id: string; message: string }> {
@@ -202,6 +231,8 @@ export async function completeLearningAssignment(assignmentId: string, value: un
   const completionNote = input.note || `${actor.displayName} recorded the course completion.`
   await db.batch([
     db.prepare("UPDATE training_records SET completion_status='Completed', completion_date=?, assessment_score=?, updated_at=CURRENT_TIMESTAMP WHERE id=?")
+      .bind(completedAt, input.assessmentScore ?? null, assignmentId),
+    db.prepare("UPDATE course_assignments SET status='Completed', completed_at=?, assessment_score=?, updated_at=CURRENT_TIMESTAMP WHERE id=?")
       .bind(completedAt, input.assessmentScore ?? null, assignmentId),
     db.prepare("UPDATE workflow_requests SET status='Completed', next_action='No further action.', due_at=NULL, resolved_by_email=?, resolved_at=CURRENT_TIMESTAMP, completed_at=CURRENT_TIMESTAMP, completion_notes=?, updated_at=CURRENT_TIMESTAMP WHERE id=? AND type='training'")
       .bind(actor.email, completionNote, assignmentId),

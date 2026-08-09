@@ -1,5 +1,4 @@
 import { loadMcpTools } from "@langchain/mcp-adapters"
-import { ChatOpenAI } from "@langchain/openai"
 import { Client } from "@modelcontextprotocol/sdk/client/index.js"
 import { InMemoryTransport } from "@modelcontextprotocol/sdk/inMemory.js"
 
@@ -8,7 +7,7 @@ import { resolveHrIntent, type AgentHistoryMessage, type ToolPlan } from "@/lib/
 import { renderHrEvidence } from "@/lib/server/hr-agent-response"
 import { getWorkforceAnalytics } from "@/lib/server/hr-analytics"
 import { createHrMcpServer } from "@/lib/server/hr-mcp"
-import { ensureHrDatabase } from "@/lib/server/hr-database"
+import { ensureHrDatabase } from "@/lib/server/hr-repository"
 import { runtimeEnv } from "@/lib/server/runtime-env"
 import { synthesizeWithAzureResponses } from "@/lib/server/azure-ai"
 
@@ -70,19 +69,6 @@ function contentToJson(value: unknown): Record<string, unknown> {
   return {}
 }
 
-function getWorkerSecret(name: "OPENAI_API_KEY" | "OPENAI_MODEL"): string | undefined {
-  const value = runtimeEnv[name]
-  return typeof value === "string" && value ? value : undefined
-}
-
-function messageText(message: unknown): string {
-  if (!message || typeof message !== "object") return ""
-  const content = (message as { content?: unknown }).content
-  if (typeof content === "string") return content
-  if (Array.isArray(content)) return content.map((item) => item && typeof item === "object" && "text" in item ? String((item as { text: unknown }).text) : "").join("\n")
-  return ""
-}
-
 function numericTokens(value: string): Set<string> {
   return new Set((value.match(/\b\d[\d,]*(?:\.\d+)?%?/g) ?? []).map((token) => token.replace(/[,%]/g, "")))
 }
@@ -104,7 +90,7 @@ function evidenceContext(data: Record<string, unknown>): ToolTrace["resultContex
 }
 
 function followUpEvidencePlans(evidence: EvidenceResult[], iteration: number): ToolPlan[] {
-  if (iteration > 2) return []
+  if (iteration !== 1) return []
   const retention = evidence.find((item) => item.plan.purpose === "attrition_record_retention_plan")
   if (!retention) return []
   const employeeIds = Array.isArray(retention.data.joinedEmployeeRecords)
@@ -115,12 +101,20 @@ function followUpEvidencePlans(evidence: EvidenceResult[], iteration: number): T
     }).slice(0, retention.plan.limit)
     : []
   if (!employeeIds.length) return []
-  return [{
-    name: "review_people_operations",
-    input: { domain: iteration === 1 ? "promotions" : "training", employeeIds },
-    purpose: iteration === 1 ? "retention_mobility_context" : "retention_learning_context",
-    limit: employeeIds.length,
-  }]
+  return [
+    {
+      name: "review_people_operations",
+      input: { domain: "promotions", employeeIds },
+      purpose: "retention_mobility_context",
+      limit: employeeIds.length,
+    },
+    {
+      name: "review_people_operations",
+      input: { domain: "training", employeeIds },
+      purpose: "retention_learning_context",
+      limit: employeeIds.length,
+    },
+  ]
 }
 
 async function loadInProcessMcpTools() {
@@ -157,27 +151,7 @@ async function synthesizeWithModel({
     const introducedNumber = [...numericTokens(azureAnswer)].some((token) => !allowedNumbers.has(token))
     if (azureAnswer.length <= 6_000 && azureAnswer.split("\n", 1)[0] === draftSource && !introducedNumber) return azureAnswer
   }
-  const apiKey = getWorkerSecret("OPENAI_API_KEY")
-  if (!apiKey) return null
-  try {
-    const model = new ChatOpenAI({ apiKey, model: getWorkerSecret("OPENAI_MODEL") ?? "gpt-4.1-mini", temperature: 0 })
-    const response = await model.invoke([
-      {
-        role: "system",
-        content: synthesisInstruction,
-      },
-      { role: "user", content: userContent },
-    ])
-    const answer = messageText(response).trim()
-    const draftSource = draft.split("\n", 1)[0]
-    const answerSource = answer.split("\n", 1)[0]
-    const allowedNumbers = numericTokens(draft)
-    const introducedNumber = [...numericTokens(answer)].some((token) => !allowedNumbers.has(token))
-    if (!answer || answer.length > 6_000 || answerSource !== draftSource || introducedNumber) return null
-    return answer
-  } catch {
-    return null
-  }
+  return null
 }
 
 async function startRun(input: { actorEmail?: string; conversationId?: string; agentId?: string; objective: string }): Promise<string | null> {
@@ -212,7 +186,7 @@ async function finishRun(runId: string | null, status: "completed" | "failed", p
   } catch { /* Best-effort operational audit. */ }
 }
 
-export async function runHrAgent({ message, history = [], actorEmail, conversationId, agentId, onProgress }: { message: unknown; history?: AgentHistoryMessage[]; actorEmail?: string; conversationId?: string; agentId?: string; onProgress?: (progress: AgentProgress) => void | Promise<void> }): Promise<AgentAnswer> {
+export async function runHrAgent({ message, history = [], actorEmail, conversationId, agentId, pageContext, onProgress }: { message: unknown; history?: AgentHistoryMessage[]; actorEmail?: string; conversationId?: string; agentId?: string; pageContext?: string; onProgress?: (progress: AgentProgress) => void | Promise<void> }): Promise<AgentAnswer> {
   if (typeof message !== "string" || !message.trim() || message.length > 2000) throw new Error("message must contain between 1 and 2,000 characters.")
   const query = message.trim()
   if (/^(?:hi|hello|hey|good (?:morning|afternoon|evening))[!.?\s]*$/i.test(query)) {
@@ -234,9 +208,13 @@ export async function runHrAgent({ message, history = [], actorEmail, conversati
   // Intent routing must reflect the user's objective, not the agent's role
   // description. Mixing the two can select an unrelated MCP schema (for
   // example, a generic workforce objective being treated as a comparison).
-  const intent = resolveHrIntent(query, safeHistory, dimensions)
-  const { prompt: basePrompt, context } = await buildHrSystemPrompt(intent.contextQuery)
-  const prompt = focus ? `${basePrompt}\n\nSpecialized agent scope: ${focus}.` : basePrompt
+  const contextualQuery = pageContext && !/employee|people|workforce|headcount|department|manager|hire|recruit|attrition|turnover|exit|retention|risk|leave|absence|training|learning|course|promotion|career|mobility|data|summary|replacement|coverage/i.test(query)
+    ? `${pageContext}: ${query}`
+    : query
+  const intent = resolveHrIntent(contextualQuery, safeHistory, dimensions)
+  const { prompt: basePrompt, context } = await buildHrSystemPrompt(`${pageContext ? `${pageContext}. ` : ""}${intent.contextQuery}`)
+  const promptParts = [basePrompt, focus ? `Specialized agent scope: ${focus}.` : "", pageContext ? `Current workspace page: ${pageContext}. Use this only to interpret ambiguous references; factual claims still require MCP evidence.` : ""].filter(Boolean)
+  const prompt = promptParts.join("\n\n")
   const citedContext = context.map(({ source, section }) => ({ source, section }))
 
   if (!intent.inScope || !intent.plans.length) {
@@ -250,7 +228,7 @@ export async function runHrAgent({ message, history = [], actorEmail, conversati
     const evidence: EvidenceResult[] = []
     let stepNumber = 0
     let pendingPlans = intent.plans
-    for (let iteration = 1; iteration <= 3 && pendingPlans.length; iteration += 1) {
+    for (let iteration = 1; iteration <= 2 && pendingPlans.length; iteration += 1) {
       for (const plan of pendingPlans) {
         const tool = mcp.tools.find((candidate) => candidate.name === plan.name)
         if (!tool) continue
@@ -280,7 +258,7 @@ export async function runHrAgent({ message, history = [], actorEmail, conversati
     const synthesized = await synthesizeWithModel({ query, draft, systemPrompt: prompt })
     const answer = synthesized ?? draft
     const dataMode = evidence.map((item) => item.data.dataMode).find((value): value is string => typeof value === "string")
-    const provider = synthesized ? (runtimeEnv.AZURE_OPENAI_MODEL ? "azure-openai-langchain-mcp" : "langchain-openai-mcp-grounded-synthesis") : "langchain-mcp-deterministic-orchestrator"
+    const provider = synthesized ? "azure-openai-langchain-mcp" : "langchain-mcp-deterministic-orchestrator"
     await finishRun(runId, "completed", provider)
     return {
       answer,

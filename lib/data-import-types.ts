@@ -25,7 +25,7 @@ export type ImportPreview = {
   issues: ImportIssue[]
 }
 
-export type ImportJobStatus = "processing" | "completed" | "failed"
+type ImportJobStatus = "processing" | "completed" | "failed"
 
 export type ImportJob = {
   id: string

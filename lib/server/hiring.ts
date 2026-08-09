@@ -1,7 +1,7 @@
 import { z } from "zod"
 
 import { hiringCandidateStages, type HiringActivity, type HiringCandidate, type HiringCandidateStage, type HiringOperations, type HiringRequisition } from "@/lib/hiring-types"
-import { ensureHrDatabase, type Database } from "@/lib/server/hr-database"
+import { ensureHrDatabase, inferJobLevel, type Database } from "@/lib/server/hr-repository"
 import { PeopleError } from "@/lib/server/people"
 import type { RequestActor } from "@/lib/server/request-user"
 
@@ -378,6 +378,8 @@ export async function updateHiringCandidate(candidateId: string, value: unknown,
     const lastName = nameParts.pop() as string
     const firstName = nameParts.join(" ")
     const employeeId = `EMP-${crypto.randomUUID().slice(0, 8).toUpperCase()}`
+    const jobProfileId = `JOB-${crypto.randomUUID().slice(0, 12).toUpperCase()}`
+    const jobLevel = inferJobLevel(candidate.position)
     const employmentType = jsonValue(candidate.details_json ?? null, "employmentType", "Full-time")
     const employeeChanges = JSON.stringify({
       source: "hiring",
@@ -389,9 +391,18 @@ export async function updateHiringCandidate(candidateId: string, value: unknown,
     const completionNote = `${actor.displayName} recorded ${candidate.full_name} as hired and created preboarding profile ${employeeId}.`
     await db.batch([
       candidateUpdate,
-      db.prepare("UPDATE hiring_records SET recruitment_status='Hired', hiring_date=?, time_to_hire_days=CAST(julianday(?) - julianday(application_date) AS INTEGER), updated_at=CURRENT_TIMESTAMP WHERE id=?").bind(today, today, candidate.requisition_id),
-      db.prepare("INSERT INTO employees(employee_id, first_name, last_name, preferred_name, work_email, phone, department, job_title, location, manager, manager_id, hire_date, employment_type, employment_status, tenure_years, data_source, archived_at, version, created_at, updated_at) VALUES (?, ?, ?, NULL, ?, NULL, ?, ?, ?, 'Not assigned', NULL, ?, ?, 'Preboarding', 0, 'workflow', NULL, 1, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)")
-        .bind(employeeId, firstName, lastName, candidate.email, candidate.department, candidate.position, candidate.location, input.startDate, employmentType),
+      db.prepare("UPDATE hiring_records SET recruitment_status='Hired', hiring_date=?, updated_at=CURRENT_TIMESTAMP WHERE id=?").bind(today, candidate.requisition_id),
+      db.prepare(`INSERT INTO job_profiles(id, organization_id, department_name, title, job_level)
+        VALUES (?, 'org:laidbackhr', ?, ?, ?)
+        ON CONFLICT(organization_id, department_name, title, job_level) DO NOTHING`)
+        .bind(jobProfileId, candidate.department, candidate.position, jobLevel),
+      db.prepare(`INSERT INTO employees(employee_id, first_name, last_name, preferred_name, work_email, phone,
+        location, manager_id, hire_date, employment_type, employment_status, data_source, organization_id, job_profile_id,
+        archived_at, version, created_at, updated_at)
+        VALUES (?, ?, ?, NULL, ?, NULL, ?, NULL, ?, ?, 'Preboarding', 'workflow', 'org:laidbackhr',
+          (SELECT id FROM job_profiles WHERE organization_id='org:laidbackhr' AND department_name=? AND title=? AND job_level=? LIMIT 1),
+          NULL, 1, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)`)
+        .bind(employeeId, firstName, lastName, candidate.email, candidate.location, input.startDate, employmentType, candidate.department, candidate.position, jobLevel),
       db.prepare("INSERT INTO employee_activity(id, employee_id, event_type, summary, changes_json, actor_email, created_at) VALUES (?, ?, 'preboarding_created', ?, ?, ?, CURRENT_TIMESTAMP)")
         .bind(crypto.randomUUID(), employeeId, `${actor.displayName} created this preboarding profile from the hiring pipeline`, employeeChanges, actor.email),
       db.prepare("UPDATE workflow_requests SET status='Hired', next_action='No further action.', due_at=NULL, resolved_by_email=?, resolved_at=CURRENT_TIMESTAMP, completed_at=CURRENT_TIMESTAMP, completion_notes=?, updated_at=CURRENT_TIMESTAMP WHERE id=? AND type='hiring'")
@@ -407,10 +418,11 @@ export async function updateHiringCandidate(candidateId: string, value: unknown,
     const offerCount = await db.prepare("SELECT COUNT(*) AS count FROM candidate_applications_view WHERE requisition_id=? AND stage='Offer'").bind(candidate.requisition_id).first<{ count: number }>()
     const nextStatus = Number(offerCount?.count ?? 0) > 0 ? "Offer" : "Open"
     const workflowNext = nextStatus === "Offer" ? "Record the offer response and proposed start date." : "Review the candidate pipeline and record the next recruiting step."
+    const workflowDue = dateAfterToday(nextStatus === "Offer" ? 5 : 7)
     await db.batch([
       db.prepare("UPDATE hiring_records SET recruitment_status=?, updated_at=CURRENT_TIMESTAMP WHERE id=? AND LOWER(recruitment_status) NOT IN ('requested','closed','rejected','hired')").bind(nextStatus, candidate.requisition_id),
-      db.prepare("UPDATE workflow_requests SET status=?, next_action=?, due_at=date('now', ?), assigned_at=CURRENT_TIMESTAMP, updated_at=CURRENT_TIMESTAMP WHERE id=? AND type='hiring' AND LOWER(status) NOT IN ('requested','closed','rejected','hired')")
-        .bind(nextStatus, workflowNext, nextStatus === "Offer" ? "+5 days" : "+7 days", candidate.requisition_id),
+      db.prepare("UPDATE workflow_requests SET status=?, next_action=?, due_at=?, assigned_at=CURRENT_TIMESTAMP, updated_at=CURRENT_TIMESTAMP WHERE id=? AND type='hiring' AND LOWER(status) NOT IN ('requested','closed','rejected','hired')")
+        .bind(nextStatus, workflowNext, workflowDue, candidate.requisition_id),
       activityInsert,
     ])
   }

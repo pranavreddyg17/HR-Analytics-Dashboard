@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server"
 
 import { hrDomains, type HrDomain } from "@/lib/hr-types"
 import type { ImportAction, ImportMode, ImportPreview } from "@/lib/data-import-types"
-import { importHrData, validateHrImport } from "@/lib/server/hr-database"
+import { importHrData, validateHrImport } from "@/lib/server/hr-repository"
 import { requireRole } from "@/lib/server/request-user"
 
 export const dynamic = "force-dynamic"

@@ -1,5 +1,5 @@
 import type { HrFilters } from "@/lib/hr-types"
-import { ensureHrDatabase } from "@/lib/server/hr-database"
+import { ensureHrDatabase } from "@/lib/server/hr-repository"
 import { getWorkforceAnalytics } from "@/lib/server/hr-analytics"
 import type { RequestActor } from "@/lib/server/request-user"
 
@@ -104,7 +104,7 @@ export async function updateInsightWorkItem(
     await database.prepare(`
       UPDATE workflow_requests
       SET status='In progress', owner_email=?, assigned_at=CURRENT_TIMESTAMP,
-        details_json=json_set(CASE WHEN json_valid(details_json) THEN details_json ELSE '{}' END, '$.workPlan', ?),
+        details_json=(COALESCE(NULLIF(details_json, ''), '{}')::jsonb || jsonb_build_object('workPlan', ?::text))::text,
         updated_at=CURRENT_TIMESTAMP
       WHERE id=? AND type='insight'
     `).bind(actor.email, note.trim(), workItemId).run()

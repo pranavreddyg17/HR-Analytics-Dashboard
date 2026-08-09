@@ -4,7 +4,8 @@ import postgresSchema from "@/db/postgres/0001_runtime.sql?raw"
 import learningAssignmentDatesMigration from "@/db/postgres/0002_learning_assignment_dates.sql?raw"
 import employeeExperienceMigration from "@/db/postgres/0003_employee_experience.sql?raw"
 import correlatedEmployeeExperienceMigration from "@/db/postgres/0004_correlated_employee_experience.sql?raw"
-import type { Database, Statement } from "@/lib/server/hr-database"
+import operatingModelMigration from "@/db/postgres/0005_operating_model.sql?raw"
+import type { Database, Statement } from "@/lib/server/hr-repository"
 import { runtimeEnv } from "@/lib/server/runtime-env"
 
 types.setTypeParser(20, (value) => Number(value))
@@ -45,45 +46,10 @@ function placeholders(sql: string): string {
   return translated
 }
 
-function dateWithModifier(expression: string, modifier: string): string {
-  const interval = modifier.startsWith("'") ? `INTERVAL ${modifier}` : `(${modifier})::interval`
-  return `((${expression})::date + ${interval})::date::text`
-}
-
-/** Translate the small SQLite expression surface retained by existing APIs. */
+/** Translate the repository's driver-neutral placeholders to PostgreSQL positions. */
 export function postgresSql(input: string): string {
-  let sql = placeholders(input.trim().replace(/;\s*$/, ""))
-  if (!sql || /^PRAGMA\b/i.test(sql)) return "SELECT 1"
-
-  const ignoreConflict = /^INSERT\s+OR\s+IGNORE\s+INTO\b/i.test(sql)
-  if (ignoreConflict) sql = sql.replace(/^INSERT\s+OR\s+IGNORE\s+INTO\b/i, "INSERT INTO")
-
-  sql = sql
-    .replace(/\bMIN\(\s*date\(/gi, "LEAST(date(")
-    .replace(
-      /json_set\(details_json,\s*'\$\.startDate',\s*(\$\d+),\s*'\$\.endDate',\s*(\$\d+),\s*'\$\.days',\s*(\$\d+)\)/gi,
-      "jsonb_set(jsonb_set(jsonb_set(details_json::jsonb, '{startDate}', to_jsonb(($1)::text)), '{endDate}', to_jsonb(($2)::text)), '{days}', to_jsonb(($3)::numeric))::text",
-    )
-    .replace(/json_extract\(([^,]+),\s*'\$\.([A-Za-z0-9_]+)'\)/gi, "(($1)::jsonb ->> '$2')")
-    .replace(/json_object\(/gi, "json_build_object(")
-    .replace(/julianday\(([^()]+)\)\s*-\s*julianday\(([^()]+)\)/gi, "(($1)::date - ($2)::date)")
-    .replace(/date\(\s*([A-Za-z_][A-Za-z0-9_.]*)\s*,\s*(CASE[\s\S]*?END)\s*\)/gi,
-      (_match, expression: string, modifier: string) => dateWithModifier(expression, `(${modifier})`))
-    .replace(/date\(\s*'now'\s*,\s*('(?:[+-]?\d+\s+(?:day|days|month|months|year|years))'|\$\d+)\s*\)/gi,
-      (_match, modifier: string) => dateWithModifier("CURRENT_DATE", modifier))
-    .replace(/date\(\s*(\$\d+)\s*,\s*('(?:[+-]?\d+\s+(?:day|days|month|months|year|years))'|\$\d+)\s*\)/gi,
-      (_match, expression: string, modifier: string) => dateWithModifier(expression, modifier))
-    .replace(/date\(\s*([A-Za-z_][A-Za-z0-9_.]*)\s*,\s*('(?:[+-]?\d+\s+(?:day|days|month|months|year|years))'|\$\d+)\s*\)/gi,
-      (_match, expression: string, modifier: string) => dateWithModifier(expression, modifier))
-    .replace(/date\(\s*'now'\s*\)/gi, "CURRENT_DATE::text")
-    .replace(/date\(\s*([A-Za-z_][A-Za-z0-9_.]*)\s*\)/gi, "(($1)::date)::text")
-    .replace(/CAST\(\s*\(\(([^)]+)\)::date - \(([^)]+)\)::date\)\s+AS\s+INTEGER\s*\)/gi, "(($1)::date - ($2)::date)")
-
-  if (/json_build_object\(/i.test(sql)) {
-    sql = sql.replace(/json_build_object\(([^)]*)\)/gi, "json_build_object($1)::text")
-  }
-  if (ignoreConflict) sql += " ON CONFLICT DO NOTHING"
-  return sql
+  const sql = placeholders(input.trim().replace(/;\s*$/, ""))
+  return sql || "SELECT 1"
 }
 
 class PostgresStatement {
@@ -154,6 +120,7 @@ async function initialize(pool: Pool): Promise<void> {
       { id: "0002_learning_assignment_dates", sql: learningAssignmentDatesMigration },
       { id: "0003_employee_experience", sql: employeeExperienceMigration },
       { id: "0004_correlated_employee_experience", sql: correlatedEmployeeExperienceMigration },
+      { id: "0005_operating_model", sql: operatingModelMigration },
     ]
     for (const migration of migrations) {
       const applied = await client.query<QueryResultRow>("SELECT id FROM schema_migrations WHERE id=$1", [migration.id])

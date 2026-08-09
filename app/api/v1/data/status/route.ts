@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server"
 
 import { getWorkforceAnalytics } from "@/lib/server/hr-analytics"
-import { getDataImportJobs, getDataImportSummary } from "@/lib/server/hr-database"
+import { getDataImportJobs, getDataImportSummary } from "@/lib/server/hr-repository"
 import { requireRole } from "@/lib/server/request-user"
 
 export const dynamic = "force-dynamic"

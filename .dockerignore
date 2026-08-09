@@ -2,7 +2,6 @@
 .github
 .next
 .terraform
-.wrangler
 backend/.pytest_cache
 backend/.venv
 node_modules

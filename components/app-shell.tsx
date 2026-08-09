@@ -11,6 +11,7 @@ import {
   type ShellUser,
 } from "@/components/app-navigation"
 import { Topbar } from "@/components/topbar"
+import { ContextualAiAssistant } from "@/components/contextual-ai-assistant"
 import { cn } from "@/lib/utils"
 
 type PaletteItem = {
@@ -188,6 +189,7 @@ export function AppShell({ user, children }: { user: ShellUser; children: React.
   const pathname = usePathname()
   const [paletteOpen, setPaletteOpen] = useState(false)
   const [mobileNavigationOpen, setMobileNavigationOpen] = useState(false)
+  const [assistantOpen, setAssistantOpen] = useState(false)
 
   useEffect(() => {
     const handler = (event: KeyboardEvent) => {
@@ -214,6 +216,7 @@ export function AppShell({ user, children }: { user: ShellUser; children: React.
       </div>
       {paletteOpen && <CommandPalette user={user} onClose={() => setPaletteOpen(false)} />}
       <MobileNavigation user={user} open={mobileNavigationOpen} onClose={() => setMobileNavigationOpen(false)} />
+      <ContextualAiAssistant open={assistantOpen} onOpenChange={setAssistantOpen} />
     </div>
   )
 }

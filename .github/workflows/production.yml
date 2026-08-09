@@ -2,9 +2,9 @@ name: LaidbackHR production
 
 on:
   pull_request:
-    branches: [azure/migration]
+    branches: [main]
   push:
-    branches: [azure/migration]
+    branches: [main]
   workflow_dispatch:
 
 permissions:
@@ -45,7 +45,7 @@ jobs:
       - uses: actions/setup-python@v7
         with:
           python-version: "3.12"
-      - name: Validate model service
+      - name: Validate reference model
         run: |
           set -euo pipefail
           python -m pip install --disable-pip-version-check -r backend/requirements.txt -r backend/requirements-dev.txt

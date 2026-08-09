@@ -258,8 +258,10 @@ function renderPeopleOperations(plan: ToolPlan, data: Record<string, unknown>): 
 
 function renderEmployeeLookup(plan: ToolPlan, data: Record<string, unknown>): string {
   const rows = records(data.employees).slice(0, plan.limit)
+  const matchCount = Number(data.matchCount ?? rows.length)
+  if (plan.purpose === "employee_count") return `${sourceLine(data)} ${matchCount.toLocaleString()} active employee record${matchCount === 1 ? "" : "s"} match the requested criteria.`
   if (!rows.length) return `${sourceLine(data)} No employee records match the requested criteria.`
-  return [sourceLine(data), `${Number(data.matchCount ?? rows.length)} employee records match; showing ${rows.length}.`, ...rows.map((row) => `- ${String(row.name)} (${String(row.employeeId)}) — ${String(row.jobTitle)}, ${String(row.department)}, ${String(row.location)}; ${String(row.employmentStatus)}.`), "Only minimum profile fields are shown."].join("\n")
+  return [sourceLine(data), `${matchCount} employee records match; showing ${rows.length}.`, ...rows.map((row) => `- ${String(row.name)} (${String(row.employeeId)}) — ${String(row.jobTitle)}, ${String(row.department)}, ${String(row.location)}; ${String(row.employmentStatus)}.`), "Only minimum profile fields are shown."].join("\n")
 }
 
 export function renderHrEvidence(plan: ToolPlan, data: Record<string, unknown>): string {

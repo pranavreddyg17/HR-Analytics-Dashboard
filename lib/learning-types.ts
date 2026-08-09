@@ -11,6 +11,7 @@ export type LearningPerson = {
   displayName: string
   department: string
   jobTitle: string
+  jobLevel: string
   location: string
 }
 
@@ -43,7 +44,7 @@ export type LearningOperations = {
     overdue: number
     mandatoryGaps: number
   }
-  dimensions: { departments: string[]; locations: string[] }
+  dimensions: { departments: string[]; locations: string[]; jobTitles: string[]; jobLevels: string[] }
   courses: LearningCourse[]
   people: LearningPerson[]
   assignments: LearningAssignment[]

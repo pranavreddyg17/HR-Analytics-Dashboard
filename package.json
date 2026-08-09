@@ -1,18 +1,17 @@
 {
   "name": "laidbackhr-ai",
-  "version": "0.1.0",
+  "version": "1.0.0",
   "private": true,
   "scripts": {
-    "dev": "WRANGLER_LOG_PATH=.wrangler/wrangler.log vinext dev",
-    "preview:ui": "LOCAL_UI_PREVIEW=true WRANGLER_LOG_PATH=.wrangler/wrangler.log vinext dev",
-    "build": "WRANGLER_LOG_PATH=.wrangler/wrangler.log vinext build",
-    "start": "WRANGLER_LOG_PATH=.wrangler/wrangler.log wrangler dev --config dist/server/wrangler.json",
-    "dev:azure": "LOCAL_UI_PREVIEW=true next dev --webpack",
-    "build:azure": "next build --webpack",
-    "start:azure": "next start",
+    "dev": "LOCAL_UI_PREVIEW=true next dev --webpack",
+    "build": "next build --webpack",
+    "start": "next start",
+    "dev:azure": "pnpm dev",
+    "build:azure": "pnpm build",
+    "start:azure": "pnpm start",
     "lint": "eslint . --ignore-pattern dist --ignore-pattern .next",
-    "db:generate": "drizzle-kit generate",
     "test:backend": "cd backend && PYTHONPATH=. .venv/bin/python -m pytest -q",
+    "model:export": "cd backend && PYTHONPATH=. .venv/bin/python scripts/export_web_runtime.py",
     "test:live": "node --test tests/api-live.test.mjs",
     "ai:sync": "node scripts/sync-ai-search.mjs"
   },
@@ -23,11 +22,9 @@
     "@langchain/core": "^1.2.4",
     "@langchain/langgraph": "^1.4.8",
     "@langchain/mcp-adapters": "1.1.3",
-    "@langchain/openai": "^1.5.5",
     "@modelcontextprotocol/sdk": "1.30.0",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
-    "drizzle-orm": "0.45.2",
     "lucide-react": "^1.16.0",
     "next": "16.2.12",
     "next-auth": "5.0.0-beta.32",
@@ -41,27 +38,24 @@
     "zod": "4.4.3"
   },
   "devDependencies": {
-    "@cloudflare/vite-plugin": "1.37.1",
     "@tailwindcss/postcss": "4.2.1",
     "@types/node": "22.19.19",
     "@types/pg": "^8.20.4",
     "@types/react": "19.2.14",
     "@types/react-dom": "19.2.3",
-    "@vitejs/plugin-react": "6.0.2",
-    "@vitejs/plugin-rsc": "0.5.26",
-    "drizzle-kit": "0.31.10",
     "eslint": "9.39.4",
     "eslint-config-next": "16.2.12",
     "postcss": "^8.5.25",
-    "react-server-dom-webpack": "19.2.6",
     "tailwindcss": "4.2.1",
-    "typescript": "5.9.3",
-    "vinext": "0.0.50",
-    "vite": "8.0.13",
-    "wrangler": "4.92.0"
+    "typescript": "5.9.3"
   },
   "type": "module",
   "engines": {
     "node": ">=22.13.0"
+  },
+  "knip": {
+    "entry": [
+      "scripts/sync-ai-search.mjs"
+    ]
   }
 }

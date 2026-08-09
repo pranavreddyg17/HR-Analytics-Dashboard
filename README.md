@@ -12,7 +12,7 @@ All runtime resources are provisioned in the existing `Laidback.ai` resource gro
 - Azure Key Vault stores database, authentication, Google OAuth, Azure OpenAI, embedding, and Azure AI Search configuration.
 - Azure AI Search indexes the curated Markdown knowledge base for hybrid/vector retrieval.
 - Azure OpenAI provides grounded synthesis when a chat deployment is configured. The assistant retains a deterministic, evidence-only fallback if generation is unavailable.
-- Azure Container Registry stores immutable web and model images.
+- Azure Container Registry stores immutable web images. The validated prediction artifact runs inside the web application; the Python package remains a test and retraining reference, not a second production service.
 - Application Insights and Log Analytics collect platform telemetry.
 - Terraform owns the Azure resources and GitHub Actions is the only deployment pipeline.
 
@@ -48,7 +48,7 @@ The PostgreSQL schema separates identities and slowly changing business records:
 - review cycles, performance reviews, and one-to-one meetings
 - workflow requests, action history, AI conversations, agent runs, and agent steps
 
-Legacy compatibility columns remain in the employee import surface while the normalized tables are adopted. Derived analytics such as tenure, attrition rate, vacancy rate, replacement rate, and cost scenarios are calculated at read time rather than persisted as operational facts.
+Employee imports accept source facts only. Derived analytics such as tenure, attrition rate, vacancy rate, replacement rate, and cost scenarios are calculated at read time rather than persisted as operational facts.
 
 ## AI agents
 
@@ -94,7 +94,7 @@ Prerequisites are Node.js 22+, pnpm, Python 3.12, and PostgreSQL 16.
 ```bash
 corepack enable
 pnpm install --frozen-lockfile
-pnpm dev:azure
+pnpm dev
 ```
 
 Use `.env.local.example` as the local configuration reference. Never commit secrets.
@@ -104,7 +104,8 @@ Use `.env.local.example` as the local configuration reference. Never commit secr
 ```bash
 pnpm lint
 pnpm exec tsc --noEmit
-pnpm build:azure
+pnpm build
+pnpm model:export
 
 python -m pip install -r backend/requirements.txt -r backend/requirements-dev.txt
 cd backend
@@ -117,7 +118,7 @@ terraform -chdir=infra validate
 
 ## Deployment
 
-`.github/workflows/production.yml` validates pull requests and deploys `azure/migration` through GitHub OpenID Connect. The deployment:
+`.github/workflows/production.yml` validates pull requests and deploys `main` through GitHub OpenID Connect. The deployment:
 
 1. validates the web app, Python reference model, and Terraform;
 2. copies approved AI values from protected GitHub environment secrets into the application Key Vault;

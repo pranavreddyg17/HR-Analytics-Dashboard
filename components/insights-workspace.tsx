@@ -37,24 +37,17 @@ type Filters = {
   department: string
   location: string
   period: "month" | "quarter" | "year"
-  recruitingCostPerHire: number
-  vacancyProductivityPercent: number
-  onboardingDays: number
-  onboardingProductivityPercent: number
-  courseFeePerLearner: number
-  courseHoursPerLearner: number
+  recruitingCostPerHire?: number
+  vacancyProductivityPercent?: number
+  onboardingDays?: number
+  onboardingProductivityPercent?: number
+  courseFeePerLearner?: number
+  courseHoursPerLearner?: number
 }
+
+type CostInputs = Required<Pick<Filters, "recruitingCostPerHire" | "vacancyProductivityPercent" | "onboardingDays" | "onboardingProductivityPercent" | "courseFeePerLearner" | "courseHoursPerLearner">>
 
 type AnalysisView = "overview" | "impact" | "talent" | "capability"
-
-const defaultCostAssumptions = {
-  recruitingCostPerHire: 7_500,
-  vacancyProductivityPercent: 50,
-  onboardingDays: 90,
-  onboardingProductivityPercent: 25,
-  courseFeePerLearner: 500,
-  courseHoursPerLearner: 8,
-}
 
 const chartColors = ["var(--chart-1)", "var(--chart-2)", "var(--chart-3)", "var(--chart-4)", "var(--chart-5)"]
 const actionLinkClass = "inline-flex h-7 items-center justify-center rounded-md border border-border bg-background px-2.5 text-control hover:bg-muted"
@@ -70,11 +63,11 @@ function rollingYear(): Pick<Filters, "from" | "to"> {
 function initialFilters(searchParams: URLSearchParams): Filters {
   const fallback = rollingYear()
   const period = searchParams.get("period")
-  const numberOr = (name: string, fallbackValue: number): number => {
+  const numberOr = (name: string): number | undefined => {
     const raw = searchParams.get(name)
-    if (raw === null || raw.trim() === "") return fallbackValue
+    if (raw === null || raw.trim() === "") return undefined
     const value = Number(raw)
-    return Number.isFinite(value) ? value : fallbackValue
+    return Number.isFinite(value) ? value : undefined
   }
   return {
     from: searchParams.get("from") ?? fallback.from,
@@ -82,12 +75,12 @@ function initialFilters(searchParams: URLSearchParams): Filters {
     department: searchParams.get("department") ?? "",
     location: searchParams.get("location") ?? "",
     period: period === "month" || period === "year" ? period : "quarter",
-    recruitingCostPerHire: numberOr("recruitingCostPerHire", defaultCostAssumptions.recruitingCostPerHire),
-    vacancyProductivityPercent: numberOr("vacancyProductivityPercent", defaultCostAssumptions.vacancyProductivityPercent),
-    onboardingDays: numberOr("onboardingDays", defaultCostAssumptions.onboardingDays),
-    onboardingProductivityPercent: numberOr("onboardingProductivityPercent", defaultCostAssumptions.onboardingProductivityPercent),
-    courseFeePerLearner: numberOr("courseFeePerLearner", defaultCostAssumptions.courseFeePerLearner),
-    courseHoursPerLearner: numberOr("courseHoursPerLearner", defaultCostAssumptions.courseHoursPerLearner),
+    recruitingCostPerHire: numberOr("recruitingCostPerHire"),
+    vacancyProductivityPercent: numberOr("vacancyProductivityPercent"),
+    onboardingDays: numberOr("onboardingDays"),
+    onboardingProductivityPercent: numberOr("onboardingProductivityPercent"),
+    courseFeePerLearner: numberOr("courseFeePerLearner"),
+    courseHoursPerLearner: numberOr("courseHoursPerLearner"),
   }
 }
 
@@ -236,7 +229,7 @@ function ManagerConcentration({ data }: { data: WorkforceAnalytics }) {
   return <div className="overflow-x-auto"><table className="w-full min-w-[720px] text-left text-body"><thead className="bg-muted/40 text-label font-semibold text-muted-foreground"><tr><th className="px-4 py-2.5">Manager</th><th className="px-4 py-2.5">Department</th><th className="px-4 py-2.5">Active team</th><th className="px-4 py-2.5">Exits</th><th className="px-4 py-2.5">Voluntary</th><th className="px-4 py-2.5">Share of department exits</th></tr></thead><tbody>{rows.map((row) => <tr key={`${row.managerId ?? row.manager}-${row.department}`} className="border-t border-border/70"><td className="px-4 py-3 font-semibold">{row.manager}</td><td className="px-4 py-3">{row.department}</td><td className="px-4 py-3 tabular-nums">{row.activeTeamSize}</td><td className="px-4 py-3 tabular-nums">{row.exits}</td><td className="px-4 py-3 tabular-nums">{row.voluntaryExits}</td><td className="px-4 py-3 tabular-nums">{row.shareOfDepartmentExits}%</td></tr>)}</tbody></table><p className="border-t border-border bg-muted/20 px-4 py-2.5 text-meta text-muted-foreground">Use this as a cohort review signal for workload and team conditions, not as a manager rating.</p></div>
 }
 
-function CostAssumptions({ data, onApply }: { data: WorkforceAnalytics; onApply: (values: typeof defaultCostAssumptions) => void }) {
+function CostAssumptions({ data, onApply }: { data: WorkforceAnalytics; onApply: (values: CostInputs) => void }) {
   const assumptions = data.decisionSupport.workforceImpact.assumptions
   const [draft, setDraft] = useState(() => ({
     recruitingCostPerHire: String(assumptions.recruitingCostPerHire),
@@ -445,7 +438,7 @@ export function InsightsWorkspace() {
       />
 
       <Card className="gap-4 p-4 shadow-none">
-        <div className="flex items-center justify-between"><p className="text-card-title font-semibold">Reporting scope</p><Button size="sm" variant="ghost" onClick={() => setFilters({ ...rollingYear(), department: "", location: "", period: "quarter", ...defaultCostAssumptions })}>Reset</Button></div>
+        <div className="flex items-center justify-between"><p className="text-card-title font-semibold">Reporting scope</p><Button size="sm" variant="ghost" onClick={() => setFilters({ ...rollingYear(), department: "", location: "", period: "quarter" })}>Reset</Button></div>
         <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-5">
           <Filter label="From"><input type="date" value={filters.from} onChange={(event) => setFilters({ ...filters, from: event.target.value })} /></Filter>
           <Filter label="To"><input type="date" value={filters.to} onChange={(event) => setFilters({ ...filters, to: event.target.value })} /></Filter>
@@ -504,7 +497,7 @@ export function InsightsWorkspace() {
 
       {analysisView === "capability" && <>
         <MetricStrip metrics={[
-          { label: "Learning completion", value: `${company.trainingCompletionRate}%`, detail: `${data.training.rows.length} assignments in scope` },
+          { label: "Learning completion", value: `${company.trainingCompletionRate}%`, detail: `${data.training.totalAssignments} assignments in scope` },
           { label: "Mandatory gaps", value: company.mandatoryTrainingGaps, detail: "Incomplete required learning" },
           { label: "Mobility review", value: data.promotions.withoutPromotionOver36Months, detail: "Tenure and no promotion record" },
           { label: "Recorded promotions", value: data.promotions.total, detail: `${data.promotions.rate}% of active employees` },

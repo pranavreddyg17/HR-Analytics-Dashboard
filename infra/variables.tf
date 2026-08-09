@@ -56,6 +56,18 @@ variable "employee_portal_url" {
   default     = "https://employee.laidbackhr.cloud"
 }
 
+variable "bootstrap_admin_email" {
+  description = "Initial workspace administrator. Existing role changes remain database-managed."
+  type        = string
+  default     = "pranavreddyg17@gmail.com"
+}
+
+variable "bootstrap_admin_name" {
+  description = "Display name for the initial workspace administrator."
+  type        = string
+  default     = "Pranav Reddy"
+}
+
 variable "enable_employee_custom_domain" {
   description = "Create the employee.laidbackhr.cloud App Service binding after its DNS CNAME and asuid TXT records exist."
   type        = bool

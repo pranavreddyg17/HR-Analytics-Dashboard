@@ -1,5 +1,5 @@
 import type { RequestActor } from "@/lib/server/request-user"
-import { ensureHrDatabase } from "@/lib/server/hr-database"
+import { ensureHrDatabase } from "@/lib/server/hr-repository"
 
 export type ConversationMessage = {
   id: string

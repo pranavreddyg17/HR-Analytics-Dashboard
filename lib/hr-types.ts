@@ -149,6 +149,7 @@ export type TrainingRecord = {
   training_hours: number
   assessment_score: number | null
   department: string
+  is_mandatory: number | boolean
   data_source: string
   due_date?: string | null
   requested_by_email?: string | null
@@ -250,6 +251,7 @@ export type WorkforceAnalytics = {
     rows: LeaveRecord[]
   }
   training: {
+    totalAssignments: number
     completionRate: number
     totalHours: number
     averageScore: number
@@ -434,8 +436,8 @@ export type WorkforceAnalytics = {
 }
 
 export const importFields: Record<HrDomain, string[]> = {
-  employees: ["employee_id", "first_name", "last_name", "preferred_name", "work_email", "phone", "department", "job_title", "location", "manager", "manager_id", "hire_date", "employment_type", "employment_status", "tenure_years"],
-  hiring: ["id", "position", "department", "application_date", "hiring_date", "hiring_source", "time_to_hire_days", "recruitment_status", "location"],
+  employees: ["employee_id", "first_name", "last_name", "preferred_name", "work_email", "phone", "department", "job_title", "location", "manager_id", "hire_date", "employment_type", "employment_status"],
+  hiring: ["id", "position", "department", "application_date", "hiring_date", "hiring_source", "recruitment_status", "location"],
   attrition: ["id", "employee_id", "exit_date", "exit_reason", "exit_type", "department", "tenure_years"],
   leave: ["id", "employee_id", "leave_type", "start_date", "end_date", "leave_days", "approval_status", "department"],
   training: ["id", "training_program", "employee_id", "completion_status", "completion_date", "training_hours", "assessment_score", "department"],

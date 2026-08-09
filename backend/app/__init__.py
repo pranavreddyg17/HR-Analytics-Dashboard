@@ -1,1 +1,1 @@
-"""LaidbackHR.AI reference backend package."""
+"""LaidbackHR.AI model training and export package."""

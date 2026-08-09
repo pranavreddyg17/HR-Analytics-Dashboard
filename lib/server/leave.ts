@@ -1,5 +1,5 @@
 import type { LeaveOperationRecord, LeaveOperations } from "@/lib/leave-types"
-import { ensureHrDatabase, type Database } from "@/lib/server/hr-database"
+import { ensureHrDatabase, type Database } from "@/lib/server/hr-repository"
 import { PeopleError } from "@/lib/server/people"
 import type { RequestActor } from "@/lib/server/request-user"
 
@@ -79,7 +79,7 @@ export async function listLeaveOperations(actor: RequestActor, filters: { id?: s
     LEFT JOIN workflow_requests w ON w.id=l.id AND w.type='leave'
     WHERE ${where.join(" AND ")}
     ORDER BY CASE LOWER(l.approval_status) WHEN 'pending' THEN 0 WHEN 'approved' THEN 1 ELSE 2 END,
-      CASE WHEN l.start_date>=date('now') THEN l.start_date ELSE '9999-12-31' END, l.start_date DESC
+      CASE WHEN l.start_date>=CURRENT_DATE::text THEN l.start_date ELSE '9999-12-31' END, l.start_date DESC
     LIMIT 5000`).bind(...bindings).all<LeaveRow>(),
     db.prepare(`SELECT e.department, e.location, l.leave_type, l.approval_status
       FROM leave_requests_view l JOIN employee_directory_view e ON e.employee_id=l.employee_id

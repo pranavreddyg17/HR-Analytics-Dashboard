@@ -1,4 +1,4 @@
-import { ensureHrDatabase } from "@/lib/server/hr-database"
+import { ensureHrDatabase } from "@/lib/server/hr-repository"
 import type { RequestActor } from "@/lib/server/request-user"
 
 export type HomeSnapshot = {
