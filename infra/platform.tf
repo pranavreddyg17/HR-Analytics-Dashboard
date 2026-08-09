@@ -195,6 +195,25 @@ locals {
   embedding_key_reference           = "@Microsoft.KeyVault(VaultName=${azurerm_key_vault.app.name};SecretName=azure-openai-embedding-key)"
 }
 
+# The prediction runtime moved into the web application. Forget the former
+# model App Service without asking the deployment identity to delete the
+# legacy ACR role assignment, which is outside its conditional RBAC scope.
+removed {
+  from = azurerm_linux_web_app.model
+
+  lifecycle {
+    destroy = false
+  }
+}
+
+removed {
+  from = azurerm_role_assignment.model_acr_pull
+
+  lifecycle {
+    destroy = false
+  }
+}
+
 resource "azurerm_linux_web_app" "web" {
   name                                           = local.web_name
   resource_group_name                            = local.resource_group_name
