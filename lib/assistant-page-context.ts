@@ -94,7 +94,7 @@ export function normalizeAssistantPageContext(value: unknown): AssistantPageCont
 export function assistantPagePrompts(context: AssistantPageContext): string[] {
   const prompts: Record<AssistantPageKey, string[]> = {
     home: ["Summarize my decisions and overdue work", "What should I review first today?"],
-    people: ["Summarize this directory and its data quality", "Which people records need operational follow-up?"],
+    people: ["Summarize this directory and its data quality", "Which required directory fields are incomplete?"],
     person: ["Summarize this employee record", "What open HR work is linked to this employee?"],
     inbox: ["Summarize decisions and exceptions in this queue", "What should I act on first?"],
     hiring: ["Summarize recruiting decisions and overdue follow-ups", "Which requisitions need action next?"],

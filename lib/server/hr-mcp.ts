@@ -282,9 +282,19 @@ export function createHrMcpServer(actor?: RequestActor): McpServer {
     annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false },
   }, async (filters: FilterArgs) => {
     const [analytics, workflows] = await Promise.all([getWorkforceAnalytics(filters), workflowSnapshot()])
+    const activeDirectory = analytics.directoryEmployees.filter((employee) => !employee.archived_at && ["active", "on leave", "preboarding"].includes(employee.employment_status.toLowerCase()))
     return result({
       ...evidence(analytics),
       kpis: analytics.kpis,
+      directoryQuality: {
+        records: analytics.directoryEmployees.length,
+        activeRecords: activeDirectory.length,
+        missingWorkEmail: activeDirectory.filter((employee) => !employee.work_email?.trim()).length,
+        missingManager: activeDirectory.filter((employee) => !employee.manager_id?.trim()).length,
+        missingLocation: activeDirectory.filter((employee) => !employee.location?.trim()).length,
+        missingJobTitle: activeDirectory.filter((employee) => !employee.job_title?.trim()).length,
+        missingDepartment: activeDirectory.filter((employee) => !employee.department?.trim()).length,
+      },
       openWork: {
         pendingLeaveRequests: analytics.leave.pending,
         activeHiringRequisitions: analytics.hiring.activeRequisitions,

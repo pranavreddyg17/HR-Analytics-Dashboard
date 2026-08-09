@@ -36,6 +36,7 @@ type PlanPurpose =
   | "employee_count"
   | "employee_lookup"
   | "work_queue_review"
+  | "directory_summary"
 
 export type ToolPlan = {
   name: HrToolName
@@ -170,8 +171,25 @@ function comparisonMetric(topic: Topic): "headcount" | "hires" | "exits" | "leav
 
 function pageWorkPlan(query: string, context?: AssistantPageContext): ToolPlan | null {
   if (!context) return null
+  if (context.key === "person" && /\bsummarize\b|\bemployee record\b|\bprofile\b/i.test(query)) {
+    return {
+      name: "find_employee_records",
+      input: { query: context.filters.employeeId ?? "", limit: 1 },
+      purpose: "employee_lookup",
+      limit: 1,
+    }
+  }
+  if (context.key === "people" && /\bdirectory\b|\bdata quality\b|\brequired fields?\b|\bincomplete\b|\bcompleteness\b/i.test(query)) {
+    return {
+      name: "workforce_overview",
+      input: {},
+      purpose: "directory_summary",
+      limit: 10,
+    }
+  }
   const asksForPageWork = /\bdecisions?\b|\bapprovals?\b|\bexceptions?\b|\boverdue\b|\bpriorit(?:y|ies|ize)\b|\bwhat should (?:i|we|hr) (?:review|act on|do) (?:first|next|today)?\b|\bneeds? (?:action|attention|follow-up)\b/i.test(query)
     || /\bsummarize\b/i.test(query) && ["home", "inbox"].includes(context.key)
+    || context.key === "person" && /\bopen (?:hr )?work\b|\blinked to (?:this|the) employee\b/i.test(query)
   if (!asksForPageWork) return null
 
   const scope = ["home", "people", "person", "inbox", "hiring", "leaves", "courses", "insights"].includes(context.key)
@@ -189,7 +207,7 @@ function pageWorkPlan(query: string, context?: AssistantPageContext): ToolPlan |
       scope,
       ...(view ? { queue: view } : {}),
       ...(domain ? { domain } : {}),
-      ...(context.filters.item ? { itemId: context.filters.item } : {}),
+      ...(context.filters.item || context.filters.requisition || context.filters.request || context.filters.assignment ? { itemId: context.filters.item ?? context.filters.requisition ?? context.filters.request ?? context.filters.assignment } : {}),
       ...(context.filters.employeeId ? { employeeId: context.filters.employeeId } : {}),
       limit: 10,
     },

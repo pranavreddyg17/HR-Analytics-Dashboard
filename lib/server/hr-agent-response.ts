@@ -69,6 +69,19 @@ function renderWorkQueue(plan: ToolPlan, data: Record<string, unknown>): string 
 
 function renderWorkforce(plan: ToolPlan, data: Record<string, unknown>): string {
   const signals = object(data.operatingSignals)
+  if (plan.purpose === "directory_summary") {
+    const quality = object(data.directoryQuality)
+    return [
+      sourceLine(data),
+      "People directory",
+      `- ${number(quality, "records")} total records; ${number(quality, "activeRecords")} active, on-leave, or preboarding records.`,
+      `- ${number(quality, "missingWorkEmail")} active records missing work email; ${number(quality, "missingManager")} missing a manager assignment.`,
+      `- ${number(quality, "missingLocation")} missing location; ${number(quality, "missingJobTitle")} missing job title; ${number(quality, "missingDepartment")} missing department.`,
+      number(quality, "missingWorkEmail") + number(quality, "missingManager") + number(quality, "missingLocation") + number(quality, "missingJobTitle") + number(quality, "missingDepartment") > 0
+        ? "Review incomplete required fields in the directory before relying on role, location, or manager reporting."
+        : "The required directory fields in this check are complete.",
+    ].join("\n")
+  }
   if (plan.purpose === "manager_concentration") {
     const rows = records(signals.managerExitConcentration).slice(0, plan.limit)
     if (!rows.length) return `${sourceLine(data)} No manager-level exits are recorded for ${String(signals.windowLabel ?? "the current window").toLowerCase()}.`
