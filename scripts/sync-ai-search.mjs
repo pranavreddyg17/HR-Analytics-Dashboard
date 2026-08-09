@@ -56,7 +56,9 @@ async function request(url, options) {
   return response.status === 204 ? null : response.json()
 }
 
-const files = ["laidbackhr-system-prompt.md", "hr-workspace-context.md"]
+// The index contains stable domain and operating guidance only. The private
+// system prompt remains in the application and is never copied into retrieval.
+const files = ["hr-workspace-context.md", "workspace-operations.md"]
 const documents = (await Promise.all(files.map(async (file) => chunks(await readFile(join(process.cwd(), "knowledge", file), "utf8"), basename(file))))).flat()
 const embeddingResponse = await request(embeddingUrl(), {
   method: "POST",
@@ -86,15 +88,32 @@ await request(endpoint(`/indexes/${encodeURIComponent(indexName)}`), {
   }),
 })
 
+const indexedDocuments = documents.map((document, index) => ({
+  "@search.action": "mergeOrUpload",
+  id: createHash("sha256").update(`${document.source}:${document.section}`).digest("hex"),
+  ...document,
+  contentVector: vectors.get(index),
+}))
+
 await request(endpoint(`/indexes/${encodeURIComponent(indexName)}/docs/index`), {
   method: "POST",
   headers: { "content-type": "application/json", "api-key": searchKey },
-  body: JSON.stringify({ value: documents.map((document, index) => ({
-    "@search.action": "mergeOrUpload",
-    id: createHash("sha256").update(`${document.source}:${document.section}`).digest("hex"),
-    ...document,
-    contentVector: vectors.get(index),
-  })) }),
+  body: JSON.stringify({ value: indexedDocuments }),
 })
 
-console.log(JSON.stringify({ index: indexName, documents: documents.length, dimensions }))
+const existing = await request(endpoint(`/indexes/${encodeURIComponent(indexName)}/docs/search`), {
+  method: "POST",
+  headers: { "content-type": "application/json", "api-key": searchKey },
+  body: JSON.stringify({ search: "*", select: "id", top: 1000 }),
+})
+const currentIds = new Set(indexedDocuments.map((document) => document.id))
+const stale = (existing.value || []).filter((document) => !currentIds.has(document.id))
+if (stale.length) {
+  await request(endpoint(`/indexes/${encodeURIComponent(indexName)}/docs/index`), {
+    method: "POST",
+    headers: { "content-type": "application/json", "api-key": searchKey },
+    body: JSON.stringify({ value: stale.map((document) => ({ "@search.action": "delete", id: document.id })) }),
+  })
+}
+
+console.log(JSON.stringify({ index: indexName, documents: documents.length, removed: stale.length, dimensions }))

@@ -10,6 +10,8 @@ import { createHrMcpServer } from "@/lib/server/hr-mcp"
 import { ensureHrDatabase } from "@/lib/server/hr-repository"
 import { runtimeEnv } from "@/lib/server/runtime-env"
 import { synthesizeWithAzureResponses } from "@/lib/server/azure-ai"
+import type { AssistantPageContext } from "@/lib/assistant-page-context"
+import type { RequestActor } from "@/lib/server/request-user"
 
 type ToolTrace = {
   tool: string
@@ -117,9 +119,9 @@ function followUpEvidencePlans(evidence: EvidenceResult[], iteration: number): T
   ]
 }
 
-async function loadInProcessMcpTools() {
+async function loadInProcessMcpTools(actor?: RequestActor) {
   const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair()
-  const mcpServer = createHrMcpServer()
+  const mcpServer = createHrMcpServer(actor)
   const mcpClient = new Client({ name: "LaidbackHR.AI Workforce Orchestrator", version: "4.0.0" }, { capabilities: {} })
   await mcpServer.connect(serverTransport)
   await mcpClient.connect(clientTransport)
@@ -186,7 +188,7 @@ async function finishRun(runId: string | null, status: "completed" | "failed", p
   } catch { /* Best-effort operational audit. */ }
 }
 
-export async function runHrAgent({ message, history = [], actorEmail, conversationId, agentId, pageContext, onProgress }: { message: unknown; history?: AgentHistoryMessage[]; actorEmail?: string; conversationId?: string; agentId?: string; pageContext?: string; onProgress?: (progress: AgentProgress) => void | Promise<void> }): Promise<AgentAnswer> {
+export async function runHrAgent({ message, history = [], actor, conversationId, agentId, pageContext, onProgress }: { message: unknown; history?: AgentHistoryMessage[]; actor?: RequestActor; conversationId?: string; agentId?: string; pageContext?: AssistantPageContext; onProgress?: (progress: AgentProgress) => void | Promise<void> }): Promise<AgentAnswer> {
   if (typeof message !== "string" || !message.trim() || message.length > 2000) throw new Error("message must contain between 1 and 2,000 characters.")
   const query = message.trim()
   if (/^(?:hi|hello|hey|good (?:morning|afternoon|evening))[!.?\s]*$/i.test(query)) {
@@ -198,7 +200,7 @@ export async function runHrAgent({ message, history = [], actorEmail, conversati
       groundedAt: new Date().toISOString(),
     }
   }
-  const runId = await startRun({ actorEmail, conversationId, agentId, objective: query })
+  const runId = await startRun({ actorEmail: actor?.email, conversationId, agentId, objective: query })
   const safeHistory = history
     .filter((item): item is AgentHistoryMessage => Boolean(item) && (item.role === "user" || item.role === "assistant") && typeof item.content === "string")
     .slice(-12)
@@ -208,12 +210,10 @@ export async function runHrAgent({ message, history = [], actorEmail, conversati
   // Intent routing must reflect the user's objective, not the agent's role
   // description. Mixing the two can select an unrelated MCP schema (for
   // example, a generic workforce objective being treated as a comparison).
-  const contextualQuery = pageContext && !/employee|people|workforce|headcount|department|manager|hire|recruit|attrition|turnover|exit|retention|risk|leave|absence|training|learning|course|promotion|career|mobility|data|summary|replacement|coverage/i.test(query)
-    ? `${pageContext}: ${query}`
-    : query
-  const intent = resolveHrIntent(contextualQuery, safeHistory, dimensions)
-  const { prompt: basePrompt, context } = await buildHrSystemPrompt(`${pageContext ? `${pageContext}. ` : ""}${intent.contextQuery}`)
-  const promptParts = [basePrompt, focus ? `Specialized agent scope: ${focus}.` : "", pageContext ? `Current workspace page: ${pageContext}. Use this only to interpret ambiguous references; factual claims still require MCP evidence.` : ""].filter(Boolean)
+  const intent = resolveHrIntent(query, safeHistory, dimensions, pageContext)
+  const pageScope = pageContext ? `${pageContext.label}${Object.keys(pageContext.filters).length ? ` (${Object.entries(pageContext.filters).map(([key, value]) => `${key}: ${value}`).join(", ")})` : ""}` : ""
+  const { prompt: basePrompt, context } = await buildHrSystemPrompt(`${pageScope ? `${pageScope}. ` : ""}${intent.contextQuery}`)
+  const promptParts = [basePrompt, focus ? `Specialized agent scope: ${focus}.` : "", pageScope ? `Current workspace page: ${pageScope}. Use the page route and active filters to choose evidence. Factual claims must come from MCP results.` : ""].filter(Boolean)
   const prompt = promptParts.join("\n\n")
   const citedContext = context.map(({ source, section }) => ({ source, section }))
 
@@ -222,7 +222,7 @@ export async function runHrAgent({ message, history = [], actorEmail, conversati
     return { answer: outOfScopeResponse, provider: "scope-guard", tools: [], context: citedContext, groundedAt: new Date().toISOString() }
   }
 
-  const mcp = await loadInProcessMcpTools()
+  const mcp = await loadInProcessMcpTools(actor)
   const traces: ToolTrace[] = []
   try {
     const evidence: EvidenceResult[] = []

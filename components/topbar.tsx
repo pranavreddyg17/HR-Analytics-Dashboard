@@ -12,7 +12,7 @@ function initials(name: string): string {
   return name.split(/\s+/).filter(Boolean).slice(0, 2).map((part) => part[0]?.toUpperCase()).join("") || "HR"
 }
 
-export function Topbar({ user, onOpenPalette, onOpenNavigation }: { user: ShellUser; onOpenPalette: () => void; onOpenNavigation: () => void }) {
+export function Topbar({ user, navigation, onOpenPalette, onOpenNavigation }: { user: ShellUser; navigation: React.ReactNode; onOpenPalette: () => void; onOpenNavigation: () => void }) {
   const searchParams = useSearchParams()
   const returnTo = safeReturnTo(searchParams.get("returnTo"))
 
@@ -25,6 +25,8 @@ export function Topbar({ user, onOpenPalette, onOpenNavigation }: { user: ShellU
           </Link>
           {returnTo && <Link href={returnTo} className="topbar-back-link">Back to {returnDestinationLabel(returnTo)}</Link>}
         </div>
+
+        {navigation}
 
         <button
           type="button"

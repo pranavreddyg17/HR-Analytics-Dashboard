@@ -1,7 +1,7 @@
 "use client"
 
 import { useEffect, useMemo, useRef, useState } from "react"
-import { usePathname, useRouter } from "next/navigation"
+import { useRouter } from "next/navigation"
 import { Loader2, Search } from "lucide-react"
 
 import {
@@ -187,7 +187,6 @@ function CommandPalette({ onClose, user }: { onClose: () => void; user: ShellUse
 }
 
 export function AppShell({ user, children }: { user: ShellUser; children: React.ReactNode }) {
-  const pathname = usePathname()
   const [paletteOpen, setPaletteOpen] = useState(false)
   const [mobileNavigationOpen, setMobileNavigationOpen] = useState(false)
   const [assistantOpen, setAssistantOpen] = useState(false)
@@ -211,10 +210,14 @@ export function AppShell({ user, children }: { user: ShellUser; children: React.
       <SessionRevalidator enabled={user.authenticated} />
       <div className="app-stage">
         <div className="app-header">
-          <Topbar user={user} onOpenPalette={() => setPaletteOpen(true)} onOpenNavigation={() => setMobileNavigationOpen(true)} />
-          <AppNavigation user={user} />
+          <Topbar
+            user={user}
+            navigation={<AppNavigation user={user} />}
+            onOpenPalette={() => setPaletteOpen(true)}
+            onOpenNavigation={() => setMobileNavigationOpen(true)}
+          />
         </div>
-        <main key={pathname} className="app-content">{children}</main>
+        <main className="app-content">{children}</main>
       </div>
       {paletteOpen && <CommandPalette user={user} onClose={() => setPaletteOpen(false)} />}
       <MobileNavigation user={user} open={mobileNavigationOpen} onClose={() => setMobileNavigationOpen(false)} />

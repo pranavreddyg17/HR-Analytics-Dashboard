@@ -1,6 +1,7 @@
 import type { HrFilters } from "@/lib/hr-types"
+import type { AssistantPageContext } from "@/lib/assistant-page-context"
 
-type HrToolName = "workforce_overview" | "compare_departments" | "analyze_attrition_signals" | "review_people_operations" | "find_employee_records"
+type HrToolName = "workforce_overview" | "compare_departments" | "analyze_attrition_signals" | "review_people_operations" | "find_employee_records" | "review_work_queue"
 
 type StoredToolContext = {
   tool: string
@@ -34,6 +35,7 @@ type PlanPurpose =
   | "people_operations"
   | "employee_count"
   | "employee_lookup"
+  | "work_queue_review"
 
 export type ToolPlan = {
   name: HrToolName
@@ -42,7 +44,7 @@ export type ToolPlan = {
   limit: number
 }
 
-type Topic = "workforce" | "manager_exits" | "replacement" | "attrition" | "hiring" | "leave" | "training" | "promotions" | "employee"
+type Topic = "workforce" | "work_queue" | "manager_exits" | "replacement" | "attrition" | "hiring" | "leave" | "training" | "promotions" | "employee"
 
 type Dimensions = {
   departments: string[]
@@ -82,6 +84,7 @@ function priorState(history: AgentHistoryMessage[]): { topic: Topic | null; inpu
   const employeeRecordScope = entityTrace?.resultContext?.recordScope ?? (typeof entityTrace?.input?.recordScope === "string" ? entityTrace.input.recordScope : undefined)
   const shared = { employeeIds, employeeRecordScope, userMessage: lastUser }
   if (!trace) return { topic: directTopic(lastUser), input: {}, ...shared }
+  if (trace.tool === "review_work_queue") return { topic: "work_queue", input: trace.input ?? {}, ...shared }
   if (trace.tool === "analyze_attrition_signals") return { topic: "attrition", input: trace.input ?? {}, ...shared }
   if (trace.tool === "workforce_overview") return { topic: "workforce", input: trace.input ?? {}, ...shared }
   if (trace.tool === "find_employee_records") return { topic: "employee", input: trace.input ?? {}, ...shared }
@@ -100,7 +103,7 @@ function priorState(history: AgentHistoryMessage[]): { topic: Topic | null; inpu
 
 function isExplicitFollowUp(message: string): boolean {
   const words = message.trim().split(/\s+/).length
-  return words <= 20 && /^(?:just|only|and\b|also\b|what about|how about|why\b|explain\b|give me (?:some )?(?:analysis|detail)|show (?:me )?(?:those|them)|those\b|them\b|same\b|top\s+\d+|can you tell me|could (?:this|that|the|their)|what(?:'s| is) driving|what could (?:be )?(?:the )?(?:reason|cause)|what should (?:we|hr)|how should (?:we|hr)|how come)/i.test(message.trim())
+  return words <= 20 && /^(?:just|only|and\b|also\b|what about|how about|why\b|explain\b|tell me more|which (?:one|item)|give me (?:some )?(?:analysis|detail)|show (?:me )?(?:those|them)|those\b|them\b|same\b|top\s+\d+|can you tell me|could (?:this|that|the|their)|what(?:'s| is) driving|what could (?:be )?(?:the )?(?:reason|cause)|what should (?:we|hr)|how should (?:we|hr)|how come)/i.test(message.trim())
 }
 
 function requestedLimit(message: string, fallback = 10): number {
@@ -165,8 +168,40 @@ function comparisonMetric(topic: Topic): "headcount" | "hires" | "exits" | "leav
   return "headcount"
 }
 
-export function resolveHrIntent(message: string, history: AgentHistoryMessage[], dimensions: Dimensions): ResolvedHrIntent {
+function pageWorkPlan(query: string, context?: AssistantPageContext): ToolPlan | null {
+  if (!context) return null
+  const asksForPageWork = /\bdecisions?\b|\bapprovals?\b|\bexceptions?\b|\boverdue\b|\bpriorit(?:y|ies|ize)\b|\bwhat should (?:i|we|hr) (?:review|act on|do) (?:first|next|today)?\b|\bneeds? (?:action|attention|follow-up)\b/i.test(query)
+    || /\bsummarize\b/i.test(query) && ["home", "inbox"].includes(context.key)
+  if (!asksForPageWork) return null
+
+  const scope = ["home", "people", "person", "inbox", "hiring", "leaves", "courses", "insights"].includes(context.key)
+    ? context.key
+    : "inbox"
+  const view = ["my_work", "decisions", "overdue", "managers", "employees", "open", "completed"].includes(context.filters.view)
+    ? context.filters.view
+    : undefined
+  const domain = ["leave", "hiring", "training", "insight", "reimbursement", "case", "onboarding"].includes(context.filters.type)
+    ? context.filters.type
+    : undefined
+  return {
+    name: "review_work_queue",
+    input: {
+      scope,
+      ...(view ? { queue: view } : {}),
+      ...(domain ? { domain } : {}),
+      ...(context.filters.item ? { itemId: context.filters.item } : {}),
+      ...(context.filters.employeeId ? { employeeId: context.filters.employeeId } : {}),
+      limit: 10,
+    },
+    purpose: "work_queue_review",
+    limit: 10,
+  }
+}
+
+export function resolveHrIntent(message: string, history: AgentHistoryMessage[], dimensions: Dimensions, pageContext?: AssistantPageContext): ResolvedHrIntent {
   const query = message.trim()
+  const contextualPlan = pageWorkPlan(query, pageContext)
+  if (contextualPlan) return { plans: [contextualPlan], inScope: true, isFollowUp: false, contextQuery: `${pageContext?.label ?? "Current page"}: ${query}` }
   const previous = priorState(history)
   const explicitTopic = directTopic(query)
   const followUp = Boolean(previous.topic) && (explicitTopic ? referencesPriorSelection(query) : isExplicitFollowUp(query))
@@ -181,6 +216,7 @@ export function resolveHrIntent(message: string, history: AgentHistoryMessage[],
 
   if (topic === "manager_exits") return { plans: [{ name: "workforce_overview", input: filters, purpose: "manager_concentration", limit }], inScope, isFollowUp: followUp, contextQuery }
   if (topic === "replacement") return { plans: [{ name: "workforce_overview", input: filters, purpose: "replacement_coverage", limit }], inScope, isFollowUp: followUp, contextQuery }
+  if (topic === "work_queue") return { plans: [{ name: "review_work_queue", input: { ...previous.input, limit }, purpose: "work_queue_review", limit }], inScope, isFollowUp: followUp, contextQuery }
   if (topic === "attrition") {
     const analysis = wantsExplanation(query)
     const retentionPlan = wantsRetentionPlan(query)

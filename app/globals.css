@@ -474,7 +474,7 @@
   position: relative;
   z-index: 2;
   display: flex;
-  height: 54px;
+  height: 58px;
   align-items: center;
   border-bottom: 1px solid var(--shell-border);
   background: var(--shell);
@@ -486,8 +486,8 @@
   max-width: 1680px;
   height: 100%;
   align-items: center;
-  grid-template-columns: minmax(260px, 1fr) minmax(320px, 560px) minmax(220px, 1fr);
-  gap: 20px;
+  grid-template-columns: minmax(180px, 250px) minmax(480px, 1fr) minmax(220px, 340px) auto;
+  gap: 12px;
   margin-inline: auto;
   padding-inline: 24px;
 }
@@ -525,7 +525,7 @@
 }
 
 .topbar-back-link {
-  max-width: 200px;
+  max-width: 96px;
   overflow: hidden;
   padding-left: 14px;
   border-left: 1px solid var(--shell-border);
@@ -598,20 +598,21 @@
 .enterprise-nav {
   position: relative;
   z-index: 1;
-  height: 42px;
-  border-bottom: 1px solid var(--shell-border);
-  background: var(--shell-raised);
+  min-width: 0;
+  height: 100%;
+  border: 0;
+  background: transparent;
 }
 
 .enterprise-nav__inner {
   display: flex;
   width: 100%;
-  max-width: 1680px;
+  max-width: none;
   height: 100%;
   align-items: stretch;
   justify-content: flex-start;
   margin-inline: auto;
-  padding-inline: 16px;
+  padding-inline: 0;
 }
 
 .enterprise-nav__primary,
@@ -621,9 +622,9 @@
 }
 
 .enterprise-nav__menus {
-  margin-left: 6px;
-  padding-left: 6px;
-  border-left: 1px solid var(--shell-border);
+  margin-left: 2px;
+  padding-left: 2px;
+  border-left: 0;
   gap: 2px;
 }
 
@@ -633,7 +634,7 @@
   height: 100%;
   flex: 0 0 auto;
   align-items: center;
-  padding-inline: 11px;
+  padding-inline: 9px;
   color: var(--shell-muted);
   font-size: 13px;
   font-weight: 400;
@@ -653,9 +654,9 @@
 
 .enterprise-nav__link--active::after {
   position: absolute;
-  right: 10px;
-  bottom: -1px;
-  left: 10px;
+  right: 8px;
+  bottom: 0;
+  left: 8px;
   height: 2px;
   background: #9d84ff;
   content: "";
@@ -670,7 +671,7 @@
   display: flex;
   height: 100%;
   align-items: center;
-  padding-inline: 12px;
+  padding-inline: 9px;
   color: var(--shell-muted);
   font-size: 13px;
   font-weight: 400;
@@ -692,9 +693,9 @@
 
 .enterprise-nav__menu--active > button::after {
   position: absolute;
-  right: 11px;
-  bottom: -1px;
-  left: 11px;
+  right: 8px;
+  bottom: 0;
+  left: 8px;
   height: 2px;
   background: #9d84ff;
   content: "";
@@ -924,6 +925,24 @@ select:focus,
 textarea:focus {
   border-color: rgb(110 76 255 / 0.58);
   box-shadow: 0 0 0 3px rgb(110 76 255 / 0.1);
+}
+
+@media (max-width: 1279px) {
+  .topbar__inner {
+    grid-template-columns: minmax(180px, 250px) minmax(260px, 1fr) auto;
+  }
+
+  .enterprise-nav {
+    display: none;
+  }
+
+  .topbar-menu-button {
+    display: block;
+  }
+
+  .user-menu__name {
+    display: none;
+  }
 }
 
 @media (max-width: 1024px) {

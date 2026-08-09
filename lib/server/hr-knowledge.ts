@@ -1,5 +1,6 @@
 import systemPromptMarkdown from "@/knowledge/laidbackhr-system-prompt.md?raw"
 import workspaceContextMarkdown from "@/knowledge/hr-workspace-context.md?raw"
+import workspaceOperationsMarkdown from "@/knowledge/workspace-operations.md?raw"
 import { searchAzureKnowledge } from "@/lib/server/azure-ai"
 
 export type KnowledgeMatch = {
@@ -52,7 +53,10 @@ function chunksFromMarkdown(source: string, markdown: string): KnowledgeChunk[] 
   return chunks
 }
 
-const knowledgeChunks = chunksFromMarkdown("HR workspace context", workspaceContextMarkdown)
+const knowledgeChunks = [
+  ...chunksFromMarkdown("HR workspace context", workspaceContextMarkdown),
+  ...chunksFromMarkdown("Workspace operating context", workspaceOperationsMarkdown),
+]
 
 function retrieveHrContext(query: string, limit = 3): KnowledgeMatch[] {
   const queryTerms = terms(query)

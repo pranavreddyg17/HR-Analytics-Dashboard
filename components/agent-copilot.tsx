@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from "react"
 import { ArrowUp, LoaderCircle } from "lucide-react"
 
 import { Button } from "@/components/ui/button"
+import { assistantPagePrompts, type AssistantPageContext } from "@/lib/assistant-page-context"
 import { cn } from "@/lib/utils"
 
 type ChatMessage = {
@@ -28,6 +29,7 @@ const toolLabels: Record<string, string> = {
   analyze_attrition_signals: "Attrition signals",
   review_people_operations: "People operations",
   find_employee_records: "Employee directory",
+  review_work_queue: "Current work queue",
 }
 
 const defaultSuggestedPrompts = [
@@ -45,7 +47,7 @@ function welcomeMessage(dataMode: string): ChatMessage {
   }
 }
 
-export function AgentCopilot({ dataMode, pageContext, compact = false }: { dataMode: string; pageContext?: string; compact?: boolean }) {
+export function AgentCopilot({ dataMode, pageContext, compact = false }: { dataMode: string; pageContext?: AssistantPageContext; compact?: boolean }) {
   const [messages, setMessages] = useState<ChatMessage[]>([welcomeMessage(dataMode)])
   const [conversations, setConversations] = useState<ConversationSummary[]>([])
   const [conversationId, setConversationId] = useState("")
@@ -91,7 +93,7 @@ export function AgentCopilot({ dataMode, pageContext, compact = false }: { dataM
     let active = true
     const timer = window.setTimeout(() => {
       void refreshConversations()
-        .then((latestId) => active && latestId ? loadConversation(latestId) : undefined)
+        .then((latestId) => active && latestId && !compact ? loadConversation(latestId) : undefined)
         .catch(() => undefined)
         .finally(() => { if (active) setLoadingHistory(false) })
     }, 0)
@@ -214,7 +216,8 @@ export function AgentCopilot({ dataMode, pageContext, compact = false }: { dataM
 
   return (
     <div className="flex h-full min-h-0 flex-col">
-      <div className="flex items-center gap-2 border-b border-border bg-card px-4 py-2.5">
+      <div className={cn("items-center gap-2 border-b border-border bg-card px-4 py-2.5", compact ? "flex justify-end" : "flex")}>
+        {!compact && <>
         <label className="min-w-0 flex-1 text-meta font-semibold text-muted-foreground">
           Conversation
           <select
@@ -228,8 +231,9 @@ export function AgentCopilot({ dataMode, pageContext, compact = false }: { dataM
             {conversations.map((conversation) => <option key={conversation.id} value={conversation.id}>{conversation.title}</option>)}
           </select>
         </label>
+        </>}
         <Button type="button" size="sm" variant="outline" onClick={newConversation} disabled={thinking || loadingHistory || deleting}>New chat</Button>
-        <Button type="button" size="sm" variant="outline" onClick={() => { setConversationError(""); setDeleteOpen(true) }} disabled={!conversationId || thinking || loadingHistory || deleting}>Delete chat</Button>
+        {!compact && <Button type="button" size="sm" variant="outline" onClick={() => { setConversationError(""); setDeleteOpen(true) }} disabled={!conversationId || thinking || loadingHistory || deleting}>Delete chat</Button>}
       </div>
 
       {conversationError && !deleteOpen && <div role="alert" className="border-b border-border bg-destructive/5 px-4 py-2 text-xs text-destructive">{conversationError}</div>}
@@ -250,7 +254,7 @@ export function AgentCopilot({ dataMode, pageContext, compact = false }: { dataM
                 <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 px-1 text-meta text-muted-foreground">
                   <span>Sources:</span>
                   {message.tools?.map((trace) => <span key={trace.tool}>{toolLabels[trace.tool] ?? trace.tool}</span>)}
-                  {message.context?.map((item) => <span key={`${item.source}-${item.section}`}>{item.section}</span>)}
+                  {message.context?.map((item) => <span key={`${item.source}-${item.section}`}>{item.source.startsWith("Azure AI Search") ? `Azure AI Search · ${item.section}` : item.section}</span>)}
                 </div>
               )}
             </div>
@@ -266,10 +270,7 @@ export function AgentCopilot({ dataMode, pageContext, compact = false }: { dataM
 
       <div className="border-t border-border bg-card px-4 py-4">
         <div className={cn("mb-3 grid gap-1", !compact && "sm:grid-cols-2")}>
-          {(pageContext ? [
-            `Summarize the decisions and exceptions on ${pageContext}`,
-            `What should HR review next on ${pageContext}?`,
-          ] : defaultSuggestedPrompts).map((prompt) => (
+          {(pageContext ? assistantPagePrompts(pageContext) : defaultSuggestedPrompts).map((prompt) => (
             <button key={prompt} type="button" onClick={() => void send(prompt)} className="border-l-2 border-border px-2 py-1 text-left text-xs text-muted-foreground hover:border-primary hover:text-foreground">
               {prompt}
             </button>
@@ -286,12 +287,12 @@ export function AgentCopilot({ dataMode, pageContext, compact = false }: { dataM
                 void send(input)
               }
             }}
-            placeholder={pageContext ? `Ask about ${pageContext}` : "Ask a workforce analytics question"}
+            placeholder={pageContext ? `Ask about ${pageContext.label.toLowerCase()}` : "Ask a workforce analytics question"}
             className="max-h-32 min-h-9 flex-1 resize-none bg-transparent py-2 text-sm outline-none placeholder:text-muted-foreground"
           />
           <Button type="submit" size="icon" disabled={!input.trim() || thinking || loadingHistory} aria-label="Send question"><ArrowUp className="size-4" /></Button>
         </form>
-        <p className="mt-2 text-meta text-muted-foreground">Conversation context is saved to your account.</p>
+        <p className="mt-2 text-meta text-muted-foreground">Uses the current page, live workspace records, and the knowledge index.</p>
       </div>
 
       {deleteOpen && conversationId && (

@@ -20,6 +20,53 @@ function sourceLine(data: Record<string, unknown>): string {
   return `Current source: ${mode(data)}.`
 }
 
+function renderWorkQueue(plan: ToolPlan, data: Record<string, unknown>): string {
+  const page = object(data.page)
+  const summary = object(data.summary)
+  const home = object(data.home)
+  const rows = records(data.items).slice(0, plan.limit)
+  const scopeLabels: Record<string, string> = {
+    home: "Home priorities",
+    people: "People operations linked to the directory",
+    person: "Open work linked to this employee",
+    inbox: "Inbox",
+    hiring: "Hiring operations",
+    leaves: "Leave operations",
+    courses: "Learning operations",
+    insights: "Workforce exception actions",
+  }
+  const scope = String(page.scope ?? "inbox")
+  const selection = String(page.queue ?? "priority")
+  const heading = scopeLabels[scope] ?? "Current work queue"
+  const summaryLines = [
+    `- ${number(summary, "decisions")} actionable decision${number(summary, "decisions") === 1 ? "" : "s"}; ${number(summary, "overdue")} overdue item${number(summary, "overdue") === 1 ? "" : "s"}; ${number(summary, "assignedToMe")} assigned to you.`,
+    `- ${number(summary, "managerQueue")} waiting on managers; ${number(summary, "employeeQueue")} waiting on employees.`,
+  ]
+  if (scope === "home" && Object.keys(home).length) {
+    summaryLines.push(`- ${number(home, "activeEmployees")} active employees; ${number(home, "awayToday")} away today; ${number(home, "activeRequisitions")} active requisitions including ${number(home, "offers")} offers.`)
+  }
+  if (!rows.length) {
+    return [
+      sourceLine(data),
+      `${heading} · ${selection.replaceAll("_", " ")}`,
+      ...summaryLines,
+      `No work items match the current page and filters.`,
+    ].join("\n")
+  }
+  return [
+    sourceLine(data),
+    `${heading} · showing ${rows.length} of ${Number(data.matchCount ?? rows.length)} matching items`,
+    ...summaryLines,
+    "Next actions",
+    ...rows.map((row, index) => {
+      const due = row.slaStatus === "overdue" ? `overdue since ${String(row.dueDate ?? "an unrecorded date")}` : row.dueDate ? `due ${String(row.dueDate)}` : "no due date"
+      const decision = row.requiresDecision ? row.actionable ? "decision available" : "decision pending outside your action scope" : "follow-up"
+      return `${index + 1}. ${String(row.title)} — ${String(row.domain)} · ${due} · ${decision}. Owner: ${String(row.owner)}. Next: ${String(row.nextAction)} Reason: ${String(row.attentionReason)}`
+    }),
+    "Open the matching record from this page to complete the action; the assistant has not changed any workflow state.",
+  ].join("\n")
+}
+
 function renderWorkforce(plan: ToolPlan, data: Record<string, unknown>): string {
   const signals = object(data.operatingSignals)
   if (plan.purpose === "manager_concentration") {
@@ -265,6 +312,7 @@ function renderEmployeeLookup(plan: ToolPlan, data: Record<string, unknown>): st
 }
 
 export function renderHrEvidence(plan: ToolPlan, data: Record<string, unknown>): string {
+  if (plan.name === "review_work_queue") return renderWorkQueue(plan, data)
   if (plan.name === "workforce_overview") return renderWorkforce(plan, data)
   if (plan.name === "analyze_attrition_signals") return renderAttrition(plan, data)
   if (plan.name === "compare_departments") return renderDepartmentComparison(data)

@@ -44,11 +44,11 @@ export async function searchAzureKnowledge(query: string, limit = 4): Promise<Ar
   const body: Record<string, unknown> = {
     search: query,
     queryType: "simple",
-    searchMode: "all",
+    searchMode: "any",
     select: "source,section,content",
     top: limit,
   }
-  if (vector) body.vectorQueries = [{ kind: "vector", vector, fields: "contentVector", k: Math.max(limit, 6) }]
+  if (vector) body.vectorQueries = [{ kind: "vector", vector, fields: "contentVector", k: Math.max(limit * 2, 8), weight: 1.5 }]
   const response = await fetch(url, {
     method: "POST",
     headers: { "content-type": "application/json", "api-key": apiKey },
@@ -58,7 +58,7 @@ export async function searchAzureKnowledge(query: string, limit = 4): Promise<Ar
   if (!response.ok) return []
   const result = await response.json() as { value?: SearchDocument[] }
   return (result.value ?? []).flatMap((item) => item.content
-    ? [{ source: item.source || "LaidbackHR knowledge", section: item.section || "Workspace guidance", content: item.content }]
+    ? [{ source: `Azure AI Search · ${item.source || "LaidbackHR knowledge"}`, section: item.section || "Workspace guidance", content: item.content }]
     : [])
 }
 

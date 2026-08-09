@@ -7,6 +7,10 @@ import { getWorkforceAnalytics } from "@/lib/server/hr-analytics"
 import { ensureHrDatabase } from "@/lib/server/hr-repository"
 import { getRetentionIntelligence } from "@/lib/server/retention-intelligence"
 import { predict } from "@/lib/server/runtime"
+import { getInboxOperations } from "@/lib/server/inbox"
+import { getHomeSnapshot } from "@/lib/server/home"
+import type { RequestActor } from "@/lib/server/request-user"
+import type { InboxItem } from "@/lib/people-types"
 
 const filtersShape = {
   from: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional().describe("Start date in YYYY-MM-DD format"),
@@ -128,6 +132,11 @@ async function employeePromotionContext(employeeIds: string[]) {
 
 const mcpToolCatalog = [
   {
+    name: "review_work_queue",
+    title: "Review current work queue",
+    description: "Actor-scoped decisions, overdue work, owners, next actions, and page-specific operational exceptions from persisted workflows.",
+  },
+  {
     name: "workforce_overview",
     title: "Workforce overview",
     description: "Current workforce KPIs, open HR work, executive observations, and source status.",
@@ -154,15 +163,121 @@ const mcpToolCatalog = [
   },
 ] as const
 
-export function createHrMcpServer(): McpServer {
+type WorkQueue = "my_work" | "decisions" | "overdue" | "managers" | "employees" | "open" | "completed"
+type WorkScope = "home" | "people" | "person" | "inbox" | "hiring" | "leaves" | "courses" | "insights"
+
+function assignedToActor(item: InboxItem, actor: RequestActor): boolean {
+  return !item.isCompleted && (item.actionable || item.ownerEmail?.toLowerCase() === actor.email.toLowerCase())
+}
+
+function inQueue(item: InboxItem, queue: WorkQueue, actor: RequestActor): boolean {
+  if (queue === "my_work") return assignedToActor(item, actor)
+  if (queue === "decisions") return !item.isCompleted && item.requiresDecision && item.actionable
+  if (queue === "overdue") return !item.isCompleted && item.slaStatus === "overdue"
+  if (queue === "managers") return !item.isCompleted && item.assignedTo === "manager"
+  if (queue === "employees") return !item.isCompleted && item.assignedTo === "employee"
+  if (queue === "open") return !item.isCompleted
+  return item.isCompleted
+}
+
+function inPageScope(item: InboxItem, scope: WorkScope): boolean {
+  if (scope === "hiring") return item.type === "hiring"
+  if (scope === "leaves") return item.type === "leave"
+  if (scope === "courses") return item.type === "training"
+  if (scope === "insights") return item.type === "insight"
+  if (scope === "people" || scope === "person") return ["onboarding", "case", "reimbursement"].includes(item.type)
+  return true
+}
+
+export function createHrMcpServer(actor?: RequestActor): McpServer {
   const server = new McpServer(
     { name: "LaidbackHR.AI Workforce Analytics", version: "3.0.0" },
     { capabilities: { tools: {}, resources: {} } },
   )
 
-  server.registerTool("workforce_overview", {
+  server.registerTool("review_work_queue", {
     title: mcpToolCatalog[0].title,
     description: mcpToolCatalog[0].description,
+    inputSchema: {
+      scope: z.enum(["home", "people", "person", "inbox", "hiring", "leaves", "courses", "insights"]),
+      queue: z.enum(["my_work", "decisions", "overdue", "managers", "employees", "open", "completed"]).optional(),
+      domain: z.enum(["leave", "hiring", "training", "insight", "reimbursement", "case", "onboarding"]).optional(),
+      itemId: z.string().trim().min(1).max(120).optional(),
+      employeeId: z.string().trim().min(1).max(80).optional(),
+      limit: z.number().int().min(1).max(20).optional(),
+    },
+    annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false },
+  }, async ({ scope, queue, domain, itemId, employeeId, limit = 10 }: { scope: WorkScope; queue?: WorkQueue; domain?: InboxItem["type"]; itemId?: string; employeeId?: string; limit?: number }) => {
+    if (!actor) throw new Error("Authenticated actor context is required for the work queue.")
+    const [operations, home] = await Promise.all([
+      getInboxOperations(actor),
+      scope === "home" ? getHomeSnapshot(actor) : Promise.resolve(null),
+    ])
+    const pageItems = operations.items.filter((item) => inPageScope(item, scope))
+    const selected = pageItems.filter((item) => {
+      if (domain && item.type !== domain) return false
+      if (itemId && item.id !== itemId) return false
+      if (employeeId && item.employeeId !== employeeId) return false
+      if (queue) return inQueue(item, queue, actor)
+      if (scope === "home" || scope === "inbox") {
+        return !item.isCompleted && (item.requiresDecision && item.actionable || item.slaStatus === "overdue" || item.priority === "high")
+      }
+      return !item.isCompleted
+    })
+    const open = pageItems.filter((item) => !item.isCompleted)
+    const decisionCount = open.filter((item) => item.requiresDecision && item.actionable).length
+    const overdueCount = open.filter((item) => item.slaStatus === "overdue").length
+    const byDomain = Object.fromEntries([...new Set(open.map((item) => item.type))].map((type) => [type, open.filter((item) => item.type === type).length]))
+    return result({
+      generatedAt: operations.generatedAt,
+      dataMode: "imported/operational",
+      recordScope: `Actor-scoped ${scope} work queue`,
+      page: { scope, queue: queue ?? "priority", domain: domain ?? "all", itemId: itemId ?? null, employeeId: employeeId ?? null },
+      actorScope: { role: actor.role, email: actor.email },
+      summary: {
+        open: open.length,
+        decisions: decisionCount,
+        overdue: overdueCount,
+        assignedToMe: open.filter((item) => assignedToActor(item, actor)).length,
+        managerQueue: open.filter((item) => item.assignedTo === "manager").length,
+        employeeQueue: open.filter((item) => item.assignedTo === "employee").length,
+        completed: pageItems.filter((item) => item.isCompleted).length,
+        byDomain,
+      },
+      home: home ? {
+        activeEmployees: home.activeEmployees,
+        awayToday: home.awayToday,
+        activeRequisitions: home.activeRequisitions,
+        offers: home.offers,
+        upcoming: home.upcoming,
+      } : null,
+      matchCount: selected.length,
+      items: selected.slice(0, limit).map((item) => ({
+        id: item.id,
+        domain: item.type,
+        title: item.title,
+        detail: item.detail,
+        person: item.person,
+        employeeId: item.employeeId,
+        status: item.status,
+        priority: item.priority,
+        owner: item.owner,
+        dueDate: item.dueDate,
+        slaStatus: item.slaStatus,
+        assignedTo: item.assignedTo,
+        requiresDecision: item.requiresDecision,
+        actionable: item.actionable,
+        nextAction: item.nextAction,
+        attentionReason: item.attentionReason,
+        recordHref: item.recordHref,
+        reviewHref: item.reviewHref,
+      })),
+    })
+  })
+
+  server.registerTool("workforce_overview", {
+    title: mcpToolCatalog[1].title,
+    description: mcpToolCatalog[1].description,
     inputSchema: filtersShape,
     annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false },
   }, async (filters: FilterArgs) => {
@@ -183,8 +298,8 @@ export function createHrMcpServer(): McpServer {
   })
 
   server.registerTool("compare_departments", {
-    title: mcpToolCatalog[1].title,
-    description: mcpToolCatalog[1].description,
+    title: mcpToolCatalog[2].title,
+    description: mcpToolCatalog[2].description,
     inputSchema: {
       metric: z.enum(["headcount", "hires", "exits", "leave_days", "training_hours", "promotions"]),
       ...filtersShape,
@@ -216,8 +331,8 @@ export function createHrMcpServer(): McpServer {
   })
 
   server.registerTool("analyze_attrition_signals", {
-    title: mcpToolCatalog[2].title,
-    description: mcpToolCatalog[2].description,
+    title: mcpToolCatalog[3].title,
+    description: mcpToolCatalog[3].description,
     inputSchema: {
       recordScope: z.enum(["summary", "exited", "high_risk", "all"]).optional().describe("Optional joined employee record cohort to return"),
       query: z.string().trim().max(120).optional().describe("Optional employee ID, name, department, job title, or location search"),
@@ -306,8 +421,8 @@ export function createHrMcpServer(): McpServer {
   })
 
   server.registerTool("review_people_operations", {
-    title: mcpToolCatalog[3].title,
-    description: mcpToolCatalog[3].description,
+    title: mcpToolCatalog[4].title,
+    description: mcpToolCatalog[4].description,
     inputSchema: {
       domain: z.enum(["hiring", "leave", "training", "promotions"]),
       employeeIds: z.array(z.string().trim().min(1).max(80)).max(20).optional().describe("Optional exact employee cohort for a targeted operational review"),
@@ -404,8 +519,8 @@ export function createHrMcpServer(): McpServer {
   })
 
   server.registerTool("find_employee_records", {
-    title: mcpToolCatalog[4].title,
-    description: mcpToolCatalog[4].description,
+    title: mcpToolCatalog[5].title,
+    description: mcpToolCatalog[5].description,
     inputSchema: {
       query: z.string().trim().max(120).optional(),
       status: z.string().trim().max(60).optional(),

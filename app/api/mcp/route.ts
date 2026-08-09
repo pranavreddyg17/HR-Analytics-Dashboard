@@ -1,6 +1,7 @@
 import { WebStandardStreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/webStandardStreamableHttp.js"
 
 import { createHrMcpServer } from "@/lib/server/hr-mcp"
+import { requireRequestActor } from "@/lib/server/request-user"
 
 export const dynamic = "force-dynamic"
 
@@ -17,13 +18,19 @@ function corsHeaders(request: Request): Record<string, string> {
 }
 
 async function handle(request: Request): Promise<Response> {
-  const transport = new WebStandardStreamableHTTPServerTransport({ sessionIdGenerator: undefined, enableJsonResponse: true })
-  const server = createHrMcpServer()
-  await server.connect(transport)
-  const response = await transport.handleRequest(request)
-  const headers = new Headers(response.headers)
-  for (const [key, value] of Object.entries(corsHeaders(request))) headers.set(key, value)
-  return new Response(response.body, { status: response.status, statusText: response.statusText, headers })
+  try {
+    const actor = await requireRequestActor(request)
+    const transport = new WebStandardStreamableHTTPServerTransport({ sessionIdGenerator: undefined, enableJsonResponse: true })
+    const server = createHrMcpServer(actor)
+    await server.connect(transport)
+    const response = await transport.handleRequest(request)
+    const headers = new Headers(response.headers)
+    for (const [key, value] of Object.entries(corsHeaders(request))) headers.set(key, value)
+    return new Response(response.body, { status: response.status, statusText: response.statusText, headers })
+  } catch (error) {
+    const detail = error instanceof Error ? error.message : "MCP request failed."
+    return Response.json({ error: detail }, { status: detail === "AUTH_REQUIRED" ? 401 : 500, headers: corsHeaders(request) })
+  }
 }
 
 export const GET = handle
