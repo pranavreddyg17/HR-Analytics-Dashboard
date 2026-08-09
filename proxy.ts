@@ -18,8 +18,7 @@ export default auth((request) => {
     return Response.redirect(destination, 308)
   }
   if (publicHost === "employee.laidbackhr.cloud" && request.nextUrl.pathname === "/") {
-    const destination = request.nextUrl.clone()
-    destination.pathname = "/employee"
+    const destination = new URL("/employee", `https://${publicHost}`)
     return Response.redirect(destination, 307)
   }
 
@@ -34,8 +33,10 @@ export default auth((request) => {
     && ["localhost", "127.0.0.1"].includes(request.nextUrl.hostname)
   if (localPreview) return
   if (!request.auth?.user?.email || !request.auth.user.role) {
-    if (request.nextUrl.pathname === "/") {
-      const destination = request.nextUrl.clone()
+    if (request.nextUrl.pathname === "/" || request.nextUrl.pathname.startsWith("/employee")) {
+      const destination = publicHost === "employee.laidbackhr.cloud"
+        ? new URL("/login", `https://${publicHost}`)
+        : request.nextUrl.clone()
       destination.pathname = "/login"
       destination.search = ""
       return Response.redirect(destination, 307)
@@ -44,4 +45,4 @@ export default auth((request) => {
   }
 })
 
-export const config = { matcher: ["/", "/login", "/api/v1/:path*", "/api/mcp", "/time-off", "/learning", "/ai-agents", "/data", "/employees"] }
+export const config = { matcher: ["/", "/login", "/employee/:path*", "/api/v1/:path*", "/api/mcp", "/time-off", "/learning", "/ai-agents", "/data", "/employees"] }
