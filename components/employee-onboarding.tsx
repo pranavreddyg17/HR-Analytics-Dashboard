@@ -61,7 +61,7 @@ export function EmployeeOnboarding({ user }: { user: { name: string; email: stri
           <label className="text-label">Annual salary<input required name="annualSalary" type="number" min="0" step="100" className={inputClass}/></label>
           <label className="text-label">Currency<input required name="currency" defaultValue="USD" maxLength={3} className={inputClass}/></label>
           {error && <p role="alert" className="text-body text-destructive sm:col-span-2">{error}</p>}
-          <div className="flex justify-end border-t border-border pt-4 sm:col-span-2"><Button disabled={busy}>{busy ? "Saving…" : "Save profile"}</Button></div>
+          <div className="flex justify-end border-t border-border pt-4 sm:col-span-2"><Button type="submit" disabled={busy}>{busy ? "Saving…" : "Save profile"}</Button></div>
         </form>
       </section>
     </div>
