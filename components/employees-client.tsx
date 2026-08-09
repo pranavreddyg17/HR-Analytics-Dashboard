@@ -18,7 +18,7 @@ const filters: { key: RiskLevel | "all"; label: string }[] = [
 ]
 
 function riskBarColor(level: RiskLevel) {
-  return level === "high" ? "var(--chart-3)" : level === "medium" ? "var(--chart-2)" : "var(--chart-1)"
+  return level === "high" ? "var(--destructive)" : level === "medium" ? "var(--warning)" : "var(--success)"
 }
 
 const pageSize = 25

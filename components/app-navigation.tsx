@@ -3,8 +3,8 @@
 import { useEffect, useRef, useState } from "react"
 import Link from "next/link"
 import { usePathname } from "next/navigation"
-import { signOut } from "next-auth/react"
 
+import { SignOutControl } from "@/components/sign-out-control"
 import { cn } from "@/lib/utils"
 
 export type ShellUser = {
@@ -144,7 +144,7 @@ export function MobileNavigation({
   if (!open) return null
 
   return (
-    <div className="mobile-navigation-layer md:hidden" role="dialog" aria-modal="true" aria-label="Application navigation">
+    <div className="mobile-navigation-layer" role="dialog" aria-modal="true" aria-label="Application navigation">
       <button type="button" className="mobile-navigation-backdrop" aria-label="Close navigation" onClick={onClose} />
       <section className="mobile-navigation-panel">
         <header className="mobile-navigation-header">
@@ -180,7 +180,7 @@ export function MobileNavigation({
             <p className="truncate text-meta text-muted-foreground">{user.email}</p>
           </div>
           {user.authenticated
-            ? <button type="button" className="text-button" onClick={() => signOut({ callbackUrl: "/login" })}>Sign out</button>
+            ? <SignOutControl />
             : <span className="text-meta text-muted-foreground">Local session</span>}
         </footer>
       </section>

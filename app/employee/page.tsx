@@ -9,7 +9,7 @@ export const dynamic = "force-dynamic"
 export default async function EmployeePage() {
   const actor = await requireRequestActor()
   const onboarding = await getEmployeeOnboardingState(actor)
-  if (onboarding.required) return <EmployeeOnboarding user={{ name: actor.displayName, email: actor.email }} />
+  if (onboarding.required) return <EmployeeOnboarding user={{ name: actor.displayName, email: actor.email, authenticated: !actor.localPreview }} />
   const initialData = await getEmployeePortal(actor)
-  return <EmployeePortal initialData={initialData} user={{ name: actor.displayName, email: actor.email }} />
+  return <EmployeePortal initialData={initialData} user={{ name: actor.displayName, email: actor.email, authenticated: !actor.localPreview }} />
 }

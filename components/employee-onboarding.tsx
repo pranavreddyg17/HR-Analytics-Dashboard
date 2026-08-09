@@ -1,14 +1,15 @@
 "use client"
 
 import { useState } from "react"
-import { signOut } from "next-auth/react"
 
 import { BrandLogo } from "@/components/brand-logo"
+import { SignOutControl } from "@/components/sign-out-control"
+import { SessionRevalidator } from "@/components/session-revalidator"
 import { Button } from "@/components/ui/button"
 
 const inputClass = "mt-1 h-9 w-full rounded-md border border-border bg-background px-3 text-control outline-none focus:border-ring focus:ring-2 focus:ring-ring/20"
 
-export function EmployeeOnboarding({ user }: { user: { name: string; email: string } }) {
+export function EmployeeOnboarding({ user }: { user: { name: string; email: string; authenticated: boolean } }) {
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState("")
 
@@ -35,9 +36,12 @@ export function EmployeeOnboarding({ user }: { user: { name: string; email: stri
     finally { setBusy(false) }
   }
 
-  return <main className="min-h-screen bg-[#f5f6f8] px-4 py-8 text-foreground sm:px-6">
-    <div className="mx-auto max-w-3xl">
-      <header className="mb-5 flex items-center justify-between"><BrandLogo/><button className="text-button" onClick={() => signOut({ callbackUrl: "/login" })}>Sign out</button></header>
+  return <main className="employee-shell min-h-screen text-foreground">
+    <SessionRevalidator enabled={user.authenticated} />
+    <header className="employee-shell__header">
+      <div className="mx-auto flex min-h-14 max-w-3xl items-center justify-between px-4 sm:px-6"><BrandLogo/><SignOutControl className="employee-shell__sign-out" /></div>
+    </header>
+    <div className="mx-auto max-w-3xl px-4 py-8 sm:px-6">
       <section className="surface-card overflow-hidden">
         <div className="border-b border-border px-5 py-4"><h1 className="text-page-title">Set up your employee profile</h1><p className="mt-1 text-page-description text-muted-foreground">Signed in as {user.email}. Enter the employment details People Operations will verify.</p></div>
         <form onSubmit={submit} className="grid gap-4 p-5 sm:grid-cols-2">

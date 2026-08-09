@@ -2,10 +2,10 @@
 
 import Link from "next/link"
 import { useSearchParams } from "next/navigation"
-import { signOut } from "next-auth/react"
 
 import { BrandLogo } from "@/components/brand-logo"
 import type { ShellUser } from "@/components/app-navigation"
+import { SignOutControl } from "@/components/sign-out-control"
 import { returnDestinationLabel, safeReturnTo } from "@/lib/navigation"
 
 function initials(name: string): string {
@@ -48,7 +48,7 @@ export function Topbar({ user, onOpenPalette, onOpenNavigation }: { user: ShellU
                 <p className="mt-0.5 truncate text-xs text-muted-foreground">{user.email}</p>
               </div>
               {user.authenticated ? (
-                <button type="button" onClick={() => signOut({ callbackUrl: "/login" })} className="user-menu__item w-full">Sign out</button>
+                <SignOutControl className="user-menu__item" />
               ) : (
                 <p className="px-3.5 py-2.5 text-xs text-muted-foreground">Local development session</p>
               )}

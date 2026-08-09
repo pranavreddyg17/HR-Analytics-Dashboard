@@ -1,0 +1,96 @@
+name: laidbackhr-validation-$(Date:yyyyMMdd).$(Rev:r)
+
+# GitHub Actions is the single production deployment owner. Azure DevOps keeps
+# an independently auditable validation record for the same mirrored main SHA;
+# it never applies Terraform or races the production state lock.
+trigger:
+  branches:
+    include:
+      - main
+
+pr:
+  branches:
+    include:
+      - main
+
+pool:
+  vmImage: ubuntu-latest
+
+variables:
+  nodeVersion: "22.x"
+  pythonVersion: "3.12"
+  terraformVersion: "1.15.8"
+
+stages:
+  - stage: Validate
+    displayName: Validate mirrored source
+    jobs:
+      - job: Application
+        displayName: Web, model, and infrastructure
+        timeoutInMinutes: 30
+        steps:
+          - checkout: self
+            clean: true
+            fetchDepth: 1
+
+          - task: NodeTool@0
+            displayName: Use Node.js
+            inputs:
+              versionSpec: $(nodeVersion)
+
+          - script: |
+              set -euo pipefail
+              corepack enable
+              pnpm install --frozen-lockfile
+              pnpm lint
+              pnpm exec tsc --noEmit
+              pnpm build:azure
+            displayName: Validate web application
+
+          - task: UsePythonVersion@0
+            displayName: Use Python
+            inputs:
+              versionSpec: $(pythonVersion)
+
+          - script: |
+              set -euo pipefail
+              python -m pip install --disable-pip-version-check -r backend/requirements.txt -r backend/requirements-dev.txt
+              cd backend
+              PYTHONPATH=. python -m pytest -q
+            displayName: Validate reference model
+
+          - script: |
+              set -euo pipefail
+              curl -fsSLo terraform.zip "https://releases.hashicorp.com/terraform/$(terraformVersion)/terraform_$(terraformVersion)_linux_amd64.zip"
+              unzip -q terraform.zip
+              sudo install terraform /usr/local/bin/terraform
+              terraform -chdir=infra init -backend=false
+              terraform -chdir=infra fmt -check -recursive
+              terraform -chdir=infra validate
+            displayName: Validate Terraform
+
+  - stage: DeploymentEvidence
+    displayName: Verify production evidence
+    dependsOn: Validate
+    condition: and(succeeded(), eq(variables['Build.SourceBranch'], 'refs/heads/main'))
+    jobs:
+      - job: Readiness
+        displayName: Confirm the mirrored SHA is deployed
+        steps:
+          - script: |
+              set -euo pipefail
+              for attempt in $(seq 1 60); do
+                response="$(curl --silent --show-error --max-time 30 https://www.laidbackhr.cloud/api/v1/ready || true)"
+                if jq -e --arg version "$(Build.SourceVersion)" '
+                  .status == "ready"
+                  and .version == $version
+                  and .database.engine == "postgresql"
+                ' <<<"$response" >/dev/null 2>&1; then
+                  echo "Production is ready at mirrored commit $(Build.SourceVersion)."
+                  exit 0
+                fi
+                sleep 15
+              done
+              echo "Production did not report mirrored commit $(Build.SourceVersion) within 15 minutes." >&2
+              exit 1
+            displayName: Verify production readiness

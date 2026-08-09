@@ -137,7 +137,7 @@ function FlowChart({ rows }: { rows: ReturnType<typeof flowRows> }) {
           <Tooltip content={<FlowTooltip />} />
           <Legend />
           <Bar dataKey="hires" name="Completed hires" fill="var(--chart-1)" radius={[3, 3, 0, 0]} />
-          <Bar dataKey="exits" name="Recorded exits" fill="var(--chart-5)" radius={[3, 3, 0, 0]} />
+          <Bar dataKey="exits" name="Recorded exits" fill="var(--destructive)" radius={[3, 3, 0, 0]} />
         </BarChart>
       </ResponsiveContainer>
     </div>

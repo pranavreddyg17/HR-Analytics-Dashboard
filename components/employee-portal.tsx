@@ -1,9 +1,11 @@
 "use client"
 
 import { useState } from "react"
-import { signOut } from "next-auth/react"
+import { useRouter, useSearchParams } from "next/navigation"
 
 import { BrandLogo } from "@/components/brand-logo"
+import { SignOutControl } from "@/components/sign-out-control"
+import { SessionRevalidator } from "@/components/session-revalidator"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 
@@ -28,6 +30,14 @@ type PortalData = {
   learning: Array<Record<string, unknown>>
 }
 
+type PortalView = "overview" | "requests" | "learning" | "reviews"
+const portalViews: Array<{ value: PortalView; label: string }> = [
+  { value: "overview", label: "Overview" },
+  { value: "requests", label: "Requests" },
+  { value: "learning", label: "Learning" },
+  { value: "reviews", label: "Reviews" },
+]
+
 const fieldClass = "mt-1 h-9 w-full rounded-md border border-border bg-background px-3 text-body outline-none focus:ring-2 focus:ring-primary/20"
 const textAreaClass = "mt-1 min-h-24 w-full resize-y rounded-md border border-border bg-background px-3 py-2 text-body outline-none focus:ring-2 focus:ring-primary/20"
 
@@ -47,11 +57,22 @@ function Status({ value }: { value: unknown }) {
   return <span className="rounded border border-border bg-muted/40 px-2 py-0.5 text-status font-semibold capitalize">{String(value || "unknown").replaceAll("_", " ")}</span>
 }
 
-export function EmployeePortal({ initialData, user }: { initialData: PortalData; user: { name: string; email: string } }) {
+export function EmployeePortal({ initialData, user }: { initialData: PortalData; user: { name: string; email: string; authenticated: boolean } }) {
+  const router = useRouter()
+  const searchParams = useSearchParams()
   const [data, setData] = useState(initialData)
-  const [active, setActive] = useState<"overview" | "requests" | "learning" | "reviews">("overview")
   const [busy, setBusy] = useState(false)
   const [message, setMessage] = useState("")
+  const requestedView = searchParams.get("view")
+  const active: PortalView = portalViews.some((item) => item.value === requestedView) ? requestedView as PortalView : "overview"
+
+  function selectView(view: PortalView) {
+    const next = new URLSearchParams(searchParams.toString())
+    if (view === "overview") next.delete("view")
+    else next.set("view", view)
+    const query = next.toString()
+    router.push(query ? `/employee?${query}` : "/employee", { scroll: false })
+  }
 
   async function refresh() {
     const response = await fetch("/api/v1/employee", { cache: "no-store" })
@@ -209,15 +230,16 @@ export function EmployeePortal({ initialData, user }: { initialData: PortalData;
     ...data.cases.map((row) => ({ id: String(row.id), kind: "HR request", title: String(row.subject), status: row.status, submitted: row.submitted_at })),
     ...data.leave.map((row) => ({ id: String(row.id), kind: "Leave", title: `${String(row.leave_type)} · ${String(row.leave_days)} days`, status: row.approval_status, submitted: row.start_date })),
   ].sort((a, b) => String(b.submitted || "").localeCompare(String(a.submitted || "")))
-  return <div className="min-h-screen bg-[#f5f6f8] text-foreground">
-    <header className="border-b border-border bg-background">
-      <div className="mx-auto flex min-h-14 max-w-[1280px] items-center gap-4 px-4 sm:px-6">
+  return <div className="employee-shell min-h-screen text-foreground">
+    <SessionRevalidator enabled={user.authenticated} />
+    <header className="employee-shell__header">
+      <div className="employee-shell__header-inner mx-auto flex min-h-14 max-w-[1280px] items-center gap-4 px-4 sm:px-6">
         <BrandLogo />
-        <nav className="ml-4 flex min-w-0 flex-1 items-center gap-1" aria-label="Employee navigation">
-          {(["overview", "requests", "learning", "reviews"] as const).map((item) => <button key={item} onClick={() => setActive(item)} className={`h-9 rounded px-3 text-body capitalize ${active === item ? "bg-muted font-semibold" : "text-muted-foreground hover:bg-muted/60"}`}>{item}</button>)}
+        <nav className="employee-shell__navigation" aria-label="Employee navigation">
+          {portalViews.map((item) => <button key={item.value} type="button" aria-current={active === item.value ? "page" : undefined} onClick={() => selectView(item.value)} className={active === item.value ? "employee-shell__navigation-link employee-shell__navigation-link--active" : "employee-shell__navigation-link"}>{item.label}</button>)}
         </nav>
-        <div className="hidden text-right sm:block"><p className="text-card-title">{user.name}</p><p className="text-meta text-muted-foreground">{user.email}</p></div>
-        <button className="text-button" onClick={() => signOut({ callbackUrl: "/login" })}>Sign out</button>
+        <div className="employee-shell__account hidden text-right sm:block"><p className="text-card-title">{user.name}</p><p className="text-meta">{user.email}</p></div>
+        <SignOutControl className="employee-shell__sign-out" />
       </div>
     </header>
 
@@ -240,7 +262,7 @@ export function EmployeePortal({ initialData, user }: { initialData: PortalData;
         </section>
         <section className="grid gap-4 md:grid-cols-3">
           <div className="surface-card p-5"><p className="text-kpi-label text-muted-foreground">Current compensation</p><p className="mt-1 text-kpi-value">{data.compensation ? money(data.compensation.annual_salary, data.compensation.currency) : "Not recorded"}</p>{data.compensation && <p className="text-meta text-muted-foreground">{String(data.compensation.pay_frequency)} · effective {date(data.compensation.effective_from)}</p>}</div>
-          <div className="surface-card p-5"><p className="text-kpi-label text-muted-foreground">Open requests</p><p className="mt-1 text-kpi-value">{data.claims.filter((row) => !["paid", "rejected", "cancelled"].includes(String(row.status))).length + data.cases.filter((row) => !["resolved", "closed"].includes(String(row.status))).length}</p><button onClick={() => setActive("requests")} className="mt-2 text-button">View requests</button></div>
+          <div className="surface-card p-5"><p className="text-kpi-label text-muted-foreground">Open requests</p><p className="mt-1 text-kpi-value">{data.claims.filter((row) => !["paid", "rejected", "cancelled"].includes(String(row.status))).length + data.cases.filter((row) => !["resolved", "closed"].includes(String(row.status))).length}</p><button type="button" onClick={() => selectView("requests")} className="mt-2 text-button">View requests</button></div>
           <div className="surface-card p-5"><p className="text-kpi-label text-muted-foreground">Learning assigned</p><p className="mt-1 text-kpi-value">{data.learning.filter((row) => String(row.status).toLowerCase() !== "completed").length}</p><p className="text-meta text-muted-foreground">Incomplete courses</p></div>
         </section>
         <section className="grid gap-4 lg:grid-cols-[1fr_1.4fr]">

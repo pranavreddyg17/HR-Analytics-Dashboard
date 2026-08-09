@@ -4,7 +4,7 @@ import Link from "next/link"
 import { useRouter, useSearchParams } from "next/navigation"
 import { useCallback, useEffect, useMemo, useState } from "react"
 import { Archive, FilterX, Plus, Search, SlidersHorizontal } from "lucide-react"
-import { Cell, Pie, PieChart, ResponsiveContainer, Tooltip } from "recharts"
+import { Cell, Pie, PieChart, ResponsiveContainer } from "recharts"
 
 import { Button } from "@/components/ui/button"
 import { Card } from "@/components/ui/card"
@@ -27,7 +27,7 @@ type Filters = {
 
 const initialFilters: Filters = { department: "", location: "", status: "", employmentType: "", tenure: "", includeArchived: false }
 const PAGE_SIZE = 25
-const compositionColors = ["#146aa3", "#4f6bed", "#038387", "#8764b8", "#ca5010", "#69797e"]
+const compositionColors = ["var(--chart-1)", "var(--chart-2)", "var(--chart-3)", "var(--chart-4)", "var(--chart-5)", "var(--chart-6)"]
 const tenureOptions = [
   { value: "under1", label: "Under 1 year" },
   { value: "1to2", label: "1–2 years" },
@@ -269,7 +269,7 @@ function WorkforceComposition({
                   innerRadius={40}
                   outerRadius={61}
                   paddingAngle={1}
-                  stroke="#ffffff"
+                  stroke="var(--card)"
                   strokeWidth={2}
                   onClick={(entry) => {
                     const name = String((entry as { name?: unknown }).name ?? "")
@@ -285,7 +285,6 @@ function WorkforceComposition({
                     />
                   ))}
                 </Pie>
-                <Tooltip formatter={(value) => [Number(value).toLocaleString(), "Employees"]} />
               </PieChart>
             </ResponsiveContainer>
             <div className="pointer-events-none absolute inset-0 flex flex-col items-center justify-center">

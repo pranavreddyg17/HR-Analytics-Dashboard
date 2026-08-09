@@ -14,7 +14,7 @@ All runtime resources are provisioned in the existing `Laidback.ai` resource gro
 - Azure OpenAI provides grounded synthesis when a chat deployment is configured. The assistant retains a deterministic, evidence-only fallback if generation is unavailable.
 - Azure Container Registry stores immutable web images. The validated prediction artifact runs inside the web application; the Python package remains a test and retraining reference, not a second production service.
 - Application Insights and Log Analytics collect platform telemetry.
-- Terraform owns the Azure resources and GitHub Actions is the only deployment pipeline.
+- Terraform owns the Azure resources and GitHub Actions is the only deployment pipeline. Azure DevOps validates the mirrored `main` commit and verifies that the same immutable SHA is live; it does not perform a competing deployment.
 
 Production demo seeding is disabled. Existing PostgreSQL records are preserved; new migrations add structures without replacing operational rows.
 
@@ -126,6 +126,8 @@ terraform -chdir=infra validate
 4. applies Terraform using remote state;
 5. synchronizes the Azure AI Search knowledge index; and
 6. verifies both service health endpoints.
+
+`azure-pipelines.yml` runs the same source, model, and Terraform validations against the Azure Repos mirror. Its final stage checks that `/api/v1/ready` reports the mirrored commit. Keeping it read-only prevents two CI systems from applying the same Terraform state concurrently.
 
 The GitHub `production` environment must contain the Azure OIDC identifiers and the approved Azure AI secret values. The application Key Vault remains the only runtime secret source.
 

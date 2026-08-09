@@ -11,6 +11,7 @@ declare global {
     google?: {
       accounts: {
         id: {
+          disableAutoSelect?: () => void
           initialize: (options: Record<string, unknown>) => void
           renderButton: (element: HTMLElement, options: Record<string, unknown>) => void
         }
@@ -116,7 +117,7 @@ export function GoogleSignInButton({ clientId }: { clientId: string }) {
   return (
     <div>
       <div ref={container} className="flex min-h-11 w-full items-center justify-center" />
-      {loading && clientId && <div className="flex h-11 items-center justify-center gap-2 text-sm text-[#637083]"><LoaderCircle className="size-4 animate-spin" />Loading Google sign-in</div>}
+      {loading && clientId && <div className="flex h-11 items-center justify-center gap-2 text-sm text-muted-foreground"><LoaderCircle className="size-4 animate-spin" />Loading Google sign-in</div>}
       {displayedError && <p role="alert" className="mt-3 rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-900">{displayedError}</p>}
     </div>
   )

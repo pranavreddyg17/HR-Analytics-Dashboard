@@ -52,10 +52,5 @@
   "type": "module",
   "engines": {
     "node": ">=22.13.0"
-  },
-  "knip": {
-    "entry": [
-      "scripts/sync-ai-search.mjs"
-    ]
   }
 }

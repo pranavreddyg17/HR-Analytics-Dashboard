@@ -12,6 +12,7 @@ import {
 } from "@/components/app-navigation"
 import { Topbar } from "@/components/topbar"
 import { ContextualAiAssistant } from "@/components/contextual-ai-assistant"
+import { SessionRevalidator } from "@/components/session-revalidator"
 import { cn } from "@/lib/utils"
 
 type PaletteItem = {
@@ -207,6 +208,7 @@ export function AppShell({ user, children }: { user: ShellUser; children: React.
 
   return (
     <div className="app-frame">
+      <SessionRevalidator enabled={user.authenticated} />
       <div className="app-stage">
         <div className="app-header">
           <Topbar user={user} onOpenPalette={() => setPaletteOpen(true)} onOpenNavigation={() => setMobileNavigationOpen(true)} />
