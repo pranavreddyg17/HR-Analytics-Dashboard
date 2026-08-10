@@ -119,6 +119,11 @@ function followUpEvidencePlans(evidence: EvidenceResult[], iteration: number): T
   ]
 }
 
+function needsGenerativeSynthesis(query: string, evidence: EvidenceResult[]): boolean {
+  if (evidence.length > 1) return true
+  return /\bwhy\b|\bexplain\b|\brecommend|\bplan\b|\bprevent|\bretain|\bintervention|\bstrategy|\bdraft\b/i.test(query)
+}
+
 async function loadInProcessMcpTools(actor?: RequestActor) {
   const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair()
   const mcpServer = createHrMcpServer(actor)
@@ -212,16 +217,16 @@ export async function runHrAgent({ message, history = [], actor, conversationId,
   // example, a generic workforce objective being treated as a comparison).
   const intent = resolveHrIntent(query, safeHistory, dimensions, pageContext)
   const pageScope = pageContext ? `${pageContext.label}${Object.keys(pageContext.filters).length ? ` (${Object.entries(pageContext.filters).map(([key, value]) => `${key}: ${value}`).join(", ")})` : ""}` : ""
-  const { prompt: basePrompt, context } = await buildHrSystemPrompt(`${pageScope ? `${pageScope}. ` : ""}${intent.contextQuery}`)
-  const promptParts = [basePrompt, focus ? `Specialized agent scope: ${focus}.` : "", pageScope ? `Current workspace page: ${pageScope}. Use the page route and active filters to choose evidence. Factual claims must come from MCP results.` : ""].filter(Boolean)
-  const prompt = promptParts.join("\n\n")
-  const citedContext = context.map(({ source, section }) => ({ source, section }))
 
   if (!intent.inScope || !intent.plans.length) {
     await finishRun(runId, "completed", "scope-guard")
-    return { answer: outOfScopeResponse, provider: "scope-guard", tools: [], context: citedContext, groundedAt: new Date().toISOString() }
+    return { answer: outOfScopeResponse, provider: "scope-guard", tools: [], context: [], groundedAt: new Date().toISOString() }
   }
 
+  // Guidance retrieval and operational MCP calls are independent. Starting
+  // retrieval here prevents Azure AI Search latency from blocking database
+  // evidence collection while keeping the final answer grounded in both.
+  const knowledgePromise = buildHrSystemPrompt(`${pageScope ? `${pageScope}. ` : ""}${intent.contextQuery}`)
   const mcp = await loadInProcessMcpTools(actor)
   const traces: ToolTrace[] = []
   try {
@@ -229,33 +234,40 @@ export async function runHrAgent({ message, history = [], actor, conversationId,
     let stepNumber = 0
     let pendingPlans = intent.plans
     for (let iteration = 1; iteration <= 2 && pendingPlans.length; iteration += 1) {
-      for (const plan of pendingPlans) {
+      const iterationEvidence = await Promise.all(pendingPlans.map(async (plan): Promise<EvidenceResult | null> => {
         const tool = mcp.tools.find((candidate) => candidate.name === plan.name)
-        if (!tool) continue
+        if (!tool) return null
         const started = Date.now()
         await onProgress?.({ phase: "tool_started", tool: plan.name, iteration })
         try {
           const output = await tool.invoke(plan.input)
           const data = contentToJson(output)
           const item = { plan, data }
-          evidence.push(item)
           const trace: ToolTrace = { tool: plan.name, input: plan.input, iteration, resultContext: evidenceContext(data), durationMs: Date.now() - started, status: "completed" }
           traces.push(trace)
           await recordRunStep(runId, ++stepNumber, trace)
           await onProgress?.({ phase: "tool_completed", tool: plan.name, iteration, durationMs: trace.durationMs })
+          return item
         } catch (error) {
           const trace: ToolTrace = { tool: plan.name, input: plan.input, iteration, durationMs: Date.now() - started, status: "failed" }
           traces.push(trace)
           await recordRunStep(runId, ++stepNumber, trace)
           throw error
         }
-      }
+      }))
+      evidence.push(...iterationEvidence.filter((item): item is EvidenceResult => item !== null))
       pendingPlans = followUpEvidencePlans(evidence, iteration)
     }
 
     const draft = evidence.map(({ plan, data }) => renderHrEvidence(plan, data)).join("\n\n")
+    const { prompt: basePrompt, context } = await knowledgePromise
+    const promptParts = [basePrompt, focus ? `Specialized agent scope: ${focus}.` : "", pageScope ? `Current workspace page: ${pageScope}. Use the page route and active filters to choose evidence. Factual claims must come from MCP results.` : ""].filter(Boolean)
+    const prompt = promptParts.join("\n\n")
+    const citedContext = context.map(({ source, section }) => ({ source, section }))
     await onProgress?.({ phase: "synthesis", message: "Preparing grounded response" })
-    const synthesized = await synthesizeWithModel({ query, draft, systemPrompt: prompt })
+    const synthesized = needsGenerativeSynthesis(query, evidence)
+      ? await synthesizeWithModel({ query, draft, systemPrompt: prompt })
+      : null
     const answer = synthesized ?? draft
     const dataMode = evidence.map((item) => item.data.dataMode).find((value): value is string => typeof value === "string")
     const provider = synthesized ? "azure-openai-langchain-mcp" : "langchain-mcp-deterministic-orchestrator"

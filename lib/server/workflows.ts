@@ -254,7 +254,13 @@ export async function actOnWorkflow(value: unknown, actor: RequestActor) {
     const confidentiality = await db.prepare("SELECT confidentiality FROM employee_cases WHERE id=?").bind(input.id).first<{ confidentiality: string }>()
     const isOwner = workflow.owner_email?.toLowerCase() === actor.email.toLowerCase()
     if (!(["admin", "hr"] as string[]).includes(actor.role) && (!isOwner || confidentiality?.confidentiality === "restricted")) throw new PeopleError("Your role cannot resolve this employee case.", 403)
-    if (workflow.requested_by_email?.toLowerCase() === actor.email.toLowerCase()) throw new PeopleError("You cannot resolve your own employee request.", 403)
+    const isSelfSubmitted = workflow.requested_by_email?.toLowerCase() === actor.email.toLowerCase()
+    // A workspace administrator may close their own ordinary service ticket in
+    // a single-admin workspace. Restricted employee-relations cases still
+    // require an independent HR reviewer, as do all approval workflows.
+    if (isSelfSubmitted && (actor.role !== "admin" || confidentiality?.confidentiality === "restricted")) {
+      throw new PeopleError("This request requires another HR reviewer.", 403)
+    }
     if (input.note.length < 10) throw new PeopleError("Record a clear resolution before closing the case.", 422)
     await db.batch([
       db.prepare("UPDATE employee_cases SET status='resolved', resolution_note=?, resolved_by_email=?, resolved_at=CURRENT_TIMESTAMP, updated_at=CURRENT_TIMESTAMP WHERE id=?").bind(input.note, actor.email, input.id),

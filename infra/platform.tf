@@ -21,7 +21,7 @@ resource "azurerm_container_registry" "app" {
   sku                           = "Basic"
   admin_enabled                 = false
   public_network_access_enabled = true
-  tags                          = local.common_tags
+  tags                          = merge(local.common_tags, { component = "container-registry" })
 }
 
 resource "azurerm_storage_account" "employee_documents" {
@@ -35,7 +35,7 @@ resource "azurerm_storage_account" "employee_documents" {
   allow_nested_items_to_be_public = false
   public_network_access_enabled   = true
   shared_access_key_enabled       = false
-  tags                            = local.common_tags
+  tags                            = merge(local.common_tags, { component = "employee-documents" })
 
   blob_properties {
     versioning_enabled = true
@@ -56,7 +56,7 @@ resource "azurerm_service_plan" "app" {
   location            = local.location
   os_type             = "Linux"
   sku_name            = var.app_service_sku
-  tags                = local.common_tags
+  tags                = merge(local.common_tags, { component = "application-hosting" })
 }
 
 resource "azurerm_log_analytics_workspace" "app" {
@@ -65,7 +65,7 @@ resource "azurerm_log_analytics_workspace" "app" {
   location            = local.location
   sku                 = "PerGB2018"
   retention_in_days   = 30
-  tags                = local.common_tags
+  tags                = merge(local.common_tags, { component = "observability-logs" })
 }
 
 resource "azurerm_application_insights" "app" {
@@ -74,7 +74,7 @@ resource "azurerm_application_insights" "app" {
   location            = local.location
   workspace_id        = azurerm_log_analytics_workspace.app.id
   application_type    = "web"
-  tags                = local.common_tags
+  tags                = merge(local.common_tags, { component = "observability-apm" })
 }
 
 resource "azurerm_postgresql_flexible_server" "app" {
@@ -90,7 +90,7 @@ resource "azurerm_postgresql_flexible_server" "app" {
   backup_retention_days         = 7
   geo_redundant_backup_enabled  = false
   public_network_access_enabled = true
-  tags                          = local.common_tags
+  tags                          = merge(local.common_tags, { component = "system-of-record" })
 
   authentication {
     active_directory_auth_enabled = false
@@ -125,7 +125,7 @@ resource "azurerm_key_vault" "app" {
   rbac_authorization_enabled = true
   purge_protection_enabled   = true
   soft_delete_retention_days = 7
-  tags                       = local.common_tags
+  tags                       = merge(local.common_tags, { component = "application-secrets" })
 }
 
 resource "azurerm_role_assignment" "deployment_key_vault_secrets" {
@@ -224,7 +224,7 @@ resource "azurerm_linux_web_app" "web" {
   client_certificate_enabled                     = false
   ftp_publish_basic_authentication_enabled       = false
   webdeploy_publish_basic_authentication_enabled = false
-  tags                                           = local.common_tags
+  tags                                           = merge(local.common_tags, { component = "hr-web-application" })
 
   identity { type = "SystemAssigned" }
 
@@ -256,6 +256,7 @@ resource "azurerm_linux_web_app" "web" {
     BOOTSTRAP_ADMIN_EMAIL                      = var.bootstrap_admin_email
     BOOTSTRAP_ADMIN_NAME                       = var.bootstrap_admin_name
     DATABASE_POOL_MAX                          = "10"
+    ANALYTICS_CACHE_TTL_MS                     = "15000"
     SEED_DEMO_DATA                             = "false"
     EMPLOYEE_DOCUMENTS_ACCOUNT_URL             = azurerm_storage_account.employee_documents.primary_blob_endpoint
     EMPLOYEE_DOCUMENTS_CONTAINER               = azurerm_storage_container.employee_documents.name

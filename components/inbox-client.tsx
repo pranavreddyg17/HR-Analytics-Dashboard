@@ -41,6 +41,7 @@ const domainOptions: Array<{ id: DomainFilter; label: string }> = [
 
 const domainLabel: Record<InboxItem["type"], string> = { leave: "Leave", hiring: "Talent acquisition", training: "Learning", insight: "Insights", reimbursement: "Reimbursement", case: "Employee request", onboarding: "Onboarding" }
 const PAGE_SIZE = 10
+const MIN_AUDIT_NOTE_LENGTH = 10
 const inputClass = "h-9 w-full rounded-md border border-border bg-background px-3 text-control outline-none focus:border-ring focus:ring-2 focus:ring-ring/20"
 const textareaClass = "min-h-20 w-full resize-y rounded-md border border-border bg-background px-3 py-2.5 text-control outline-none focus:border-ring focus:ring-2 focus:ring-ring/20"
 
@@ -137,9 +138,11 @@ function ActionDialog({ pending, leave, note, score, busy, error, onActionChange
   const { item, action } = pending
   const isDecision = item.actions?.includes("approve")
   const declineNeedsReason = action === "reject"
+  const noteIsRequired = declineNeedsReason || item.type === "case"
+  const noteLength = note.trim().length
   return <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
     <button type="button" aria-label="Close action" className="absolute inset-0 bg-slate-950/45" onClick={() => !busy && onClose()} />
-    <form onSubmit={onSubmit} className="relative max-h-[92dvh] w-full max-w-lg overflow-y-auto rounded-lg border border-border bg-background shadow-xl">
+    <form noValidate onSubmit={onSubmit} className="relative max-h-[92dvh] w-full max-w-lg overflow-y-auto rounded-lg border border-border bg-background shadow-xl">
       <header className="border-b border-border px-5 py-4 pr-14">
         <h2 className="text-section font-semibold">{isDecision ? item.type === "leave" ? "Leave decision" : item.type === "reimbursement" ? "Reimbursement decision" : item.type === "onboarding" ? "Onboarding verification" : "Headcount decision" : item.type === "case" ? "Resolve employee request" : "Record course completion"}</h2>
         <p className="mt-0.5 text-description text-muted-foreground">{item.title}{item.person ? ` · ${item.person}` : ""}</p>
@@ -160,12 +163,16 @@ function ActionDialog({ pending, leave, note, score, busy, error, onActionChange
         </div>}
 
         {item.type === "training" && <label className="block"><span className="mb-1.5 block text-label font-semibold">Assessment score</span><input type="number" min="0" max="100" step="1" value={score} onChange={(event) => onScoreChange(event.target.value)} className={inputClass} placeholder="Optional, 0–100" /></label>}
-        <label className="block"><span className="mb-1.5 block text-label font-semibold">{declineNeedsReason ? "Reason" : item.type === "training" ? "Completion note" : item.type === "case" ? "Resolution" : "Decision note"}</span><textarea required={declineNeedsReason || item.type === "case"} minLength={declineNeedsReason || item.type === "case" ? 10 : undefined} value={note} onChange={(event) => onNoteChange(event.target.value)} className={textareaClass} placeholder={declineNeedsReason ? "Record a clear reason for the requester and audit history" : item.type === "case" ? "Record the resolution shared with the employee" : "Optional context for the audit history"} /></label>
+        <label className="block">
+          <span className="mb-1.5 block text-label font-semibold">{declineNeedsReason ? "Reason" : item.type === "training" ? "Completion note" : item.type === "case" ? "Resolution" : "Decision note"}</span>
+          <textarea aria-describedby={noteIsRequired ? "workflow-note-requirement" : undefined} required={noteIsRequired} value={note} onChange={(event) => onNoteChange(event.target.value)} className={textareaClass} placeholder={declineNeedsReason ? "Record a clear reason for the requester and audit history" : item.type === "case" ? "Record the resolution shared with the employee" : "Optional context for the audit history"} />
+          {noteIsRequired && <span id="workflow-note-requirement" className={cn("mt-1 block text-meta", noteLength > 0 && noteLength < MIN_AUDIT_NOTE_LENGTH ? "text-destructive" : "text-muted-foreground")}>{noteLength < MIN_AUDIT_NOTE_LENGTH ? `${MIN_AUDIT_NOTE_LENGTH - noteLength} more character${MIN_AUDIT_NOTE_LENGTH - noteLength === 1 ? "" : "s"} required` : "Ready to save to the audit history"}</span>}
+        </label>
         {error && <p role="alert" className="text-meta text-destructive">{error}</p>}
       </div>
       <footer className="flex justify-end gap-2 border-t border-border px-5 py-4">
         <Button type="button" variant="ghost" onClick={onClose} disabled={busy}>Cancel</Button>
-        <Button type="submit" variant={action === "reject" ? "destructive" : "default"} disabled={busy || (declineNeedsReason || item.type === "case") && note.trim().length < 10}>{busy && <LoaderCircle className="size-4 animate-spin" />}{action === "approve" ? "Approve request" : action === "reject" ? "Decline request" : item.type === "case" ? "Resolve request" : "Record completion"}</Button>
+        <Button type="submit" variant={action === "reject" ? "destructive" : "default"} disabled={busy}>{busy && <LoaderCircle className="size-4 animate-spin" />}{action === "approve" ? "Approve request" : action === "reject" ? "Decline request" : item.type === "case" ? "Resolve request" : "Record completion"}</Button>
       </footer>
     </form>
   </div>
@@ -269,15 +276,21 @@ export function InboxClient({ initialData, actor, people }: { initialData: Inbox
   async function submitAction(event: React.FormEvent) {
     event.preventDefault()
     if (!pending) return
+    const noteIsRequired = pending.action === "reject" || pending.item.type === "case"
+    const normalizedNote = actionNote.trim()
+    if (noteIsRequired && normalizedNote.length < MIN_AUDIT_NOTE_LENGTH) {
+      setActionError(`Enter at least ${MIN_AUDIT_NOTE_LENGTH} characters so the requester has a clear outcome.`)
+      return
+    }
     setActionBusy(true)
     setActionError("")
     try {
       const { item, action } = pending
       const request = item.type === "leave"
-        ? { url: `/api/v1/hr/leave/${encodeURIComponent(item.id)}/decision`, method: "POST", body: { decision: action === "approve" ? "Approved" : "Rejected", note: actionNote } }
+        ? { url: `/api/v1/hr/leave/${encodeURIComponent(item.id)}/decision`, method: "POST", body: { decision: action === "approve" ? "Approved" : "Rejected", note: normalizedNote } }
         : item.type === "training"
-          ? { url: `/api/v1/hr/learning/assignments/${encodeURIComponent(item.id)}`, method: "PATCH", body: { assessmentScore: assessmentScore ? Number(assessmentScore) : null, note: actionNote } }
-          : { url: "/api/v1/hr/workflows/action", method: "POST", body: { id: item.id, type: item.type, action, note: actionNote } }
+          ? { url: `/api/v1/hr/learning/assignments/${encodeURIComponent(item.id)}`, method: "PATCH", body: { assessmentScore: assessmentScore ? Number(assessmentScore) : null, note: normalizedNote } }
+          : { url: "/api/v1/hr/workflows/action", method: "POST", body: { id: item.id, type: item.type, action, note: normalizedNote } }
       const response = await fetch(request.url, { method: request.method, headers: { "content-type": "application/json" }, body: JSON.stringify(request.body) })
       const result = await response.json() as { error?: string; message?: string }
       if (!response.ok) throw new Error(result.error === "AUTH_REQUIRED" ? "Sign in is required to update this work item." : result.error || "The update could not be saved.")

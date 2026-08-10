@@ -16,5 +16,6 @@ locals {
     application = "laidbackhr"
     environment = var.environment
     managed_by  = "terraform"
+    workload    = "hr-analytics-platform"
   }
 }

@@ -16,6 +16,7 @@ import type {
 } from "@/lib/hr-types"
 import { hrDomains } from "@/lib/hr-types"
 import { ensureHrDatabase, readAttritionModelProfiles, readDomainRows } from "@/lib/server/hr-repository"
+import { cachedAnalyticsRead } from "@/lib/server/analytics-cache"
 import { buildWorkforceImpact } from "@/lib/server/workforce-impact"
 
 function inRange(date: string | null, filters: HrFilters): boolean {
@@ -133,24 +134,32 @@ export async function getWorkspaceDomainStatus(): Promise<DomainStatus[]> {
 }
 
 export async function getWorkforceDimensions(): Promise<{ departments: string[]; jobTitles: string[]; locations: string[] }> {
-  const database = await ensureHrDatabase()
-  const [employees, requisitions] = await Promise.all([
-    database.prepare(`SELECT DISTINCT department, job_title, location
-      FROM employee_directory_view
-      WHERE archived_at IS NULL`).all<{ department: string; job_title: string; location: string }>(),
-    database.prepare(`SELECT DISTINCT department, position, location
-      FROM hiring_requisitions_view`).all<{ department: string; position: string; location: string }>(),
-  ])
-  const employeeRows = employees.results ?? []
-  const requisitionRows = requisitions.results ?? []
-  return {
-    departments: unique([...employeeRows.map((row) => row.department), ...requisitionRows.map((row) => row.department)]),
-    jobTitles: unique([...employeeRows.map((row) => row.job_title), ...requisitionRows.map((row) => row.position)]),
-    locations: unique([...employeeRows.map((row) => row.location), ...requisitionRows.map((row) => row.location)]),
-  }
+  return cachedAnalyticsRead("workforce:dimensions", async () => {
+    const database = await ensureHrDatabase()
+    const [employees, requisitions] = await Promise.all([
+      database.prepare(`SELECT DISTINCT department, job_title, location
+        FROM employee_directory_view
+        WHERE archived_at IS NULL`).all<{ department: string; job_title: string; location: string }>(),
+      database.prepare(`SELECT DISTINCT department, position, location
+        FROM hiring_requisitions_view`).all<{ department: string; position: string; location: string }>(),
+    ])
+    const employeeRows = employees.results ?? []
+    const requisitionRows = requisitions.results ?? []
+    return {
+      departments: unique([...employeeRows.map((row) => row.department), ...requisitionRows.map((row) => row.department)]),
+      jobTitles: unique([...employeeRows.map((row) => row.job_title), ...requisitionRows.map((row) => row.position)]),
+      locations: unique([...employeeRows.map((row) => row.location), ...requisitionRows.map((row) => row.location)]),
+    }
+  })
 }
 
 export async function getWorkforceAnalytics(filters: HrFilters = {}, options: { rowLimit?: number | null } = {}): Promise<WorkforceAnalytics> {
+  if (options.rowLimit === null) return calculateWorkforceAnalytics(filters, options)
+  const cacheKey = JSON.stringify({ filters: Object.fromEntries(Object.entries(filters).sort(([left], [right]) => left.localeCompare(right))), rowLimit: options.rowLimit ?? "default" })
+  return cachedAnalyticsRead(`workforce:${cacheKey}`, () => calculateWorkforceAnalytics(filters, options))
+}
+
+async function calculateWorkforceAnalytics(filters: HrFilters = {}, options: { rowLimit?: number | null } = {}): Promise<WorkforceAnalytics> {
   const normalizedFilters: WorkforceAnalytics["filters"] = { ...filters, period: filters.period ?? "month" }
   const outputRows = <T>(rows: T[], defaultLimit: number): T[] => options.rowLimit === null ? rows : rows.slice(0, options.rowLimit ?? defaultLimit)
   const database = await ensureHrDatabase()

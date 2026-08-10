@@ -1,6 +1,7 @@
 import type { ImportIssue, ImportJob, ImportMode, ImportPreview } from "@/lib/data-import-types"
 import { hrDomains, importFields, type HrDomain } from "@/lib/hr-types"
 import { runtimeEnv } from "@/lib/server/runtime-env"
+import { cachedAnalyticsRead } from "@/lib/server/analytics-cache"
 
 export type Statement = {
   bind(...values: unknown[]): Statement
@@ -321,13 +322,17 @@ export async function getDataImportSummary(): Promise<{ completedImports: number
 }
 
 export async function readDomainRows(domain: HrDomain): Promise<Array<Record<string, unknown>>> {
-  const database = await ensureHrDatabase()
-  const result = await database.prepare(`SELECT * FROM ${readViewByDomain[domain]} ORDER BY updated_at DESC LIMIT 10000`).all<Record<string, unknown>>()
-  return result.results ?? []
+  return cachedAnalyticsRead(`domain:${domain}`, async () => {
+    const database = await ensureHrDatabase()
+    const result = await database.prepare(`SELECT * FROM ${readViewByDomain[domain]} ORDER BY updated_at DESC LIMIT 10000`).all<Record<string, unknown>>()
+    return result.results ?? []
+  })
 }
 
 export async function readAttritionModelProfiles(): Promise<Array<Record<string, unknown>>> {
-  const database = await ensureHrDatabase()
-  const result = await database.prepare("SELECT * FROM attrition_model_profiles_view ORDER BY risk_score DESC LIMIT 10000").all<Record<string, unknown>>()
-  return result.results ?? []
+  return cachedAnalyticsRead("domain:attrition-model", async () => {
+    const database = await ensureHrDatabase()
+    const result = await database.prepare("SELECT * FROM attrition_model_profiles_view ORDER BY risk_score DESC LIMIT 10000").all<Record<string, unknown>>()
+    return result.results ?? []
+  })
 }

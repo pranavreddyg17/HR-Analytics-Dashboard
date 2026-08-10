@@ -8,6 +8,7 @@ import operatingModelMigration from "@/db/postgres/0005_operating_model.sql?raw"
 import onboardingAndCapabilityMigration from "@/db/postgres/0006_onboarding_and_capability.sql?raw"
 import employeeServiceOutcomesMigration from "@/db/postgres/0007_employee_service_outcomes.sql?raw"
 import type { Database, Statement } from "@/lib/server/hr-repository"
+import { invalidateAnalyticsReads, sqlAffectsAnalytics } from "@/lib/server/analytics-cache"
 import { runtimeEnv } from "@/lib/server/runtime-env"
 
 types.setTypeParser(20, (value) => Number(value))
@@ -70,6 +71,7 @@ class PostgresStatement {
 
   async run(): Promise<{ success: boolean }> {
     await this.execute()
+    if (sqlAffectsAnalytics(this.sourceSql)) invalidateAnalyticsReads()
     return { success: true }
   }
 
@@ -100,6 +102,7 @@ class PostgresDatabase implements Database {
       const results = []
       for (const statement of statements) results.push(await (statement as PostgresStatement).execute(client))
       await client.query("COMMIT")
+      if (statements.some((statement) => sqlAffectsAnalytics((statement as PostgresStatement).sourceSql))) invalidateAnalyticsReads()
       return results
     } catch (error) {
       await client.query("ROLLBACK")

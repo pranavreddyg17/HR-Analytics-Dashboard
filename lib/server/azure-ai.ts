@@ -43,7 +43,7 @@ async function createAzureEmbedding(input: string): Promise<number[] | null> {
     method: "POST",
     headers: { "content-type": "application/json", "api-key": apiKey },
     body: JSON.stringify({ model: runtimeEnv.AZURE_OPENAI_EMBEDDING_MODEL ?? "text-embedding-3-small", input }),
-    signal: AbortSignal.timeout(5_000),
+    signal: AbortSignal.timeout(3_500),
   })
   if (!response.ok) return null
   const body = await response.json() as { data?: Array<{ embedding?: number[] }> }
@@ -74,7 +74,7 @@ export async function searchAzureKnowledge(query: string, limit = 4): Promise<Kn
     method: "POST",
     headers: { "content-type": "application/json", "api-key": apiKey },
     body: JSON.stringify(body),
-    signal: AbortSignal.timeout(6_000),
+    signal: AbortSignal.timeout(4_500),
   })
   if (!response.ok) return []
   const result = await response.json() as { value?: SearchDocument[] }
@@ -101,7 +101,7 @@ export async function synthesizeWithAzureResponses(input: { system: string; user
         { role: "user", content: [{ type: "input_text", text: input.user }] },
       ],
     }),
-    signal: AbortSignal.timeout(30_000),
+    signal: AbortSignal.timeout(15_000),
   })
   if (!response.ok) return null
   const body = await response.json() as { output_text?: string; output?: Array<{ content?: Array<{ type?: string; text?: string }> }> }

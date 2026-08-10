@@ -522,7 +522,12 @@ export async function listInboxItems(actor?: RequestActor): Promise<InboxItem[]>
       const dueDate = row.due_at?.slice(0, 10) ?? null
       const sla = slaStatus(dueDate, isCompleted)
       const restricted = detailValue(row, "confidentiality") === "restricted"
-      const canAct = Boolean(!isCompleted && actor && (isPeopleTeam || !restricted && row.owner_email?.toLowerCase() === ownEmail))
+      const selfSubmitted = row.requested_by_email?.toLowerCase() === ownEmail
+      const roleCanAct = type === "reimbursement"
+        ? isPeopleTeam && !selfSubmitted
+        : (isPeopleTeam || !restricted && row.owner_email?.toLowerCase() === ownEmail)
+          && (!selfSubmitted || actor?.role === "admin" && !restricted)
+      const canAct = Boolean(!isCompleted && actor && roleCanAct)
       const amount = detailValue(row, "amount")
       const currency = detailValue(row, "currency")
       return {

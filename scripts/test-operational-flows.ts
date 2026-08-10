@@ -17,6 +17,7 @@ import { actOnWorkflow, createWorkflow } from "@/lib/server/workflows"
 if (!process.env.DATABASE_URL) throw new Error("DATABASE_URL is required for operational integration tests.")
 
 const hr: RequestActor = { email: "hr.integration@example.com", displayName: "HR Integration", role: "hr" }
+const admin: RequestActor = { email: "admin.integration@example.com", displayName: "Admin Integration", role: "admin" }
 const manager: RequestActor = { email: "manager.integration@example.com", displayName: "Morgan Manager", role: "manager" }
 const employee: RequestActor = { email: "employee.integration@example.com", displayName: "Elliot Employee", role: "employee" }
 const newHire: RequestActor = { email: "newhire.integration@example.com", displayName: "Nora Newhire", role: "employee" }
@@ -30,6 +31,7 @@ function inboxItem(operations: Awaited<ReturnType<typeof getInboxOperations>>, i
 async function main() {
 const db = await ensureHrDatabase()
 await db.batch([
+  db.prepare("INSERT INTO app_users(email, display_name, role, status, invited_by, onboarding_status) VALUES (?, ?, 'admin', 'active', 'integration-test', 'not_required') ON CONFLICT(email) DO NOTHING").bind(admin.email, admin.displayName),
   db.prepare("INSERT INTO app_users(email, display_name, role, status, invited_by, onboarding_status) VALUES (?, ?, 'hr', 'active', 'integration-test', 'not_required') ON CONFLICT(email) DO NOTHING").bind(hr.email, hr.displayName),
   db.prepare("INSERT INTO app_users(email, display_name, role, status, invited_by, onboarding_status) VALUES (?, ?, 'manager', 'active', 'integration-test', 'not_required') ON CONFLICT(email) DO NOTHING").bind(manager.email, manager.displayName),
   db.prepare("INSERT INTO app_users(email, display_name, role, status, invited_by, onboarding_status) VALUES (?, ?, 'employee', 'active', 'integration-test', 'not_required') ON CONFLICT(email) DO NOTHING").bind(employee.email, employee.displayName),
@@ -61,7 +63,20 @@ const employeeRecord = await createPerson({
   employment_type: "Full-time",
   employment_status: "Active",
 }, hr)
+const adminRecord = await createPerson({
+  employee_id: "INT-ADMIN",
+  first_name: "Admin",
+  last_name: "Integration",
+  work_email: admin.email,
+  department: "People Operations",
+  job_title: "HR Administrator",
+  location: "Remote",
+  hire_date: "2021-01-04",
+  employment_type: "Full-time",
+  employment_status: "Active",
+}, hr)
 await db.batch([
+  db.prepare("UPDATE app_users SET employee_id=?, onboarding_status='complete' WHERE email=?").bind(adminRecord.employee_id, admin.email),
   db.prepare("UPDATE app_users SET employee_id=?, onboarding_status='complete' WHERE email=?").bind(managerRecord.employee_id, manager.email),
   db.prepare("UPDATE app_users SET employee_id=?, onboarding_status='complete' WHERE email=?").bind(employeeRecord.employee_id, employee.email),
 ])
@@ -106,12 +121,24 @@ const employeeCase = await createEmployeeCase({ category: "equipment", subject: 
 managerInbox = await getInboxOperations(manager)
 assert.deepEqual(inboxItem(managerInbox, employeeCase.id).actions, ["complete"])
 assert.equal(inboxItem(managerInbox, employeeCase.id).assignedTo, "manager")
+await assert.rejects(() => actOnWorkflow({ id: employeeCase.id, type: "case", action: "complete", note: "short" }, manager), /clear resolution/i)
+portal = await getEmployeePortal(employee)
+assert.equal(portal.cases.find((row) => row.id === employeeCase.id)?.status, "open")
 await actOnWorkflow({ id: employeeCase.id, type: "case", action: "complete", note: "Replacement approved and the service desk ticket was created." }, manager)
 portal = await getEmployeePortal(employee)
 assert.equal(portal.cases.find((row) => row.id === employeeCase.id)?.status, "resolved")
 assert.match(String(portal.cases.find((row) => row.id === employeeCase.id)?.resolution_note), /service desk/i)
 managerInbox = await getInboxOperations(manager)
 assert.equal(inboxItem(managerInbox, employeeCase.id).isCompleted, true)
+
+const adminCase = await createEmployeeCase({ category: "equipment", subject: "Administrator equipment request", description: "A replacement laptop is required for normal workspace administration.", confidentiality: "hr" }, admin)
+let adminInbox = await getInboxOperations(admin)
+assert.deepEqual(inboxItem(adminInbox, adminCase.id).actions, ["complete"])
+await actOnWorkflow({ id: adminCase.id, type: "case", action: "complete", note: "Replacement approved and assigned to the service desk." }, admin)
+portal = await getEmployeePortal(admin)
+assert.equal(portal.cases.find((row) => row.id === adminCase.id)?.status, "resolved")
+adminInbox = await getInboxOperations(admin)
+assert.equal(inboxItem(adminInbox, adminCase.id).isCompleted, true)
 
 const course = await createLearningCourse({ code: "INT-AZ-101", title: "Integration cloud reliability", defaultHours: 3, isMandatory: false, skillIds: [] }, hr)
 const campaign = await assignLearningCourse({ targetType: "job_title", targetValue: "Software Engineer II", courseId: course.id, dueDate: "2027-03-01", hours: 3, note: "Role capability evidence." }, hr)
