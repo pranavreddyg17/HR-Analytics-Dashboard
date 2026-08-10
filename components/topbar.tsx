@@ -49,6 +49,7 @@ export function Topbar({ user, navigation, onOpenPalette, onOpenNavigation }: { 
                 <p className="truncate text-sm font-semibold">{user.displayName}</p>
                 <p className="mt-0.5 truncate text-xs text-muted-foreground">{user.email}</p>
               </div>
+              <Link href="/employee" className="user-menu__item">Employee portal</Link>
               {user.authenticated ? (
                 <SignOutControl className="user-menu__item" />
               ) : (

@@ -152,8 +152,8 @@ function EmployeeDrawerPanel({
       })
       const body = await response.json() as ManagedEmployee & { error?: string }
       if (!response.ok) throw new Error(body.error ?? `Unable to ${mode === "create" ? "add" : "update"} employee.`)
-      onSaved(body)
       onClose()
+      onSaved(body)
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : "Unable to save this employee.")
     } finally {

@@ -265,7 +265,7 @@ function WorkforceComposition({
           <p className="text-card-title font-semibold">Workforce by department</p>
           <p className="mt-0.5 text-meta text-muted-foreground">Current employee distribution</p>
           <div className="relative mt-2 h-36">
-            <ResponsiveContainer width="100%" height="100%">
+            <ResponsiveContainer width="100%" height="100%" minWidth={0} initialDimension={{ width: 240, height: 144 }}>
               <PieChart>
                 <Pie
                   data={data}

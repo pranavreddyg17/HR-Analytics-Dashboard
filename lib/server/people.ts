@@ -167,8 +167,8 @@ export async function getPerson(employeeId: string, actor?: RequestActor): Promi
       WHERE a.employee_id=? ORDER BY a.is_primary DESC, a.starts_on DESC LIMIT 30`).bind(employeeId).all<Record<string, unknown>>(),
     canViewSensitiveHrData ? database.prepare("SELECT annual_salary, currency, pay_frequency, effective_from, effective_to FROM employee_compensation WHERE employee_id=? ORDER BY effective_from DESC LIMIT 20").bind(employeeId).all<Record<string, unknown>>() : Promise.resolve({ results: [] as Record<string, unknown>[] }),
     canViewSensitiveHrData ? database.prepare("SELECT id, document_type, file_name, content_type, size_bytes, visibility, uploaded_by_email, created_at FROM employee_documents WHERE employee_id=? ORDER BY created_at DESC LIMIT 50").bind(employeeId).all<Record<string, unknown>>() : Promise.resolve({ results: [] as Record<string, unknown>[] }),
-    canViewSensitiveHrData ? database.prepare("SELECT id, category, expense_date, amount, currency, status, submitted_at, reviewed_at FROM expense_claims WHERE employee_id=? ORDER BY created_at DESC LIMIT 50").bind(employeeId).all<Record<string, unknown>>() : Promise.resolve({ results: [] as Record<string, unknown>[] }),
-    canViewSensitiveHrData ? database.prepare("SELECT id, category, subject, confidentiality, status, assigned_to_email, submitted_at, resolved_at FROM employee_cases WHERE employee_id=? ORDER BY submitted_at DESC LIMIT 50").bind(employeeId).all<Record<string, unknown>>() : Promise.resolve({ results: [] as Record<string, unknown>[] }),
+    canViewSensitiveHrData ? database.prepare("SELECT id, category, expense_date, amount, currency, description, status, receipt_document_id, submitted_at, reviewed_at, decision_note FROM expense_claims WHERE employee_id=? ORDER BY created_at DESC LIMIT 50").bind(employeeId).all<Record<string, unknown>>() : Promise.resolve({ results: [] as Record<string, unknown>[] }),
+    canViewSensitiveHrData ? database.prepare("SELECT id, category, subject, description, confidentiality, status, assigned_to_email, submitted_at, resolved_at, resolution_note, resolved_by_email FROM employee_cases WHERE employee_id=? ORDER BY submitted_at DESC LIMIT 50").bind(employeeId).all<Record<string, unknown>>() : Promise.resolve({ results: [] as Record<string, unknown>[] }),
     canViewSensitiveHrData ? database.prepare(`SELECT r.id, r.status, r.employee_rating, r.manager_rating, r.submitted_at, r.completed_at, c.name AS cycle_name, c.starts_on, c.ends_on
       FROM performance_reviews r JOIN review_cycles c ON c.id=r.cycle_id WHERE r.employee_id=? ORDER BY c.ends_on DESC LIMIT 20`).bind(employeeId).all<Record<string, unknown>>()
       : Promise.resolve({ results: [] as Record<string, unknown>[] }),
@@ -294,7 +294,7 @@ export async function listInboxItems(actor?: RequestActor): Promise<InboxItem[]>
     updated_at?: string
   }
   type InsightWorkflow = WorkflowPerson & { id: string; title: string; source_entity_id: string | null }
-  type ServiceWorkflow = WorkflowPerson & { id: string; type: "reimbursement" | "employee_case"; title: string; employee_id: string; first_name?: string; last_name?: string; preferred_name?: string | null; work_email?: string | null; manager_id?: string | null; manager_email?: string | null }
+  type ServiceWorkflow = WorkflowPerson & { id: string; type: "reimbursement" | "employee_case"; title: string; employee_id: string; first_name?: string; last_name?: string; preferred_name?: string | null; work_email?: string | null; manager_id?: string | null; manager_email?: string | null; service_description?: string | null; receipt_document_id?: string | null }
   type OnboardingWorkflow = WorkflowPerson & { id: string; title: string; employee_id: string; first_name: string; last_name: string; preferred_name: string | null; organization_name: string; department: string; job_title: string; job_level: string; location: string; manager_name: string | null; requested_annual_salary: number; salary_currency: string }
   const workflowColumns = `
     w.requested_by_email,
@@ -343,10 +343,13 @@ export async function listInboxItems(actor?: RequestActor): Promise<InboxItem[]>
       LEFT JOIN employee_directory_view oe ON LOWER(oe.work_email)=LOWER(w.owner_email) AND oe.archived_at IS NULL
       WHERE w.type='insight'
       ORDER BY COALESCE(w.completed_at, w.updated_at) DESC LIMIT 160`).all<InsightWorkflow>(),
-    database.prepare(`SELECT w.id, w.type, w.title, w.employee_id, e.first_name, e.last_name, e.preferred_name, e.work_email, e.manager_id, m.work_email AS manager_email, ${workflowColumns}
+    database.prepare(`SELECT w.id, w.type, w.title, w.employee_id, e.first_name, e.last_name, e.preferred_name, e.work_email, e.manager_id, m.work_email AS manager_email,
+        COALESCE(ec.description, ex.description) AS service_description, ex.receipt_document_id, ${workflowColumns}
       FROM workflow_requests w
       JOIN employee_directory_view e ON e.employee_id=w.employee_id
       LEFT JOIN employee_directory_view m ON m.employee_id=e.manager_id
+      LEFT JOIN employee_cases ec ON w.type='employee_case' AND ec.id=w.source_entity_id
+      LEFT JOIN expense_claims ex ON w.type='reimbursement' AND ex.id=w.source_entity_id
       LEFT JOIN app_users au ON LOWER(au.email)=LOWER(w.owner_email)
       LEFT JOIN employee_directory_view oe ON LOWER(oe.work_email)=LOWER(w.owner_email) AND oe.archived_at IS NULL
       WHERE w.type IN ('reimbursement', 'employee_case')
@@ -530,6 +533,8 @@ export async function listInboxItems(actor?: RequestActor): Promise<InboxItem[]>
         requestContext: [
           { label: "Category", value: detailValue(row, "category") || "Other" },
           ...(amount ? [{ label: "Amount", value: `${currency || "USD"} ${amount}` }] : []),
+          ...((row.service_description || detailValue(row, "description")) ? [{ label: type === "case" ? "Employee request" : "Description", value: row.service_description || detailValue(row, "description") as string }] : []),
+          ...(row.receipt_document_id ? [{ label: "Receipt", value: `Document ${row.receipt_document_id} is attached to the employee profile` }] : []),
           { label: "Submitted by", value: row.requested_by_email || row.work_email || "Employee" },
         ],
         assignedTo: row.manager_email && row.owner_email?.toLowerCase() === row.manager_email.toLowerCase() ? "manager" : "hr",

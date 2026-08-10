@@ -1,5 +1,6 @@
 "use client"
 
+import Link from "next/link"
 import { useState } from "react"
 import { useRouter, useSearchParams } from "next/navigation"
 
@@ -18,6 +19,7 @@ type PortalData = {
     location: string
     manager_name: string | null
     hire_date: string
+    employment_status: string
   }
   projects: Array<Record<string, unknown>>
   compensation: Record<string, unknown> | null
@@ -57,7 +59,7 @@ function Status({ value }: { value: unknown }) {
   return <span className="rounded border border-border bg-muted/40 px-2 py-0.5 text-status font-semibold capitalize">{String(value || "unknown").replaceAll("_", " ")}</span>
 }
 
-export function EmployeePortal({ initialData, user }: { initialData: PortalData; user: { name: string; email: string; authenticated: boolean } }) {
+export function EmployeePortal({ initialData, user }: { initialData: PortalData; user: { name: string; email: string; authenticated: boolean; workspaceAccess: boolean } }) {
   const router = useRouter()
   const searchParams = useSearchParams()
   const [data, setData] = useState(initialData)
@@ -166,9 +168,10 @@ export function EmployeePortal({ initialData, user }: { initialData: PortalData;
     const formElement = event.currentTarget
     const form = new FormData(formElement)
     setBusy(true); setMessage("")
+    let receiptDocumentId: string | null = null
     try {
       const receipt = form.get("receipt")
-      const receiptDocumentId = receipt instanceof File && receipt.size ? await uploadDocument(receipt, "receipt") : null
+      receiptDocumentId = receipt instanceof File && receipt.size ? await uploadDocument(receipt, "receipt") : null
       const saved = await submit("submit_expense", {
       category: form.get("category"),
       expenseDate: form.get("expenseDate"),
@@ -178,7 +181,12 @@ export function EmployeePortal({ initialData, user }: { initialData: PortalData;
         receiptDocumentId,
       })
       if (saved) formElement.reset()
+      else if (receiptDocumentId) {
+        await fetch(`/api/v1/employee/documents?id=${encodeURIComponent(receiptDocumentId)}`, { method: "DELETE" }).catch(() => undefined)
+        receiptDocumentId = null
+      }
     } catch (error) {
+      if (receiptDocumentId) await fetch(`/api/v1/employee/documents?id=${encodeURIComponent(receiptDocumentId)}`, { method: "DELETE" }).catch(() => undefined)
       setMessage(error instanceof Error ? error.message : "Reimbursement could not be submitted.")
     } finally {
       setBusy(false)
@@ -225,10 +233,10 @@ export function EmployeePortal({ initialData, user }: { initialData: PortalData;
   }
 
   const primaryProject = data.projects.find((row) => Boolean(row.is_primary)) ?? data.projects[0]
-  const requestHistory: Array<{ id: string; kind: string; title: string; status: unknown; submitted: unknown }> = [
-    ...data.claims.map((row) => ({ id: String(row.id), kind: "Reimbursement", title: `${String(row.category)} · ${money(row.amount, row.currency)}`, status: row.status, submitted: row.submitted_at })),
-    ...data.cases.map((row) => ({ id: String(row.id), kind: "HR request", title: String(row.subject), status: row.status, submitted: row.submitted_at })),
-    ...data.leave.map((row) => ({ id: String(row.id), kind: "Leave", title: `${String(row.leave_type)} · ${String(row.leave_days)} days`, status: row.approval_status, submitted: row.start_date })),
+  const requestHistory: Array<{ id: string; kind: string; title: string; status: unknown; submitted: unknown; outcome: unknown }> = [
+    ...data.claims.map((row) => ({ id: String(row.id), kind: "Reimbursement", title: `${String(row.category)} · ${money(row.amount, row.currency)}`, status: row.status, submitted: row.submitted_at, outcome: row.decision_note })),
+    ...data.cases.map((row) => ({ id: String(row.id), kind: "HR request", title: String(row.subject), status: row.status, submitted: row.submitted_at, outcome: row.resolution_note })),
+    ...data.leave.map((row) => ({ id: String(row.id), kind: "Leave", title: `${String(row.leave_type)} · ${String(row.leave_days)} days`, status: row.approval_status, submitted: row.start_date, outcome: row.decision_note })),
   ].sort((a, b) => String(b.submitted || "").localeCompare(String(a.submitted || "")))
   return <div className="employee-shell min-h-screen text-foreground">
     <SessionRevalidator enabled={user.authenticated} />
@@ -239,7 +247,10 @@ export function EmployeePortal({ initialData, user }: { initialData: PortalData;
           {portalViews.map((item) => <button key={item.value} type="button" aria-current={active === item.value ? "page" : undefined} onClick={() => selectView(item.value)} className={active === item.value ? "employee-shell__navigation-link employee-shell__navigation-link--active" : "employee-shell__navigation-link"}>{item.label}</button>)}
         </nav>
         <div className="employee-shell__account hidden text-right sm:block"><p className="text-card-title">{user.name}</p><p className="text-meta">{user.email}</p></div>
-        <SignOutControl className="employee-shell__sign-out" />
+        <div className="ml-auto flex items-center gap-3">
+          {user.workspaceAccess && <Link href="/" className="employee-shell__sign-out">HR workspace</Link>}
+          <SignOutControl className="employee-shell__sign-out" />
+        </div>
       </div>
     </header>
 
@@ -250,7 +261,7 @@ export function EmployeePortal({ initialData, user }: { initialData: PortalData;
       {active === "overview" && <>
         <section className="grid gap-4 lg:grid-cols-[1.3fr_1fr]">
           <div className="surface-card p-5">
-            <div className="flex items-start justify-between gap-4"><div><h2 className="text-section-title">{data.employee.display_name}</h2><p className="mt-1 text-body text-muted-foreground">{data.employee.job_title} · {data.employee.department}</p></div><Status value="Active" /></div>
+            <div className="flex items-start justify-between gap-4"><div><h2 className="text-section-title">{data.employee.display_name}</h2><p className="mt-1 text-body text-muted-foreground">{data.employee.job_title} · {data.employee.department}</p></div><Status value={data.employee.employment_status} /></div>
             <dl className="mt-5 grid gap-x-6 gap-y-4 sm:grid-cols-2">
               <div><dt className="text-label text-muted-foreground">Manager</dt><dd className="mt-1 text-body">{data.employee.manager_name || "Not assigned"}</dd></div>
               <div><dt className="text-label text-muted-foreground">Location</dt><dd className="mt-1 text-body">{data.employee.location}</dd></div>
@@ -283,7 +294,7 @@ export function EmployeePortal({ initialData, user }: { initialData: PortalData;
         <form onSubmit={submitLeave} className="surface-card p-5"><h2 className="text-section-title">Request leave</h2><div className="mt-4 space-y-3"><label className="block text-label">Leave type<select name="leaveType" className={fieldClass} defaultValue="Annual"><option>Annual</option><option>Sick</option><option>Parental</option><option>Personal</option><option>Caregiver</option><option>Unpaid</option></select></label><label className="block text-label">Start date<Input required name="startDate" type="date" className={fieldClass} /></label><label className="block text-label">End date<Input required name="endDate" type="date" className={fieldClass} /></label><label className="block text-label">Note<textarea name="note" className={textAreaClass} maxLength={600} /></label><Button type="submit" disabled={busy} className="w-full">Submit leave request</Button></div></form>
         <form onSubmit={submitExpense} className="surface-card p-5"><h2 className="text-section-title">Submit reimbursement</h2><div className="mt-4 space-y-3"><label className="block text-label">Category<select name="category" className={fieldClass} defaultValue="travel"><option value="travel">Travel</option><option value="meals">Meals</option><option value="office">Office</option><option value="training">Training</option><option value="wellness">Wellness</option><option value="other">Other</option></select></label><label className="block text-label">Expense date<Input required name="expenseDate" type="date" className={fieldClass} /></label><div className="grid grid-cols-[1fr_90px] gap-2"><label className="block text-label">Amount<Input required name="amount" type="number" min="0.01" step="0.01" className={fieldClass} /></label><label className="block text-label">Currency<Input required name="currency" defaultValue="USD" maxLength={3} className={fieldClass} /></label></div><label className="block text-label">Description<textarea required name="description" className={textAreaClass} minLength={5} maxLength={1000} /></label><label className="block text-label">Receipt<Input name="receipt" type="file" accept=".pdf,.jpg,.jpeg,.png" className={fieldClass} /></label><Button type="submit" disabled={busy} className="w-full">Submit reimbursement</Button></div></form>
         <form onSubmit={submitCase} className="surface-card p-5"><h2 className="text-section-title">Ask HR for help</h2><div className="mt-4 space-y-3"><label className="block text-label">Category<select name="category" className={fieldClass} defaultValue="payroll"><option value="payroll">Payroll</option><option value="benefits">Benefits</option><option value="workplace">Workplace</option><option value="equipment">Equipment</option><option value="access">Access</option><option value="policy">Policy</option><option value="other">Other</option></select></label><label className="block text-label">Subject<Input required name="subject" minLength={4} maxLength={160} className={fieldClass} /></label><label className="block text-label">Details<textarea required name="description" className={textAreaClass} minLength={10} maxLength={4000} /></label><label className="block text-label">Visible to<select name="confidentiality" className={fieldClass} defaultValue="hr"><option value="hr">HR</option><option value="manager">Manager and HR</option><option value="restricted">Restricted HR</option></select></label><Button type="submit" disabled={busy} className="w-full">Submit request</Button></div></form>
-        <section className="surface-card overflow-hidden xl:col-span-3"><div className="border-b border-border px-5 py-4"><h2 className="text-section-title">Request history</h2></div><div className="divide-y divide-border">{requestHistory.map((row) => <div key={`${row.kind}-${row.id}`} className="grid gap-2 px-5 py-3 sm:grid-cols-[120px_1fr_auto_auto] sm:items-center"><span className="text-meta text-muted-foreground">{row.kind}</span><span className="text-body font-semibold capitalize">{row.title}</span><Status value={row.status} /><span className="text-meta text-muted-foreground">{date(row.submitted)}</span></div>)}</div></section>
+        <section className="surface-card overflow-hidden xl:col-span-3"><div className="border-b border-border px-5 py-4"><h2 className="text-section-title">Request history</h2></div><div className="divide-y divide-border">{requestHistory.map((row) => <div key={`${row.kind}-${row.id}`} className="grid gap-2 px-5 py-3 sm:grid-cols-[120px_minmax(0,1fr)_auto_auto] sm:items-start"><span className="text-meta text-muted-foreground">{row.kind}</span><div><p className="text-body font-semibold capitalize">{row.title}</p>{Boolean(row.outcome) && <p className="mt-1 text-meta text-muted-foreground">Response: {String(row.outcome)}</p>}</div><Status value={row.status} /><span className="text-meta text-muted-foreground">{date(row.submitted)}</span></div>)}</div></section>
       </div>}
 
       {active === "learning" && <section className="surface-card overflow-hidden">

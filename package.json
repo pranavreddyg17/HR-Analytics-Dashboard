@@ -12,6 +12,8 @@
     "lint": "eslint . --ignore-pattern dist --ignore-pattern .next",
     "test:backend": "cd backend && PYTHONPATH=. .venv/bin/python -m pytest -q",
     "test:knowledge": "node scripts/evaluate-knowledge.mjs",
+    "test:operations": "tsx --import ./scripts/register-sql-loader.mjs scripts/test-operational-flows.ts",
+    "test:interactions": "node scripts/audit-interactions.mjs",
     "model:export": "cd backend && PYTHONPATH=. .venv/bin/python scripts/export_web_runtime.py",
     "test:live": "node --test tests/api-live.test.mjs",
     "ai:sync": "node scripts/sync-ai-search.mjs"
@@ -48,6 +50,7 @@
     "eslint-config-next": "16.2.12",
     "postcss": "^8.5.25",
     "tailwindcss": "4.2.1",
+    "tsx": "^4.23.11",
     "typescript": "5.9.3"
   },
   "type": "module",

@@ -80,8 +80,11 @@ export async function getEmployeePortal(actor: RequestActor) {
       ORDER BY effective_from DESC LIMIT 1
     `).bind(employee.employee_id).first<Record<string, unknown>>(),
     db.prepare(`
-      SELECT id, leave_type, start_date, end_date, leave_days, approval_status
-      FROM leave_requests_view WHERE employee_id=?
+      SELECT l.id, l.leave_type, l.start_date, l.end_date, l.leave_days, l.approval_status,
+        w.completion_notes AS decision_note
+      FROM leave_requests_view l
+      LEFT JOIN workflow_requests w ON w.id=l.id AND w.type='leave'
+      WHERE l.employee_id=?
       ORDER BY start_date DESC LIMIT 20
     `).bind(employee.employee_id).all<Record<string, unknown>>(),
     db.prepare(`
@@ -89,7 +92,8 @@ export async function getEmployeePortal(actor: RequestActor) {
       FROM expense_claims WHERE employee_id=? ORDER BY created_at DESC LIMIT 30
     `).bind(employee.employee_id).all<Record<string, unknown>>(),
     db.prepare(`
-      SELECT id, category, subject, confidentiality, status, assigned_to_email, submitted_at, resolved_at
+      SELECT id, category, subject, description, confidentiality, status, assigned_to_email,
+        submitted_at, resolved_at, resolution_note, resolved_by_email
       FROM employee_cases WHERE employee_id=? ORDER BY submitted_at DESC LIMIT 30
     `).bind(employee.employee_id).all<Record<string, unknown>>(),
     db.prepare(`
@@ -105,7 +109,7 @@ export async function getEmployeePortal(actor: RequestActor) {
     db.prepare(`
       SELECT id, document_type, file_name, content_type, size_bytes, visibility, created_at
       FROM employee_documents
-      WHERE employee_id=? AND visibility IN ('employee','manager','hr')
+      WHERE employee_id=? AND visibility='employee'
       ORDER BY created_at DESC LIMIT 30
     `).bind(employee.employee_id).all<Record<string, unknown>>(),
     db.prepare(`
@@ -142,7 +146,7 @@ export async function createExpenseClaim(value: unknown, actor: RequestActor) {
     if (!receipt) throw new PeopleError("The selected receipt is not available for this employee.", 422)
   }
   const id = `EXP-${crypto.randomUUID().slice(0, 12).toUpperCase()}`
-  const details = JSON.stringify({ category: input.category, expenseDate: input.expenseDate, amount: input.amount, currency: input.currency })
+  const details = JSON.stringify({ category: input.category, expenseDate: input.expenseDate, amount: input.amount, currency: input.currency, description: input.description, receiptDocumentId: input.receiptDocumentId ?? null })
   await db.batch([
     db.prepare(`
       INSERT INTO expense_claims(id, employee_id, category, expense_date, amount, currency, description, status, receipt_document_id, submitted_at)
@@ -150,7 +154,7 @@ export async function createExpenseClaim(value: unknown, actor: RequestActor) {
     `).bind(id, employee.employee_id, input.category, input.expenseDate, input.amount, input.currency, input.description, input.receiptDocumentId ?? null),
     db.prepare(`
       INSERT INTO workflow_requests(id, type, employee_id, title, status, details_json, requested_by_email, priority, owner_email, due_at, next_action, source_entity_type, source_entity_id, assigned_at, confidentiality_level)
-      VALUES (?, 'reimbursement', ?, 'Expense reimbursement', 'Submitted', ?, ?, 'medium', 'finance@laidbackhr.cloud', (CURRENT_DATE + INTERVAL '5 days')::date::text, 'Review the claim and receipt.', 'expense_claim', ?, CURRENT_TIMESTAMP, 'restricted')
+      VALUES (?, 'reimbursement', ?, 'Expense reimbursement', 'Submitted', ?, ?, 'medium', 'people-ops@laidbackhr.cloud', (CURRENT_DATE + INTERVAL '5 days')::date::text, 'Review the claim and receipt.', 'expense_claim', ?, CURRENT_TIMESTAMP, 'restricted')
     `).bind(id, employee.employee_id, details, actor.email, id),
     db.prepare("INSERT INTO employee_activity(id, employee_id, event_type, summary, changes_json, actor_email) VALUES (?, ?, 'expense_submitted', 'Expense reimbursement submitted', ?, ?)")
       .bind(crypto.randomUUID(), employee.employee_id, details, actor.email),
@@ -166,7 +170,7 @@ export async function createEmployeeCase(value: unknown, actor: RequestActor) {
   const owner = input.confidentiality === "manager" && employee.manager_email
     ? employee.manager_email
     : "people-ops@laidbackhr.cloud"
-  const details = JSON.stringify({ category: input.category, confidentiality: input.confidentiality })
+  const details = JSON.stringify({ category: input.category, confidentiality: input.confidentiality, description: input.description })
   await db.batch([
     db.prepare(`
       INSERT INTO employee_cases(id, employee_id, category, subject, description, confidentiality, status, assigned_to_email)

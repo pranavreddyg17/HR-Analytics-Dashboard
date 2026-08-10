@@ -56,6 +56,20 @@ stages:
               set -euo pipefail
               corepack enable
               pnpm install --frozen-lockfile
+              pnpm test:interactions
+              docker run --detach --rm --name laidbackhr-test-postgres \
+                --env POSTGRES_USER=postgres \
+                --env POSTGRES_PASSWORD=postgres \
+                --env POSTGRES_DB=laidbackhr_test \
+                --publish 5432:5432 postgres:16
+              cleanup_postgres() { docker stop laidbackhr-test-postgres >/dev/null 2>&1 || true; }
+              trap cleanup_postgres EXIT
+              for attempt in $(seq 1 30); do
+                if docker exec laidbackhr-test-postgres pg_isready -U postgres -d laidbackhr_test >/dev/null 2>&1; then break; fi
+                sleep 1
+              done
+              docker exec laidbackhr-test-postgres pg_isready -U postgres -d laidbackhr_test
+              DATABASE_URL='postgresql://postgres:postgres@127.0.0.1:5432/laidbackhr_test' DATABASE_SSL_MODE=disable pnpm test:operations
               pnpm test:knowledge
               pnpm lint
               pnpm exec tsc --noEmit

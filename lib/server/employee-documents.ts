@@ -45,12 +45,21 @@ function safeName(value: string): string {
   return (normalized || "document").slice(0, 180)
 }
 
-export async function uploadEmployeeDocument(file: File, metadata: unknown, actor: RequestActor) {
+export async function uploadEmployeeDocument(file: File, metadata: unknown, actor: RequestActor, requestedEmployeeId?: string | null) {
   const input = metadataSchema.parse(metadata)
+  if (!["admin", "hr"].includes(actor.role) && input.visibility !== "employee") throw new PeopleError("Employee uploads must remain visible to the employee and HR.", 403)
   if (!file.size || file.size > maximumBytes) throw new PeopleError("Documents must be between 1 byte and 10 MB.", 422)
   if (!allowedTypes.has(file.type)) throw new PeopleError("Upload a PDF, DOCX, JPEG, or PNG file.", 422)
   const db = await database()
-  const employeeId = await employeeForActor(db, actor)
+  const employeeId = requestedEmployeeId?.trim()
+    ? await (async () => {
+        if (!["admin", "hr"].includes(actor.role)) throw new PeopleError("Only HR can upload a document to another employee profile.", 403)
+        const target = await db.prepare("SELECT employee_id FROM employee_directory_view WHERE employee_id=? AND archived_at IS NULL")
+          .bind(requestedEmployeeId.trim()).first<{ employee_id: string }>()
+        if (!target) throw new PeopleError("Employee profile not found.", 404)
+        return target.employee_id
+      })()
+    : await employeeForActor(db, actor)
   const id = `DOC-${crypto.randomUUID().slice(0, 12).toUpperCase()}`
   const fileName = safeName(file.name)
   const blobName = `${employeeId}/${new Date().getUTCFullYear()}/${id}-${fileName}`
@@ -83,12 +92,28 @@ export async function downloadEmployeeDocument(id: string, actor: RequestActor) 
   const actorEmployee = await db.prepare("SELECT employee_id FROM employee_directory_view WHERE LOWER(work_email)=LOWER(?) AND archived_at IS NULL")
     .bind(actor.email).first<{ employee_id: string }>()
   const allowed = ["admin", "hr"].includes(actor.role)
-    || actorEmployee?.employee_id === row.employee_id
-    || actor.role === "manager" && actorEmployee?.employee_id === row.manager_id && row.visibility !== "hr"
+    || actorEmployee?.employee_id === row.employee_id && row.visibility === "employee"
+    || actor.role === "manager" && actorEmployee?.employee_id === row.manager_id && row.visibility === "manager"
   if (!allowed) throw new PeopleError("You do not have access to this document.", 403)
   if (Number(row.size_bytes) > maximumBytes) throw new PeopleError("Document is too large to download through this service.", 422)
   const response = await containerClient().getBlobClient(row.blob_name).download()
   const bytes = await response.blobBody?.then((value) => value.arrayBuffer())
   if (!bytes) throw new PeopleError("The document could not be read from Azure storage.", 503)
   return { bytes, fileName: row.file_name, contentType: row.content_type }
+}
+
+export async function deleteEmployeeDocument(id: string, actor: RequestActor): Promise<void> {
+  const db = await database()
+  const privileged = ["admin", "hr"].includes(actor.role)
+  const employeeId = privileged ? null : await employeeForActor(db, actor)
+  const row = await db.prepare(`
+    SELECT d.id, d.employee_id, d.blob_name,
+      EXISTS(SELECT 1 FROM expense_claims e WHERE e.receipt_document_id=d.id) AS in_use
+    FROM employee_documents d WHERE d.id=?
+  `).bind(id).first<{ id: string; employee_id: string; blob_name: string; in_use: boolean }>()
+  if (!row) return
+  if (!privileged && row.employee_id !== employeeId) throw new PeopleError("You do not have access to this document.", 403)
+  if (row.in_use) throw new PeopleError("This document is attached to an employee record and cannot be removed.", 409)
+  await containerClient().getBlobClient(row.blob_name).deleteIfExists()
+  await db.prepare("DELETE FROM employee_documents WHERE id=?").bind(id).run()
 }

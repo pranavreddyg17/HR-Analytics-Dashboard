@@ -1,6 +1,6 @@
 import { ZodError } from "zod"
 
-import { downloadEmployeeDocument, uploadEmployeeDocument } from "@/lib/server/employee-documents"
+import { deleteEmployeeDocument, downloadEmployeeDocument, uploadEmployeeDocument } from "@/lib/server/employee-documents"
 import { PeopleError } from "@/lib/server/people"
 import { requireRequestActor } from "@/lib/server/request-user"
 
@@ -19,8 +19,20 @@ export async function POST(request: Request) {
     const result = await uploadEmployeeDocument(file, {
       documentType: form.get("documentType"),
       visibility: form.get("visibility") || "employee",
-    }, actor)
+    }, actor, String(form.get("employeeId") || "") || null)
     return Response.json(result, { status: 201 })
+  } catch (error) {
+    return errorResponse(error)
+  }
+}
+
+export async function DELETE(request: Request) {
+  try {
+    const actor = await requireRequestActor(request)
+    const id = new URL(request.url).searchParams.get("id")
+    if (!id || id.length > 100) return Response.json({ error: "A valid document ID is required." }, { status: 422 })
+    await deleteEmployeeDocument(id, actor)
+    return Response.json({ message: "Document removed." })
   } catch (error) {
     return errorResponse(error)
   }

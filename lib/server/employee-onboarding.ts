@@ -28,9 +28,9 @@ async function database(): Promise<Database> {
   return db
 }
 
-type EmployeeOnboardingState = {
+export type EmployeeOnboardingState = {
   required: boolean
-  status: "required" | "submitted" | "complete"
+  status: "required" | "submitted" | "rejected" | "complete"
   submission: Record<string, unknown> | null
 }
 
@@ -39,21 +39,20 @@ export async function getEmployeeOnboardingState(actor: RequestActor): Promise<E
   const user = await db.prepare(`
     SELECT u.employee_id, u.onboarding_status,
       s.id AS submission_id, s.status AS submission_status, s.organization_name,
-      s.first_name, s.last_name, s.preferred_name, s.department, s.job_title,
+      s.first_name, s.last_name, s.preferred_name, s.phone, s.department, s.job_title,
       s.job_level, s.location, s.manager_name, s.manager_email, s.hire_date,
       s.employment_type, s.requested_annual_salary, s.salary_currency, s.review_note
     FROM app_users u
     LEFT JOIN employee_onboarding_submissions s ON s.user_email=u.email
-      AND s.status IN ('draft','submitted')
     WHERE u.email=?
     ORDER BY s.created_at DESC LIMIT 1
   `).bind(actor.email).first<Record<string, unknown>>()
   if (!user) throw new PeopleError("Your sign-in account could not be loaded.", 404)
-  if (user.employee_id) return { required: false, status: "complete", submission: null }
+  if (user.employee_id && String(user.onboarding_status) !== "submitted") return { required: false, status: "complete", submission: null }
   const submissionStatus = String(user.submission_status ?? "")
   return {
     required: true,
-    status: submissionStatus === "submitted" ? "submitted" : "required",
+    status: submissionStatus === "submitted" ? "submitted" : submissionStatus === "rejected" ? "rejected" : "required",
     submission: user.submission_id ? user : null,
   }
 }

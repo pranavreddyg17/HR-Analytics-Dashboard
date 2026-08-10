@@ -106,7 +106,9 @@ Use `.env.local.example` as the local configuration reference. Never commit secr
 ```bash
 pnpm lint
 pnpm exec tsc --noEmit
+pnpm test:interactions
 pnpm test:knowledge
+DATABASE_URL=postgresql://postgres:postgres@127.0.0.1:5432/laidbackhr_test DATABASE_SSL_MODE=disable pnpm test:operations
 pnpm build
 pnpm model:export
 

@@ -86,7 +86,7 @@ export function AccessManager({ ownerEmail }: { ownerEmail: string }) {
               <option value="admin">Admin</option>
             </select>
           </label>
-          <button disabled={saving} className="inline-flex h-9 items-center justify-center gap-2 rounded-md bg-primary px-4 text-sm font-semibold text-primary-foreground disabled:opacity-50">
+          <button type="submit" disabled={saving} className="inline-flex h-9 items-center justify-center gap-2 rounded-md bg-primary px-4 text-sm font-semibold text-primary-foreground disabled:opacity-50">
             {saving && <Loader2 className="size-4 animate-spin" />}
             Add account
           </button>
@@ -119,7 +119,7 @@ export function AccessManager({ ownerEmail }: { ownerEmail: string }) {
                   <option value="employee">Employee</option>
                   <option value="viewer">Viewer</option>
                 </select>
-                <button disabled={user.email === ownerEmail} onClick={() => update(user, { status: user.status === "active" ? "disabled" : "active" })} className="h-9 rounded-md border border-border bg-background px-3 text-xs font-semibold capitalize disabled:opacity-50">
+                <button type="button" disabled={user.email === ownerEmail} onClick={() => update(user, { status: user.status === "active" ? "disabled" : "active" })} className="h-9 rounded-md border border-border bg-background px-3 text-xs font-semibold capitalize disabled:opacity-50">
                   {user.status}
                 </button>
                 <button type="button" disabled={user.email === ownerEmail} onClick={() => setRemoveTarget(user)} className="inline-flex h-9 items-center justify-center rounded-md border border-border px-3 text-muted-foreground hover:bg-muted hover:text-destructive disabled:cursor-not-allowed disabled:opacity-30" aria-label={`Remove ${user.email}`} title={user.email === ownerEmail ? "The workspace owner cannot be removed" : "Remove access"}>Remove</button>

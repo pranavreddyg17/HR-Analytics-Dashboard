@@ -146,6 +146,10 @@ function ManagementTab({ data, onChanged }: { data: EmployeeProfileResponse; onC
   const endpoint = `/api/v1/hr/people/${encodeURIComponent(data.employee.employee_id)}/management`
   const today = new Date().toISOString().slice(0, 10)
   const scheduledMeetings = data.meetings.filter((meeting) => String(meeting.status) === "scheduled")
+  const serviceRequests = [
+    ...data.reimbursements.map((row) => ({ id: String(row.id), submittedAt: String(row.submitted_at ?? ""), requestType: "Reimbursement", requestTitle: `${String(row.category)} · ${formatMoney(row.amount, row.currency)}`, requestStatus: String(row.status), requestNote: row.decision_note, inboxType: "reimbursement" })),
+    ...data.cases.map((row) => ({ id: String(row.id), submittedAt: String(row.submitted_at ?? ""), requestType: "Employee request", requestTitle: String(row.subject), requestStatus: String(row.status), requestNote: row.resolution_note, inboxType: "case" })),
+  ].sort((left, right) => right.submittedAt.localeCompare(left.submittedAt))
 
   async function submit(payload: Record<string, unknown>, form?: HTMLFormElement) {
     setBusy(true); setMessage("")
@@ -160,6 +164,23 @@ function ManagementTab({ data, onChanged }: { data: EmployeeProfileResponse; onC
     finally { setBusy(false) }
   }
 
+  async function uploadDocument(event: React.FormEvent<HTMLFormElement>) {
+    event.preventDefault()
+    const formElement = event.currentTarget
+    const form = new FormData(formElement)
+    form.set("employeeId", data.employee.employee_id)
+    setBusy(true); setMessage("")
+    try {
+      const response = await fetch("/api/v1/employee/documents", { method: "POST", body: form })
+      const body = await response.json() as { error?: string }
+      if (!response.ok) throw new Error(body.error ?? "The document could not be uploaded.")
+      setMessage("Document uploaded to the employee profile.")
+      formElement.reset()
+      onChanged()
+    } catch (reason) { setMessage(reason instanceof Error ? reason.message : "The document could not be uploaded.") }
+    finally { setBusy(false) }
+  }
+
   const value = (form: FormData, name: string) => String(form.get(name) ?? "").trim()
   return <div className="space-y-4">
     {message && <div className="rounded-md border border-border bg-background px-4 py-3 text-body" role="status">{message}</div>}
@@ -169,14 +190,14 @@ function ManagementTab({ data, onChanged }: { data: EmployeeProfileResponse; onC
         <form className="space-y-3" onSubmit={(event) => { event.preventDefault(); const form = event.currentTarget; const values = new FormData(form); const raw = value(values, "scheduledAt"); void submit({ action: "schedule_one_on_one", scheduledAt: new Date(raw).toISOString() }, form) }}>
           <p className="text-card-title font-semibold">Schedule meeting</p>
           <label className="block text-label text-muted-foreground">Date and time<input className={managementFieldClass} type="datetime-local" name="scheduledAt" required /></label>
-          <Button size="sm" disabled={busy}>Schedule</Button>
+          <Button type="submit" size="sm" disabled={busy}>Schedule</Button>
         </form>
         <form className="space-y-3" onSubmit={(event) => { event.preventDefault(); const form = event.currentTarget; const values = new FormData(form); void submit({ action: "complete_one_on_one", meetingId: value(values, "meetingId"), employeeNotes: value(values, "employeeNotes"), managerNotes: value(values, "managerNotes") }, form) }}>
           <p className="text-card-title font-semibold">Record outcome</p>
           <label className="block text-label text-muted-foreground">Scheduled meeting<select className={managementFieldClass} name="meetingId" required defaultValue=""><option value="" disabled>Select meeting</option>{scheduledMeetings.map((meeting) => <option key={String(meeting.id)} value={String(meeting.id)}>{formatWorkspaceDateTime(String(meeting.scheduled_at))}</option>)}</select></label>
           <label className="block text-label text-muted-foreground">Employee notes<textarea className={managementTextAreaClass} name="employeeNotes" maxLength={10000} /></label>
           <label className="block text-label text-muted-foreground">Manager notes<textarea className={managementTextAreaClass} name="managerNotes" minLength={20} maxLength={10000} required /></label>
-          <Button size="sm" disabled={busy || !scheduledMeetings.length}>Prepare synopsis</Button>
+          <Button type="submit" size="sm" disabled={busy || !scheduledMeetings.length}>Prepare synopsis</Button>
         </form>
       </div>
       <div className="border-t border-border/60">
@@ -186,16 +207,37 @@ function ManagementTab({ data, onChanged }: { data: EmployeeProfileResponse; onC
 
     {data.permissions.canManageEmployment && <div className="grid gap-4 xl:grid-cols-3">
       <form className="surface-card p-5" onSubmit={(event) => { event.preventDefault(); const form = event.currentTarget; const values = new FormData(form); void submit({ action: "set_compensation", annualSalary: Number(value(values, "annualSalary")), currency: value(values, "currency"), payFrequency: value(values, "payFrequency"), effectiveFrom: value(values, "effectiveFrom") }, form) }}>
-        <h3 className="text-section-title">Compensation</h3><div className="mt-4 space-y-3"><label className="block text-label text-muted-foreground">Annual amount<input className={managementFieldClass} type="number" name="annualSalary" min="0" step="0.01" required /></label><div className="grid grid-cols-2 gap-2"><label className="block text-label text-muted-foreground">Currency<input className={managementFieldClass} name="currency" defaultValue="USD" maxLength={3} required /></label><label className="block text-label text-muted-foreground">Frequency<select className={managementFieldClass} name="payFrequency" defaultValue="annual"><option value="annual">Annual</option><option value="monthly">Monthly</option><option value="biweekly">Biweekly</option><option value="weekly">Weekly</option><option value="hourly">Hourly</option></select></label></div><label className="block text-label text-muted-foreground">Effective date<input className={managementFieldClass} type="date" name="effectiveFrom" defaultValue={today} required /></label><Button size="sm" disabled={busy}>Save compensation</Button></div>
+        <h3 className="text-section-title">Compensation</h3><div className="mt-4 space-y-3"><label className="block text-label text-muted-foreground">Annual amount<input className={managementFieldClass} type="number" name="annualSalary" min="0" step="0.01" required /></label><div className="grid grid-cols-2 gap-2"><label className="block text-label text-muted-foreground">Currency<input className={managementFieldClass} name="currency" defaultValue="USD" maxLength={3} required /></label><label className="block text-label text-muted-foreground">Frequency<select className={managementFieldClass} name="payFrequency" defaultValue="annual"><option value="annual">Annual</option><option value="monthly">Monthly</option><option value="biweekly">Biweekly</option><option value="weekly">Weekly</option><option value="hourly">Hourly</option></select></label></div><label className="block text-label text-muted-foreground">Effective date<input className={managementFieldClass} type="date" name="effectiveFrom" defaultValue={today} required /></label><Button type="submit" size="sm" disabled={busy}>Save compensation</Button></div>
       </form>
       <form className="surface-card p-5" onSubmit={(event) => { event.preventDefault(); const form = event.currentTarget; const values = new FormData(form); void submit({ action: "assign_project", projectCode: value(values, "projectCode"), projectName: value(values, "projectName"), clientName: value(values, "clientName") || null, roleTitle: value(values, "roleTitle"), allocationPercent: Number(value(values, "allocationPercent")), startsOn: value(values, "startsOn"), endsOn: value(values, "endsOn") || null, isPrimary: values.get("isPrimary") === "on" }, form) }}>
-        <h3 className="text-section-title">Project assignment</h3><div className="mt-4 space-y-3"><div className="grid grid-cols-2 gap-2"><label className="block text-label text-muted-foreground">Project code<input className={managementFieldClass} name="projectCode" maxLength={40} required /></label><label className="block text-label text-muted-foreground">Allocation %<input className={managementFieldClass} type="number" name="allocationPercent" min="1" max="100" defaultValue="100" required /></label></div><label className="block text-label text-muted-foreground">Project name<input className={managementFieldClass} name="projectName" maxLength={160} required /></label><label className="block text-label text-muted-foreground">Client<input className={managementFieldClass} name="clientName" maxLength={160} /></label><label className="block text-label text-muted-foreground">Role<input className={managementFieldClass} name="roleTitle" defaultValue={data.employee.job_title} maxLength={160} required /></label><div className="grid grid-cols-2 gap-2"><label className="block text-label text-muted-foreground">Starts<input className={managementFieldClass} type="date" name="startsOn" defaultValue={today} required /></label><label className="block text-label text-muted-foreground">Ends<input className={managementFieldClass} type="date" name="endsOn" /></label></div><label className="flex items-center gap-2 text-body"><input type="checkbox" name="isPrimary" />Primary assignment</label><Button size="sm" disabled={busy}>Assign project</Button></div>
+        <h3 className="text-section-title">Project assignment</h3><div className="mt-4 space-y-3"><div className="grid grid-cols-2 gap-2"><label className="block text-label text-muted-foreground">Project code<input className={managementFieldClass} name="projectCode" maxLength={40} required /></label><label className="block text-label text-muted-foreground">Allocation %<input className={managementFieldClass} type="number" name="allocationPercent" min="1" max="100" defaultValue="100" required /></label></div><label className="block text-label text-muted-foreground">Project name<input className={managementFieldClass} name="projectName" maxLength={160} required /></label><label className="block text-label text-muted-foreground">Client<input className={managementFieldClass} name="clientName" maxLength={160} /></label><label className="block text-label text-muted-foreground">Role<input className={managementFieldClass} name="roleTitle" defaultValue={data.employee.job_title} maxLength={160} required /></label><div className="grid grid-cols-2 gap-2"><label className="block text-label text-muted-foreground">Starts<input className={managementFieldClass} type="date" name="startsOn" defaultValue={today} required /></label><label className="block text-label text-muted-foreground">Ends<input className={managementFieldClass} type="date" name="endsOn" /></label></div><label className="flex items-center gap-2 text-body"><input type="checkbox" name="isPrimary" />Primary assignment</label><Button type="submit" size="sm" disabled={busy}>Assign project</Button></div>
       </form>
       <form className="surface-card p-5" onSubmit={(event) => { event.preventDefault(); const form = event.currentTarget; const values = new FormData(form); void submit({ action: "create_review", cycleName: value(values, "cycleName"), startsOn: value(values, "startsOn"), endsOn: value(values, "endsOn") }, form) }}>
-        <h3 className="text-section-title">Performance review</h3><div className="mt-4 space-y-3"><label className="block text-label text-muted-foreground">Cycle name<input className={managementFieldClass} name="cycleName" maxLength={160} required /></label><label className="block text-label text-muted-foreground">Starts<input className={managementFieldClass} type="date" name="startsOn" defaultValue={today} required /></label><label className="block text-label text-muted-foreground">Ends<input className={managementFieldClass} type="date" name="endsOn" required /></label><Button size="sm" disabled={busy}>Assign review</Button></div>
+        <h3 className="text-section-title">Performance review</h3><div className="mt-4 space-y-3"><label className="block text-label text-muted-foreground">Cycle name<input className={managementFieldClass} name="cycleName" maxLength={160} required /></label><label className="block text-label text-muted-foreground">Starts<input className={managementFieldClass} type="date" name="startsOn" defaultValue={today} required /></label><label className="block text-label text-muted-foreground">Ends<input className={managementFieldClass} type="date" name="endsOn" required /></label><Button type="submit" size="sm" disabled={busy}>Assign review</Button></div>
       </form>
     </div>}
-    {data.permissions.canManageEmployment && <Card className="gap-0 overflow-hidden rounded-lg border-border/70 shadow-none"><SectionHeader title="Employee documents" detail="Private files associated with this employee record." /><div className="divide-y divide-border/60">{data.documents.length ? data.documents.map((document) => <div key={String(document.id)} className="grid gap-2 px-5 py-3 sm:grid-cols-[1fr_160px_auto] sm:items-center"><div><p className="text-card-title font-semibold">{String(document.file_name)}</p><p className="text-meta capitalize text-muted-foreground">{String(document.document_type).replaceAll("_", " ")}</p></div><span className="text-meta text-muted-foreground">{formatWorkspaceDateTime(String(document.created_at))}</span><a className="text-button" href={`/api/v1/employee/documents?id=${encodeURIComponent(String(document.id))}`}>Download</a></div>) : <p className="px-5 py-8 text-center text-body text-muted-foreground">No documents uploaded.</p>}</div></Card>}
+    {data.permissions.canManageEmployment && <Card className="gap-0 overflow-hidden rounded-lg border-border/70 shadow-none">
+      <SectionHeader title="Employee documents" detail="Files are stored privately in Azure Blob Storage and access follows the selected visibility." />
+      <form onSubmit={uploadDocument} className="grid gap-3 border-b border-border/60 p-5 md:grid-cols-[160px_160px_minmax(220px,1fr)_auto] md:items-end">
+        <label className="block text-label text-muted-foreground">Document type<select name="documentType" defaultValue="supporting_document" className={managementFieldClass}><option value="resume">Resume</option><option value="profile_photo">Profile photo</option><option value="supporting_document">Supporting document</option></select></label>
+        <label className="block text-label text-muted-foreground">Visible to<select name="visibility" defaultValue="employee" className={managementFieldClass}><option value="employee">Employee and HR</option><option value="manager">Manager and HR</option><option value="hr">HR only</option></select></label>
+        <label className="block text-label text-muted-foreground">File<input required name="file" type="file" accept=".pdf,.docx,.jpg,.jpeg,.png" className={managementFieldClass} /></label>
+        <Button type="submit" size="sm" disabled={busy}>Upload</Button>
+      </form>
+      <div className="divide-y divide-border/60">{data.documents.length ? data.documents.map((document) => <div key={String(document.id)} className="grid gap-2 px-5 py-3 sm:grid-cols-[1fr_120px_160px_auto] sm:items-center"><div><p className="text-card-title font-semibold">{String(document.file_name)}</p><p className="text-meta capitalize text-muted-foreground">{String(document.document_type).replaceAll("_", " ")}</p></div><span className="text-meta capitalize text-muted-foreground">{String(document.visibility)}</span><span className="text-meta text-muted-foreground">{formatWorkspaceDateTime(String(document.created_at))}</span><a className="text-button" href={`/api/v1/employee/documents?id=${encodeURIComponent(String(document.id))}`}>Download</a></div>) : <p className="px-5 py-8 text-center text-body text-muted-foreground">No documents uploaded.</p>}</div>
+    </Card>}
+    {data.permissions.canManageEmployment && <Card className="gap-0 overflow-hidden rounded-lg border-border/70 shadow-none">
+      <SectionHeader title="Employee service requests" detail="Reimbursements and employee-raised cases use the same records shown in Inbox and employee self-service." />
+      <div className="divide-y divide-border/60">
+        {serviceRequests.map((request) => <div key={`${request.inboxType}-${request.id}`} className="grid gap-2 px-5 py-3 md:grid-cols-[130px_minmax(0,1fr)_120px_auto] md:items-start">
+            <span className="text-meta text-muted-foreground">{request.requestType}</span>
+            <div><p className="text-card-title font-semibold capitalize">{request.requestTitle}</p>{Boolean(request.requestNote) && <p className="mt-1 text-meta text-muted-foreground">Outcome: {String(request.requestNote)}</p>}</div>
+            <RecordStatus status={String(request.requestStatus)} />
+            <Link className="text-button" href={`/inbox?type=${request.inboxType}&item=${encodeURIComponent(request.id)}&returnTo=${encodeURIComponent(`/people/${data.employee.employee_id}`)}`}>Open in Inbox</Link>
+          </div>)}
+        {!data.reimbursements.length && !data.cases.length && <p className="px-5 py-8 text-center text-body text-muted-foreground">No employee service requests.</p>}
+      </div>
+    </Card>}
   </div>
 }
 

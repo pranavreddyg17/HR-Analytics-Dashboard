@@ -25,7 +25,7 @@ export async function findAccessUser(email: string): Promise<AccessUser | null> 
 }
 
 export async function recordLogin(email: string, displayName: string) {
-  await accessTable((db) => db.prepare("UPDATE app_users SET display_name = CASE WHEN ? = '' THEN display_name ELSE ? END, employee_id = COALESCE(employee_id, (SELECT employee_id FROM employees WHERE LOWER(work_email)=LOWER(?) AND archived_at IS NULL LIMIT 1)), onboarding_status = CASE WHEN COALESCE(employee_id, (SELECT employee_id FROM employees WHERE LOWER(work_email)=LOWER(?) AND archived_at IS NULL LIMIT 1)) IS NULL THEN onboarding_status ELSE 'complete' END, last_login_at = CURRENT_TIMESTAMP, updated_at = CURRENT_TIMESTAMP WHERE email = ?")
+  await accessTable((db) => db.prepare("UPDATE app_users SET display_name = CASE WHEN ? = '' THEN display_name ELSE ? END, employee_id = COALESCE(employee_id, (SELECT employee_id FROM employees WHERE LOWER(work_email)=LOWER(?) AND archived_at IS NULL LIMIT 1)), onboarding_status = CASE WHEN onboarding_status='submitted' THEN 'submitted' WHEN COALESCE(employee_id, (SELECT employee_id FROM employees WHERE LOWER(work_email)=LOWER(?) AND archived_at IS NULL LIMIT 1)) IS NULL THEN onboarding_status ELSE 'complete' END, last_login_at = CURRENT_TIMESTAMP, updated_at = CURRENT_TIMESTAMP WHERE email = ?")
     .bind(displayName, displayName, normalizedEmail(email), normalizedEmail(email), normalizedEmail(email)).run())
 }
 

@@ -75,6 +75,7 @@ export function EmployeesClient({ employees, total }: { employees: Employee[]; t
             <div className="flex items-center border-b border-border">
               {filters.map((item) => (
                 <button
+                  type="button"
                   key={item.key}
                   onClick={() => { setFilter(item.key); setPage(1); setOpenId(null) }}
                   className={cn(

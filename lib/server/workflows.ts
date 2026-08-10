@@ -161,6 +161,7 @@ export async function actOnWorkflow(value: unknown, actor: RequestActor) {
     const submission = await db.prepare("SELECT id, employee_id, user_email, requested_annual_salary, salary_currency, hire_date FROM employee_onboarding_submissions WHERE id=? AND status='submitted'")
       .bind(input.id).first<{ id: string; employee_id: string; user_email: string; requested_annual_salary: number; salary_currency: string; hire_date: string }>()
     if (!submission) throw new PeopleError("This onboarding profile has already been reviewed.", 409)
+    if (submission.user_email.toLowerCase() === actor.email.toLowerCase()) throw new PeopleError("You cannot verify your own onboarding profile.", 403)
     if (input.action === "approve") {
       await db.batch([
         db.prepare("UPDATE employee_onboarding_submissions SET status='approved', reviewed_by_email=?, reviewed_at=CURRENT_TIMESTAMP, review_note=?, updated_at=CURRENT_TIMESTAMP WHERE id=?").bind(actor.email, input.note || null, input.id),
@@ -233,6 +234,7 @@ export async function actOnWorkflow(value: unknown, actor: RequestActor) {
     if (!(["admin", "hr"] as string[]).includes(actor.role)) throw new PeopleError("Only HR can decide reimbursement claims.", 403)
     if (!["approve", "reject"].includes(input.action)) throw new PeopleError("Choose approve or reject.", 422)
     if (input.action === "reject" && input.note.length < 10) throw new PeopleError("Add a brief reason before rejecting the claim.", 422)
+    if (workflow.requested_by_email?.toLowerCase() === actor.email.toLowerCase()) throw new PeopleError("You cannot decide your own reimbursement claim.", 403)
     const status = input.action === "approve" ? "approved" : "rejected"
     await db.batch([
       db.prepare("UPDATE expense_claims SET status=?, reviewed_by_email=?, reviewed_at=CURRENT_TIMESTAMP, decision_note=?, updated_at=CURRENT_TIMESTAMP WHERE id=?")
@@ -250,9 +252,10 @@ export async function actOnWorkflow(value: unknown, actor: RequestActor) {
     const confidentiality = await db.prepare("SELECT confidentiality FROM employee_cases WHERE id=?").bind(input.id).first<{ confidentiality: string }>()
     const isOwner = workflow.owner_email?.toLowerCase() === actor.email.toLowerCase()
     if (!(["admin", "hr"] as string[]).includes(actor.role) && (!isOwner || confidentiality?.confidentiality === "restricted")) throw new PeopleError("Your role cannot resolve this employee case.", 403)
+    if (workflow.requested_by_email?.toLowerCase() === actor.email.toLowerCase()) throw new PeopleError("You cannot resolve your own employee request.", 403)
     if (input.note.length < 10) throw new PeopleError("Record a clear resolution before closing the case.", 422)
     await db.batch([
-      db.prepare("UPDATE employee_cases SET status='resolved', resolved_at=CURRENT_TIMESTAMP, updated_at=CURRENT_TIMESTAMP WHERE id=?").bind(input.id),
+      db.prepare("UPDATE employee_cases SET status='resolved', resolution_note=?, resolved_by_email=?, resolved_at=CURRENT_TIMESTAMP, updated_at=CURRENT_TIMESTAMP WHERE id=?").bind(input.note, actor.email, input.id),
       db.prepare("UPDATE workflow_requests SET status='Resolved', next_action='No further action.', resolved_by_email=?, resolved_at=CURRENT_TIMESTAMP, completed_at=CURRENT_TIMESTAMP, completion_notes=?, updated_at=CURRENT_TIMESTAMP WHERE id=?")
         .bind(actor.email, input.note, input.id),
       ...(workflow.employee_id ? [db.prepare("INSERT INTO employee_activity(id, employee_id, event_type, summary, changes_json, actor_email) VALUES (?, ?, 'employee_case_resolved', 'Employee service request resolved', ?, ?)")

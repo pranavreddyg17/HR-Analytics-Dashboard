@@ -180,9 +180,12 @@ export function MobileNavigation({
             <p className="truncate font-semibold">{user.displayName}</p>
             <p className="truncate text-meta text-muted-foreground">{user.email}</p>
           </div>
-          {user.authenticated
-            ? <SignOutControl />
-            : <span className="text-meta text-muted-foreground">Local session</span>}
+          <div className="flex items-center gap-3">
+            <Link href="/employee" onClick={onClose} className="text-button">Employee portal</Link>
+            {user.authenticated
+              ? <SignOutControl />
+              : <span className="text-meta text-muted-foreground">Local session</span>}
+          </div>
         </footer>
       </section>
     </div>
