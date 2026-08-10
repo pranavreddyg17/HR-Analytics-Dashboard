@@ -153,6 +153,7 @@ export async function getPerson(employeeId: string, actor?: RequestActor): Promi
     ? await database.prepare("SELECT employee_id FROM employee_directory_view WHERE LOWER(work_email)=LOWER(?) AND archived_at IS NULL").bind(actor.email).first<{ employee_id: string }>()
     : null
   const canManageMeetings = canViewSensitiveHrData || Boolean(actorEmployee?.employee_id && employee.manager_id === actorEmployee.employee_id)
+  const canManageReviews = canManageMeetings
   const [manager, directReports, leave, training, promotions, attrition, attritionModel, activity, projects, compensation, documents, reimbursements, cases, reviews, meetings] = await Promise.all([
     employee.manager_id ? database.prepare(`${employeeSelect} WHERE e.employee_id = ?`).bind(employee.manager_id).first<ManagedEmployee>() : Promise.resolve(null),
     database.prepare(`${employeeSelect} WHERE e.manager_id = ? AND e.archived_at IS NULL ORDER BY display_name`).bind(employeeId).all<ManagedEmployee>(),
@@ -169,13 +170,13 @@ export async function getPerson(employeeId: string, actor?: RequestActor): Promi
     canViewSensitiveHrData ? database.prepare("SELECT id, document_type, file_name, content_type, size_bytes, visibility, uploaded_by_email, created_at FROM employee_documents WHERE employee_id=? ORDER BY created_at DESC LIMIT 50").bind(employeeId).all<Record<string, unknown>>() : Promise.resolve({ results: [] as Record<string, unknown>[] }),
     canViewSensitiveHrData ? database.prepare("SELECT id, category, expense_date, amount, currency, description, status, receipt_document_id, submitted_at, reviewed_at, decision_note FROM expense_claims WHERE employee_id=? ORDER BY created_at DESC LIMIT 50").bind(employeeId).all<Record<string, unknown>>() : Promise.resolve({ results: [] as Record<string, unknown>[] }),
     canViewSensitiveHrData ? database.prepare("SELECT id, category, subject, description, confidentiality, status, assigned_to_email, submitted_at, resolved_at, resolution_note, resolved_by_email FROM employee_cases WHERE employee_id=? ORDER BY submitted_at DESC LIMIT 50").bind(employeeId).all<Record<string, unknown>>() : Promise.resolve({ results: [] as Record<string, unknown>[] }),
-    canViewSensitiveHrData ? database.prepare(`SELECT r.id, r.status, r.employee_rating, r.manager_rating, r.submitted_at, r.completed_at, c.name AS cycle_name, c.starts_on, c.ends_on
+    canManageReviews ? database.prepare(`SELECT r.id, r.status, r.self_review, r.manager_review, r.employee_rating, r.manager_rating, r.submitted_at, r.completed_at, c.name AS cycle_name, c.starts_on, c.ends_on
       FROM performance_reviews r JOIN review_cycles c ON c.id=r.cycle_id WHERE r.employee_id=? ORDER BY c.ends_on DESC LIMIT 20`).bind(employeeId).all<Record<string, unknown>>()
       : Promise.resolve({ results: [] as Record<string, unknown>[] }),
     canManageMeetings ? database.prepare("SELECT id, scheduled_at, held_at, status, employee_notes, manager_notes, ai_summary, summary_approved_at, follow_up_sent_at FROM one_on_one_meetings WHERE employee_id=? ORDER BY scheduled_at DESC LIMIT 30").bind(employeeId).all<Record<string, unknown>>() : Promise.resolve({ results: [] as Record<string, unknown>[] }),
   ])
   return {
-    permissions: { canManageEmployment: canViewSensitiveHrData, canManageMeetings },
+    permissions: { canManageEmployment: canViewSensitiveHrData, canManageMeetings, canManageReviews },
     employee,
     manager,
     directReports: directReports.results ?? [],
@@ -552,6 +553,7 @@ export async function listInboxItems(actor?: RequestActor): Promise<InboxItem[]>
       const dueDate = row.due_at?.slice(0, 10) ?? null
       const sla = slaStatus(dueDate, isCompleted)
       const displayName = `${row.preferred_name || row.first_name} ${row.last_name}`.trim()
+      const canDecide = Boolean(!isCompleted && actor && row.requested_by_email?.toLowerCase() !== ownEmail)
       return {
         id: row.id, type: "onboarding", title: row.title, detail: `${row.job_title} · ${row.department} · ${row.location}`,
         person: displayName, employeeId: row.employee_id, dueDate, status, priority: priority(row, sla),
@@ -570,7 +572,7 @@ export async function listInboxItems(actor?: RequestActor): Promise<InboxItem[]>
         timeInStatusDays: daysSince(row.assigned_at || row.workflow_updated_at || row.workflow_created_at),
         createdAt: row.workflow_created_at || nowIso, completedAt: row.completed_at ?? null,
         completionNotes: row.completion_notes ?? null, blockedReason: row.blocked_reason ?? null,
-        actionable: !isCompleted, actions: !isCompleted ? ["reject", "approve"] : [],
+        actionable: canDecide, actions: canDecide ? ["reject", "approve"] : [],
         reviewHref: reviewHref("onboarding", row.id, isCompleted ? "completed" : "decisions"),
         recordHref: `/people/${encodeURIComponent(row.employee_id)}`,
       }

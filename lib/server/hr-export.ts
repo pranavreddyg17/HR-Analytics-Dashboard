@@ -1,7 +1,7 @@
 import { PDFDocument, PDFPage, PDFFont, StandardFonts, rgb } from "pdf-lib"
 import writeXlsxFile, { type Cell, type Sheet, type SheetData } from "write-excel-file/node"
 
-import type { BreakdownPoint, HrDomain, WorkforceAnalytics } from "@/lib/hr-types"
+import { importFields, type BreakdownPoint, type HrDomain, type WorkforceAnalytics } from "@/lib/hr-types"
 
 const INK = "#1F1F1F"
 const MUTED = "#5F5F5F"
@@ -16,9 +16,11 @@ function csvCell(value: unknown): string {
   return /[",\n\r]/.test(text) ? `"${text.replace(/"/g, '""')}"` : text
 }
 
-export function rowsToCsv(rows: Array<Record<string, unknown>>): string {
-  if (!rows.length) return ""
-  const headers = Object.keys(rows[0]).filter((header) => !INTERNAL_COLUMNS.has(header))
+function rowsToCsv(rows: Array<Record<string, unknown>>, fallbackHeaders: string[] = []): string {
+  const headers = rows.length
+    ? Object.keys(rows[0]).filter((header) => !INTERNAL_COLUMNS.has(header))
+    : fallbackHeaders.filter((header) => !INTERNAL_COLUMNS.has(header))
+  if (!headers.length) return ""
   return [headers.join(","), ...rows.map((row) => headers.map((header) => csvCell(row[header])).join(","))].join("\n")
 }
 
@@ -437,6 +439,10 @@ export async function createExecutivePdf(analytics: WorkforceAnalytics): Promise
   return document.save()
 }
 
-export function getAnalyticsDomainRows(analytics: WorkforceAnalytics, domain: HrDomain): Array<Record<string, unknown>> {
+function getAnalyticsDomainRows(analytics: WorkforceAnalytics, domain: HrDomain): Array<Record<string, unknown>> {
   return analyticsRows(analytics)[domain]
+}
+
+export function analyticsDomainToCsv(analytics: WorkforceAnalytics, domain: HrDomain): string {
+  return rowsToCsv(getAnalyticsDomainRows(analytics, domain), importFields[domain])
 }

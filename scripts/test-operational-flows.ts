@@ -1,10 +1,14 @@
 import assert from "node:assert/strict"
 
+import { createAiWorkflowDraft, executeAiWorkflow, planAiWorkflow } from "@/lib/server/ai-workflows"
 import { downloadEmployeeDocument, uploadEmployeeDocument } from "@/lib/server/employee-documents"
-import { createEmployeeCase, createExpenseClaim, getEmployeePortal } from "@/lib/server/employee-portal"
+import { manageEmployee } from "@/lib/server/employee-management"
+import { createEmployeeCase, createExpenseClaim, getEmployeePortal, submitSelfReview } from "@/lib/server/employee-portal"
 import { getEmployeeOnboardingState, submitEmployeeOnboarding } from "@/lib/server/employee-onboarding"
 import { createHiringCandidate, updateHiringCandidate } from "@/lib/server/hiring"
+import { runHrAgent } from "@/lib/server/hr-agent"
 import { ensureHrDatabase } from "@/lib/server/hr-repository"
+import { getInboxOperations } from "@/lib/server/inbox"
 import { assignLearningCourse, completeLearningAssignment, createLearningCourse, listLearningOperations } from "@/lib/server/learning"
 import { createPerson, getPerson } from "@/lib/server/people"
 import type { RequestActor } from "@/lib/server/request-user"
@@ -16,6 +20,12 @@ const hr: RequestActor = { email: "hr.integration@example.com", displayName: "HR
 const manager: RequestActor = { email: "manager.integration@example.com", displayName: "Morgan Manager", role: "manager" }
 const employee: RequestActor = { email: "employee.integration@example.com", displayName: "Elliot Employee", role: "employee" }
 const newHire: RequestActor = { email: "newhire.integration@example.com", displayName: "Nora Newhire", role: "employee" }
+
+function inboxItem(operations: Awaited<ReturnType<typeof getInboxOperations>>, id: string) {
+  const item = operations.items.find((row) => row.id === id)
+  assert.ok(item, `Expected ${id} in the work queue.`)
+  return item
+}
 
 async function main() {
 const db = await ensureHrDatabase()
@@ -57,23 +67,51 @@ await db.batch([
 ])
 
 const leave = await createWorkflow({ type: "leave", leaveType: "Annual", startDate: "2027-02-08", endDate: "2027-02-09", note: "Integration coverage handoff is documented." }, employee)
+let managerInbox = await getInboxOperations(manager)
+let hrInbox = await getInboxOperations(hr)
+assert.deepEqual(inboxItem(managerInbox, leave.id).actions, ["reject", "approve"])
+assert.equal(inboxItem(managerInbox, leave.id).assignedTo, "manager")
+assert.equal(inboxItem(hrInbox, leave.id).requiresDecision, true)
+
+const inboxAnswer = await runHrAgent({
+  message: "Summarize decisions and exceptions in this queue",
+  actor: manager,
+  pageContext: { key: "inbox", route: "/inbox", label: "Inbox", filters: { type: "leave", item: leave.id } },
+})
+assert.equal(inboxAnswer.tools[0]?.tool, "review_work_queue")
+assert.match(inboxAnswer.answer, /Annual leave request/i)
+assert.match(inboxAnswer.answer, new RegExp(leave.id.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"), "i"))
+
 await actOnWorkflow({ id: leave.id, type: "leave", action: "approve", note: "Coverage confirmed by the manager." }, manager)
 let portal = await getEmployeePortal(employee)
 assert.equal(portal.leave.find((row) => row.id === leave.id)?.approval_status, "Approved")
-assert.match(String(portal.leave.find((row) => row.id === leave.id)?.decision_note), /approved/i)
+assert.equal(portal.leave.find((row) => row.id === leave.id)?.decision_note, "Coverage confirmed by the manager.")
+managerInbox = await getInboxOperations(manager)
+assert.equal(inboxItem(managerInbox, leave.id).isCompleted, true)
+assert.deepEqual(inboxItem(managerInbox, leave.id).actions, [])
 
 const expense = await createExpenseClaim({ category: "training", expenseDate: "2026-08-01", amount: 180, currency: "USD", description: "Cloud certification examination fee." }, employee)
+hrInbox = await getInboxOperations(hr)
+assert.deepEqual(inboxItem(hrInbox, expense.id).actions, ["reject", "approve"])
+assert.match(inboxItem(hrInbox, expense.id).requestContext.map((row) => row.value).join(" "), /Cloud certification examination fee/i)
 await assert.rejects(() => actOnWorkflow({ id: expense.id, type: "reimbursement", action: "approve", note: "Self approval must fail." }, employee), /Only HR|own reimbursement/i)
 await actOnWorkflow({ id: expense.id, type: "reimbursement", action: "approve", note: "Receipt and policy eligibility verified." }, hr)
 portal = await getEmployeePortal(employee)
 assert.equal(portal.claims.find((row) => row.id === expense.id)?.status, "approved")
 assert.equal(portal.claims.find((row) => row.id === expense.id)?.decision_note, "Receipt and policy eligibility verified.")
+hrInbox = await getInboxOperations(hr)
+assert.equal(inboxItem(hrInbox, expense.id).isCompleted, true)
 
 const employeeCase = await createEmployeeCase({ category: "equipment", subject: "Development laptop replacement", description: "The assigned laptop is failing hardware diagnostics and needs replacement.", confidentiality: "manager" }, employee)
+managerInbox = await getInboxOperations(manager)
+assert.deepEqual(inboxItem(managerInbox, employeeCase.id).actions, ["complete"])
+assert.equal(inboxItem(managerInbox, employeeCase.id).assignedTo, "manager")
 await actOnWorkflow({ id: employeeCase.id, type: "case", action: "complete", note: "Replacement approved and the service desk ticket was created." }, manager)
 portal = await getEmployeePortal(employee)
 assert.equal(portal.cases.find((row) => row.id === employeeCase.id)?.status, "resolved")
 assert.match(String(portal.cases.find((row) => row.id === employeeCase.id)?.resolution_note), /service desk/i)
+managerInbox = await getInboxOperations(manager)
+assert.equal(inboxItem(managerInbox, employeeCase.id).isCompleted, true)
 
 const course = await createLearningCourse({ code: "INT-AZ-101", title: "Integration cloud reliability", defaultHours: 3, isMandatory: false, skillIds: [] }, hr)
 const campaign = await assignLearningCourse({ targetType: "job_title", targetValue: "Software Engineer II", courseId: course.id, dueDate: "2027-03-01", hours: 3, note: "Role capability evidence." }, hr)
@@ -81,17 +119,74 @@ assert.equal(campaign.assigned, 1)
 let learning = await listLearningOperations(employee)
 const assignment = learning.assignments.find((row) => row.courseId === course.id)
 assert.ok(assignment)
+let employeeInbox = await getInboxOperations(employee)
+assert.deepEqual(inboxItem(employeeInbox, assignment.id).actions, ["complete"])
 await completeLearningAssignment(assignment.id, { assessmentScore: 92, note: "Completion verified in employee self-service." }, employee)
 learning = await listLearningOperations(hr)
 assert.equal(learning.assignments.find((row) => row.id === assignment.id)?.status, "Completed")
+employeeInbox = await getInboxOperations(employee)
+assert.equal(inboxItem(employeeInbox, assignment.id).isCompleted, true)
+
+const aiLearningDraft = await createAiWorkflowDraft({
+  type: "learning_assignment",
+  targetType: "job_title",
+  targetValue: "Software Engineer II",
+  courseId: course.id,
+  dueDate: "2027-03-15",
+  hours: 3,
+  note: "Agent-prepared role capability assignment.",
+}, hr)
+const aiLearningResult = await executeAiWorkflow(aiLearningDraft.draft.id, hr, new Request("http://localhost/api/v1/ai/workflows/execute"))
+assert.equal(aiLearningResult.status, "completed")
+learning = await listLearningOperations(employee)
+assert.ok(learning.assignments.some((row) => row.courseId === course.id && row.status !== "Completed"))
+
+const review = await manageEmployee(employeeRecord.employee_id, { action: "create_review", cycleName: "Integration performance review", startsOn: "2027-01-01", endsOn: "2027-06-30" }, hr)
+const managerReview = await manageEmployee(managerRecord.employee_id, { action: "create_review", cycleName: "Integration performance review", startsOn: "2027-01-01", endsOn: "2027-06-30" }, hr)
+assert.equal(managerReview.cycleId, review.cycleId)
+await assert.rejects(
+  () => manageEmployee(employeeRecord.employee_id, { action: "create_review", cycleName: "Integration performance review", startsOn: "2027-01-01", endsOn: "2027-06-30" }, hr),
+  /already assigned/i,
+)
+portal = await getEmployeePortal(employee)
+assert.equal(portal.reviews.find((row) => row.id === review.id)?.status, "self_review")
+await submitSelfReview({ reviewId: review.id, selfReview: "I delivered the integration outcomes, documented operational handoffs, and identified the next reliability improvements for the team.", employeeRating: 4 }, employee)
+let managerProfile = await getPerson(employeeRecord.employee_id, manager)
+assert.equal(managerProfile.permissions.canManageReviews, true)
+assert.match(String(managerProfile.reviews.find((row) => row.id === review.id)?.self_review), /integration outcomes/i)
+await manageEmployee(employeeRecord.employee_id, { action: "submit_manager_review", reviewId: review.id, managerReview: "Elliot delivered the agreed integration outcomes, improved operational documentation, and should lead the next reliability review with continued mentoring support.", managerRating: 4 }, manager)
+portal = await getEmployeePortal(employee)
+assert.equal(portal.reviews.find((row) => row.id === review.id)?.status, "completed")
+assert.match(String(portal.reviews.find((row) => row.id === review.id)?.manager_review), /continued mentoring support/i)
+
+const meeting = await manageEmployee(employeeRecord.employee_id, { action: "schedule_one_on_one", scheduledAt: "2027-06-10T17:00:00.000Z" }, manager)
+await manageEmployee(employeeRecord.employee_id, { action: "complete_one_on_one", meetingId: meeting.id, employeeNotes: "Discussed platform ownership and support needed.", managerNotes: "Agreed that Elliot will own the reliability review and receive protected preparation time each sprint." }, manager)
+const approvedMeeting = await manageEmployee(employeeRecord.employee_id, { action: "approve_one_on_one_summary", meetingId: meeting.id }, manager)
+assert.match(String(approvedMeeting.emailDraft?.launchUrl), /^https:\/\/mail\.google\.com\/mail\//)
+portal = await getEmployeePortal(employee)
+assert.ok(portal.meetings.find((row) => row.id === meeting.id)?.summary_approved_at)
 
 const requisition = await createWorkflow({ type: "hiring", position: "Platform Engineer", department: "Engineering", location: "Remote", employmentType: "Full-time", justification: "Add production reliability coverage for the platform team." }, manager)
+hrInbox = await getInboxOperations(hr)
+assert.deepEqual(inboxItem(hrInbox, requisition.id).actions, ["reject", "approve"])
 await actOnWorkflow({ id: requisition.id, type: "hiring", action: "approve", note: "Headcount is approved in the operating plan." }, hr)
+hrInbox = await getInboxOperations(hr)
+assert.equal(inboxItem(hrInbox, requisition.id).status, "Open")
+assert.equal(inboxItem(hrInbox, requisition.id).isCompleted, false)
 const candidate = await createHiringCandidate({ requisitionId: requisition.id, fullName: "Harper Candidate", email: "harper.candidate@example.com", source: "Employee referral", notes: "Integration candidate." }, manager)
 for (const stage of ["Screening", "Interview", "Offer"] as const) await updateHiringCandidate(candidate.id, { stage }, manager)
 await updateHiringCandidate(candidate.id, { stage: "Hired", startDate: "2027-04-05" }, manager)
 const hired = await db.prepare("SELECT employee_id, employment_status FROM employee_directory_view WHERE LOWER(work_email)=LOWER(?)").bind("harper.candidate@example.com").first<{ employee_id: string; employment_status: string }>()
 assert.equal(hired?.employment_status, "Preboarding")
+
+const aiHiringPlan = await planAiWorkflow({ prompt: "Request a full-time Release Engineer in Engineering, Remote, because the release programme needs dedicated production coordination." }, manager)
+assert.equal(aiHiringPlan.type, "hiring_requisition")
+if (aiHiringPlan.type !== "hiring_requisition") throw new Error("Expected a hiring requisition plan.")
+const aiHiringDraft = await createAiWorkflowDraft({ type: aiHiringPlan.type, position: aiHiringPlan.position, department: aiHiringPlan.department, location: aiHiringPlan.location, employmentType: aiHiringPlan.employmentType, justification: aiHiringPlan.justification }, manager)
+const aiHiringResult = await executeAiWorkflow(aiHiringDraft.draft.id, manager, new Request("http://localhost/api/v1/ai/workflows/execute"))
+assert.equal(aiHiringResult.status, "completed")
+hrInbox = await getInboxOperations(hr)
+assert.deepEqual(inboxItem(hrInbox, String(aiHiringResult.requisitionId)).actions, ["reject", "approve"])
 
 const onboarding = await submitEmployeeOnboarding({ organizationName: "LaidbackHR", firstName: "Nora", lastName: "Newhire", department: "Engineering", jobTitle: "Site Reliability Engineer", jobLevel: "IC3", location: "Remote", managerName: manager.displayName, managerEmail: manager.email, hireDate: "2027-05-03", employmentType: "Full-time", annualSalary: 125000, currency: "USD" }, newHire)
 assert.equal((await getEmployeeOnboardingState(newHire)).status, "submitted")
@@ -101,8 +196,12 @@ await assert.rejects(
 )
 const submitted = await db.prepare("SELECT id FROM employee_onboarding_submissions WHERE employee_id=? AND status='submitted'").bind(onboarding.employeeId).first<{ id: string }>()
 assert.ok(submitted)
+hrInbox = await getInboxOperations(hr)
+assert.deepEqual(inboxItem(hrInbox, submitted.id).actions, ["reject", "approve"])
 await actOnWorkflow({ id: submitted.id, type: "onboarding", action: "approve", note: "Employment details verified against the approved offer." }, hr)
 assert.equal((await getEmployeeOnboardingState(newHire)).status, "complete")
+hrInbox = await getInboxOperations(hr)
+assert.equal(inboxItem(hrInbox, submitted.id).isCompleted, true)
 
 await db.batch([
   db.prepare("INSERT INTO employee_documents(id, employee_id, document_type, file_name, blob_name, content_type, size_bytes, visibility, uploaded_by_email) VALUES ('INT-DOC-EMP', ?, 'resume', 'employee.pdf', 'integration/employee.pdf', 'application/pdf', 10, 'employee', ?)").bind(employeeRecord.employee_id, employee.email),
@@ -119,7 +218,7 @@ await assert.rejects(
   /must remain visible to the employee and HR/i,
 )
 
-console.log("Operational integration passed: leave, reimbursement, case resolution, learning, hiring, onboarding, and document visibility.")
+console.log("Operational integration passed: employee services, actor-scoped queues, reviews, one-on-ones, AI workflows, learning, hiring, onboarding, and document visibility.")
 }
 
 void main().catch((error) => {

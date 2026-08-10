@@ -74,6 +74,26 @@ stages:
               pnpm lint
               pnpm exec tsc --noEmit
               pnpm build:azure
+              export DATABASE_URL='postgresql://postgres:postgres@127.0.0.1:5432/laidbackhr_test'
+              export DATABASE_SSL_MODE=disable
+              export LOCAL_UI_PREVIEW=true
+              export BOOTSTRAP_ADMIN_EMAIL='local-admin@laidbackhr.ai'
+              export BOOTSTRAP_ADMIN_NAME='CI administrator'
+              export APP_VERSION=ci-smoke
+              export PORT=3000
+              pnpm start > /tmp/laidbackhr-next.log 2>&1 &
+              server_pid=$!
+              cleanup_services() {
+                kill "${server_pid:-}" >/dev/null 2>&1 || true
+                docker stop laidbackhr-test-postgres >/dev/null 2>&1 || true
+              }
+              trap cleanup_services EXIT
+              for attempt in $(seq 1 30); do
+                if curl --fail --silent http://127.0.0.1:3000/api/v1/ready >/dev/null; then break; fi
+                sleep 1
+              done
+              curl --fail --silent http://127.0.0.1:3000/api/v1/ready >/dev/null || { cat /tmp/laidbackhr-next.log; exit 1; }
+              LAIDBACKHR_BASE_URL=http://127.0.0.1:3000 pnpm test:live
             displayName: Validate web application
 
           - task: UsePythonVersion@0

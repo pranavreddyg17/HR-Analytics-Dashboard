@@ -193,11 +193,13 @@ export async function actOnWorkflow(value: unknown, actor: RequestActor) {
     }
     if (!employee || employee.work_email?.toLowerCase() === actor.email.toLowerCase()) throw new PeopleError("You cannot approve your own leave request.", 403)
     if (!["approve", "reject"].includes(input.action)) throw new PeopleError("Choose approve or reject.", 422)
+    if (input.action === "reject" && input.note.length < 10) throw new PeopleError("Add a brief reason before declining the leave request.", 422)
     const status = input.action === "approve" ? "Approved" : "Rejected"
+    const decisionNote = input.note || `${actor.displayName} ${status.toLowerCase()} the leave request.`
     await db.batch([
       db.prepare("UPDATE leave_records SET approval_status=?, updated_at=CURRENT_TIMESTAMP WHERE id=?").bind(status, input.id),
       db.prepare("UPDATE workflow_requests SET status=?, next_action='No further action.', assigned_at=CURRENT_TIMESTAMP, resolved_by_email=?, resolved_at=CURRENT_TIMESTAMP, completed_at=CURRENT_TIMESTAMP, completion_notes=?, updated_at=CURRENT_TIMESTAMP WHERE id=?")
-        .bind(status, actor.email, `${actor.displayName} ${status.toLowerCase()} the leave request.`, input.id),
+        .bind(status, actor.email, decisionNote, input.id),
       db.prepare("INSERT INTO employee_activity(id, employee_id, event_type, summary, changes_json, actor_email) VALUES (?, ?, 'leave_decision', ?, ?, ?)")
         .bind(crypto.randomUUID(), employee.employee_id, `${actor.displayName} ${status.toLowerCase()} the leave request`, JSON.stringify({ workflowId: input.id, status }), actor.email),
     ])

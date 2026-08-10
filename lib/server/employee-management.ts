@@ -11,6 +11,7 @@ const managementSchema = z.discriminatedUnion("action", [
   z.object({ action: z.literal("set_compensation"), annualSalary: z.number().nonnegative().max(100_000_000), currency: z.string().trim().toUpperCase().regex(/^[A-Z]{3}$/), payFrequency: z.enum(["annual", "monthly", "biweekly", "weekly", "hourly"]), effectiveFrom: date }),
   z.object({ action: z.literal("assign_project"), projectCode: z.string().trim().min(2).max(40), projectName: z.string().trim().min(2).max(160), clientName: z.string().trim().max(160).nullable().optional(), roleTitle: z.string().trim().min(2).max(160), allocationPercent: z.number().positive().max(100), startsOn: date, endsOn: date.nullable().optional(), isPrimary: z.boolean().default(false) }),
   z.object({ action: z.literal("create_review"), cycleName: z.string().trim().min(3).max(160), startsOn: date, endsOn: date }),
+  z.object({ action: z.literal("submit_manager_review"), reviewId: z.string().trim().min(8).max(100), managerReview: z.string().trim().min(50).max(10_000), managerRating: z.number().min(1).max(5) }),
   z.object({ action: z.literal("schedule_one_on_one"), scheduledAt: z.string().datetime({ offset: true }) }),
   z.object({ action: z.literal("complete_one_on_one"), meetingId: z.string().trim().min(8).max(100), employeeNotes: z.string().trim().max(10_000).default(""), managerNotes: z.string().trim().min(20).max(10_000) }),
   z.object({ action: z.literal("approve_one_on_one_summary"), meetingId: z.string().trim().min(8).max(100) }),
@@ -89,18 +90,42 @@ export async function manageEmployee(employeeId: string, value: unknown, actor: 
   if (input.action === "create_review") {
     requirePeopleTeam(actor)
     if (input.endsOn < input.startsOn) throw new PeopleError("Review end date must be on or after the start date.", 422)
-    const cycleId = `CYCLE-${crypto.randomUUID().slice(0, 12).toUpperCase()}`
+    const existingCycle = await db.prepare(`
+      SELECT id FROM review_cycles
+      WHERE LOWER(name)=LOWER(?) AND starts_on=? AND ends_on=? AND status IN ('draft', 'open')
+      ORDER BY created_at DESC LIMIT 1
+    `).bind(input.cycleName, input.startsOn, input.endsOn).first<{ id: string }>()
+    const cycleId = existingCycle?.id ?? `CYCLE-${crypto.randomUUID().slice(0, 12).toUpperCase()}`
+    const existingReview = await db.prepare("SELECT id FROM performance_reviews WHERE cycle_id=? AND employee_id=?")
+      .bind(cycleId, employeeId).first<{ id: string }>()
+    if (existingReview) throw new PeopleError("This employee is already assigned to the review cycle.", 409)
     const reviewId = `REV-${crypto.randomUUID().slice(0, 12).toUpperCase()}`
-    await db.batch([
-      db.prepare("INSERT INTO review_cycles(id, name, starts_on, ends_on, status, created_by_email) VALUES (?, ?, ?, ?, 'open', ?)").bind(cycleId, input.cycleName, input.startsOn, input.endsOn, actor.email),
+    const statements = [
       db.prepare("INSERT INTO performance_reviews(id, cycle_id, employee_id, manager_employee_id, status) VALUES (?, ?, ?, ?, 'self_review')").bind(reviewId, cycleId, employeeId, employee.manager_id),
       db.prepare("INSERT INTO employee_activity(id, employee_id, event_type, summary, changes_json, actor_email) VALUES (?, ?, 'review_assigned', 'Performance review assigned', ?, ?)").bind(crypto.randomUUID(), employeeId, JSON.stringify({ reviewId, cycleId }), actor.email),
-    ])
+    ]
+    if (!existingCycle) statements.unshift(db.prepare("INSERT INTO review_cycles(id, name, starts_on, ends_on, status, created_by_email) VALUES (?, ?, ?, ?, 'open', ?)").bind(cycleId, input.cycleName, input.startsOn, input.endsOn, actor.email))
+    await db.batch(statements)
     return { id: reviewId, cycleId, status: "self_review", message: "Review assigned to the employee." }
   }
 
-  const canManageMeeting = ["admin", "hr"].includes(actor.role) || actor.role === "manager" && employee.manager_id === actorEmployeeId
-  if (!canManageMeeting) throw new PeopleError("Only the employee's manager or HR can manage this one-on-one.", 403)
+  const canManageEmployeeDevelopment = ["admin", "hr"].includes(actor.role) || actor.role === "manager" && employee.manager_id === actorEmployeeId
+  if (!canManageEmployeeDevelopment) throw new PeopleError("Only the employee's manager or HR can manage reviews and one-on-ones.", 403)
+
+  if (input.action === "submit_manager_review") {
+    const review = await db.prepare("SELECT id, status, manager_employee_id FROM performance_reviews WHERE id=? AND employee_id=?")
+      .bind(input.reviewId, employeeId).first<{ id: string; status: string; manager_employee_id: string | null }>()
+    if (!review) throw new PeopleError("Performance review not found.", 404)
+    if (review.status !== "manager_review") throw new PeopleError("The employee self-review must be submitted before the manager review.", 409)
+    if (actor.role === "manager" && review.manager_employee_id !== actorEmployeeId) throw new PeopleError("Managers can only complete reviews assigned to them.", 403)
+    await db.batch([
+      db.prepare("UPDATE performance_reviews SET manager_review=?, manager_rating=?, status='completed', completed_at=CURRENT_TIMESTAMP, updated_at=CURRENT_TIMESTAMP WHERE id=?")
+        .bind(input.managerReview, input.managerRating, input.reviewId),
+      db.prepare("INSERT INTO employee_activity(id, employee_id, event_type, summary, changes_json, actor_email) VALUES (?, ?, 'review_completed', 'Performance review completed', ?, ?)")
+        .bind(crypto.randomUUID(), employeeId, JSON.stringify({ reviewId: input.reviewId }), actor.email),
+    ])
+    return { id: input.reviewId, status: "completed", message: "Manager review completed and shared with the employee." }
+  }
 
   if (input.action === "schedule_one_on_one") {
     const id = `1ON1-${crypto.randomUUID().slice(0, 12).toUpperCase()}`

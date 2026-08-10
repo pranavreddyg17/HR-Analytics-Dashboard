@@ -35,6 +35,7 @@ export type EmployeeProfileResponse = {
   permissions: {
     canManageEmployment: boolean
     canManageMeetings: boolean
+    canManageReviews: boolean
   }
   employee: ManagedEmployee
   manager: ManagedEmployee | null

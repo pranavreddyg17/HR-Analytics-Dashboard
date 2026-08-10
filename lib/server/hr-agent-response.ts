@@ -61,7 +61,7 @@ function renderWorkQueue(plan: ToolPlan, data: Record<string, unknown>): string 
     ...rows.map((row, index) => {
       const due = row.slaStatus === "overdue" ? `overdue since ${String(row.dueDate ?? "an unrecorded date")}` : row.dueDate ? `due ${String(row.dueDate)}` : "no due date"
       const decision = row.requiresDecision ? row.actionable ? "decision available" : "decision pending outside your action scope" : "follow-up"
-      return `${index + 1}. ${String(row.title)} — ${String(row.domain)} · ${due} · ${decision}. Owner: ${String(row.owner)}. Next: ${String(row.nextAction)} Reason: ${String(row.attentionReason)}`
+      return `${index + 1}. ${String(row.title)} (${String(row.id)}) — ${String(row.domain)} · ${due} · ${decision}. Owner: ${String(row.owner)}. Next: ${String(row.nextAction)} Reason: ${String(row.attentionReason)}`
     }),
     "Open the matching record from this page to complete the action; the assistant has not changed any workflow state.",
   ].join("\n")

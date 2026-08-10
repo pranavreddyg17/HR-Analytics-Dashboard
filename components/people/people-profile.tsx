@@ -143,6 +143,7 @@ const managementTextAreaClass = "mt-1 min-h-24 w-full resize-y rounded-md border
 function ManagementTab({ data, onChanged }: { data: EmployeeProfileResponse; onChanged: () => void }) {
   const [busy, setBusy] = useState(false)
   const [message, setMessage] = useState("")
+  const [followUpUrl, setFollowUpUrl] = useState("")
   const endpoint = `/api/v1/hr/people/${encodeURIComponent(data.employee.employee_id)}/management`
   const today = new Date().toISOString().slice(0, 10)
   const scheduledMeetings = data.meetings.filter((meeting) => String(meeting.status) === "scheduled")
@@ -155,9 +156,10 @@ function ManagementTab({ data, onChanged }: { data: EmployeeProfileResponse; onC
     setBusy(true); setMessage("")
     try {
       const response = await fetch(endpoint, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(payload) })
-      const body = await response.json() as { error?: string; message?: string }
+      const body = await response.json() as { error?: string; message?: string; emailDraft?: { launchUrl?: string | null } }
       if (!response.ok) throw new Error(body.error ?? "The employee record could not be updated.")
       setMessage(body.message ?? "Employee record updated.")
+      setFollowUpUrl(body.emailDraft?.launchUrl ?? "")
       form?.reset()
       onChanged()
     } catch (reason) { setMessage(reason instanceof Error ? reason.message : "The employee record could not be updated.") }
@@ -183,7 +185,22 @@ function ManagementTab({ data, onChanged }: { data: EmployeeProfileResponse; onC
 
   const value = (form: FormData, name: string) => String(form.get(name) ?? "").trim()
   return <div className="space-y-4">
-    {message && <div className="rounded-md border border-border bg-background px-4 py-3 text-body" role="status">{message}</div>}
+    {message && <div className="flex flex-wrap items-center justify-between gap-3 rounded-md border border-border bg-background px-4 py-3 text-body" role="status"><span>{message}</span>{followUpUrl && <a href={followUpUrl} target="_blank" rel="noreferrer" className="text-button">Review follow-up email</a>}</div>}
+    {data.permissions.canManageReviews && data.reviews.length > 0 && <Card className="gap-0 overflow-hidden rounded-lg border-border/70 shadow-none">
+      <SectionHeader title="Performance reviews" detail="Employee self-reviews awaiting manager input and completed review records." />
+      <div className="divide-y divide-border/60">
+        {data.reviews.map((review) => <div key={String(review.id)} className="p-5">
+          <div className="flex flex-wrap items-start justify-between gap-3"><div><p className="text-card-title font-semibold">{String(review.cycle_name)}</p><p className="mt-1 text-meta text-muted-foreground">{formatDate(String(review.starts_on))} to {formatDate(String(review.ends_on))}</p></div><RecordStatus status={String(review.status)} /></div>
+          {Boolean(review.self_review) && <div className="mt-4 rounded-md bg-muted/35 p-3"><p className="text-label font-semibold">Employee self-review</p><p className="mt-1 whitespace-pre-wrap text-body text-muted-foreground">{String(review.self_review)}</p>{Boolean(review.employee_rating) && <p className="mt-2 text-meta text-muted-foreground">Self-rating: {String(review.employee_rating)} / 5</p>}</div>}
+          {String(review.status) === "manager_review" && <form className="mt-4 grid gap-3" onSubmit={(event) => { event.preventDefault(); const form = event.currentTarget; const values = new FormData(form); void submit({ action: "submit_manager_review", reviewId: String(review.id), managerReview: value(values, "managerReview"), managerRating: Number(value(values, "managerRating")) }, form) }}>
+            <label className="block text-label text-muted-foreground">Manager review<textarea required name="managerReview" minLength={50} maxLength={10000} className={managementTextAreaClass} placeholder="Record outcomes, strengths, development priorities, and agreed support." /></label>
+            <label className="block max-w-xs text-label text-muted-foreground">Manager rating<select required name="managerRating" defaultValue="" className={managementFieldClass}><option value="" disabled>Select rating</option><option value="1">1 – Below expectations</option><option value="2">2 – Developing</option><option value="3">3 – Meets expectations</option><option value="4">4 – Exceeds expectations</option><option value="5">5 – Exceptional</option></select></label>
+            <Button type="submit" size="sm" className="w-fit" disabled={busy}>Complete manager review</Button>
+          </form>}
+          {Boolean(review.manager_review) && <div className="mt-4"><p className="text-label font-semibold">Manager review</p><p className="mt-1 whitespace-pre-wrap text-body text-muted-foreground">{String(review.manager_review)}</p>{Boolean(review.manager_rating) && <p className="mt-2 text-meta text-muted-foreground">Manager rating: {String(review.manager_rating)} / 5</p>}</div>}
+        </div>)}
+      </div>
+    </Card>}
     {data.permissions.canManageMeetings && <Card className="gap-0 overflow-hidden rounded-lg border-border/70 shadow-none">
       <SectionHeader title="One-on-ones" detail="Schedule meetings, prepare a synopsis, and approve the follow-up before an email draft is created." />
       <div className="grid gap-5 p-5 lg:grid-cols-2">

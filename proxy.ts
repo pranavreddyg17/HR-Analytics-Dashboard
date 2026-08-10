@@ -2,6 +2,7 @@ import { auth } from "@/auth"
 import { runtimeEnv } from "@/lib/server/runtime-env"
 
 const legacyRoutes: Record<string, string> = {
+  "/hiring": "/onboarding",
   "/time-off": "/leaves",
   "/learning": "/courses",
   "/ai-agents": "/assistant",
@@ -26,6 +27,7 @@ export default auth((request) => {
   if (canonicalPath) {
     const destination = request.nextUrl.clone()
     destination.pathname = canonicalPath
+    if (request.nextUrl.pathname === "/hiring") destination.searchParams.set("view", "talent")
     return Response.redirect(destination, 308)
   }
   if (request.nextUrl.pathname === "/login") return
@@ -45,4 +47,4 @@ export default auth((request) => {
   }
 })
 
-export const config = { matcher: ["/", "/login", "/employee/:path*", "/api/v1/:path*", "/api/mcp", "/time-off", "/learning", "/ai-agents", "/data", "/employees"] }
+export const config = { matcher: ["/", "/login", "/employee/:path*", "/api/v1/:path*", "/api/mcp", "/hiring", "/time-off", "/learning", "/ai-agents", "/data", "/employees"] }

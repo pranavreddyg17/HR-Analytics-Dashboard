@@ -137,7 +137,8 @@ export function EmployeePortal({ initialData, user }: { initialData: PortalData;
 
   async function submitLeave(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault()
-    const form = new FormData(event.currentTarget)
+    const formElement = event.currentTarget
+    const form = new FormData(formElement)
     setBusy(true); setMessage("")
     try {
       const response = await fetch("/api/v1/hr/workflows", {
@@ -154,7 +155,7 @@ export function EmployeePortal({ initialData, user }: { initialData: PortalData;
       const body = await response.json() as { message?: string; error?: string }
       if (!response.ok) throw new Error(body.error || "Leave request could not be submitted.")
       setMessage(body.message || "Leave request submitted.")
-      event.currentTarget.reset()
+      formElement.reset()
       await refresh()
     } catch (error) {
       setMessage(error instanceof Error ? error.message : "Leave request could not be submitted.")
@@ -233,6 +234,9 @@ export function EmployeePortal({ initialData, user }: { initialData: PortalData;
   }
 
   const primaryProject = data.projects.find((row) => Boolean(row.is_primary)) ?? data.projects[0]
+  const openRequestCount = data.leave.filter((row) => String(row.approval_status).toLowerCase() === "pending").length
+    + data.claims.filter((row) => ["submitted", "under_review"].includes(String(row.status).toLowerCase())).length
+    + data.cases.filter((row) => !["resolved", "closed"].includes(String(row.status).toLowerCase())).length
   const requestHistory: Array<{ id: string; kind: string; title: string; status: unknown; submitted: unknown; outcome: unknown }> = [
     ...data.claims.map((row) => ({ id: String(row.id), kind: "Reimbursement", title: `${String(row.category)} · ${money(row.amount, row.currency)}`, status: row.status, submitted: row.submitted_at, outcome: row.decision_note })),
     ...data.cases.map((row) => ({ id: String(row.id), kind: "HR request", title: String(row.subject), status: row.status, submitted: row.submitted_at, outcome: row.resolution_note })),
@@ -273,7 +277,7 @@ export function EmployeePortal({ initialData, user }: { initialData: PortalData;
         </section>
         <section className="grid gap-4 md:grid-cols-3">
           <div className="surface-card p-5"><p className="text-kpi-label text-muted-foreground">Current compensation</p><p className="mt-1 text-kpi-value">{data.compensation ? money(data.compensation.annual_salary, data.compensation.currency) : "Not recorded"}</p>{data.compensation && <p className="text-meta text-muted-foreground">{String(data.compensation.pay_frequency)} · effective {date(data.compensation.effective_from)}</p>}</div>
-          <div className="surface-card p-5"><p className="text-kpi-label text-muted-foreground">Open requests</p><p className="mt-1 text-kpi-value">{data.claims.filter((row) => !["paid", "rejected", "cancelled"].includes(String(row.status))).length + data.cases.filter((row) => !["resolved", "closed"].includes(String(row.status))).length}</p><button type="button" onClick={() => selectView("requests")} className="mt-2 text-button">View requests</button></div>
+          <div className="surface-card p-5"><p className="text-kpi-label text-muted-foreground">Open requests</p><p className="mt-1 text-kpi-value">{openRequestCount}</p><button type="button" onClick={() => selectView("requests")} className="mt-2 text-button">View requests</button></div>
           <div className="surface-card p-5"><p className="text-kpi-label text-muted-foreground">Learning assigned</p><p className="mt-1 text-kpi-value">{data.learning.filter((row) => String(row.status).toLowerCase() !== "completed").length}</p><p className="text-meta text-muted-foreground">Incomplete courses</p></div>
         </section>
         <section className="grid gap-4 lg:grid-cols-[1fr_1.4fr]">
