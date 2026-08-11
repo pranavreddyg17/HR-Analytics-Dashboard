@@ -59,6 +59,50 @@ resource "azurerm_service_plan" "app" {
   tags                = merge(local.common_tags, { component = "application-hosting" })
 }
 
+resource "azurerm_virtual_network" "app" {
+  name                = "laidbackhr-${var.environment}-vnet"
+  resource_group_name = local.resource_group_name
+  location            = local.location
+  address_space       = [var.virtual_network_cidr]
+  tags                = merge(local.common_tags, { component = "application-network" })
+}
+
+resource "azurerm_network_security_group" "app_integration" {
+  name                = "laidbackhr-${var.environment}-app-nsg"
+  resource_group_name = local.resource_group_name
+  location            = local.location
+  tags                = merge(local.common_tags, { component = "application-network" })
+}
+
+resource "azurerm_subnet" "app_integration" {
+  name                 = "app-integration"
+  resource_group_name  = local.resource_group_name
+  virtual_network_name = azurerm_virtual_network.app.name
+  address_prefixes     = [var.app_integration_subnet_cidr]
+  service_endpoints    = ["Microsoft.Storage"]
+
+  delegation {
+    name = "app-service"
+    service_delegation {
+      name    = "Microsoft.Web/serverFarms"
+      actions = ["Microsoft.Network/virtualNetworks/subnets/action"]
+    }
+  }
+}
+
+resource "azurerm_subnet_network_security_group_association" "app_integration" {
+  subnet_id                 = azurerm_subnet.app_integration.id
+  network_security_group_id = azurerm_network_security_group.app_integration.id
+}
+
+resource "azurerm_subnet" "private_endpoints" {
+  name                              = "private-endpoints"
+  resource_group_name               = local.resource_group_name
+  virtual_network_name              = azurerm_virtual_network.app.name
+  address_prefixes                  = [var.private_endpoint_subnet_cidr]
+  private_endpoint_network_policies = "Disabled"
+}
+
 resource "azurerm_log_analytics_workspace" "app" {
   name                = "laidbackhr-${var.environment}-logs"
   resource_group_name = local.resource_group_name
@@ -224,6 +268,7 @@ resource "azurerm_linux_web_app" "web" {
   client_certificate_enabled                     = false
   ftp_publish_basic_authentication_enabled       = false
   webdeploy_publish_basic_authentication_enabled = false
+  virtual_network_subnet_id                      = azurerm_subnet.app_integration.id
   tags                                           = merge(local.common_tags, { component = "hr-web-application" })
 
   identity { type = "SystemAssigned" }
@@ -235,6 +280,19 @@ resource "azurerm_linux_web_app" "web" {
     container_registry_use_managed_identity = true
     minimum_tls_version                     = "1.2"
     http2_enabled                           = true
+    ip_restriction_default_action           = "Allow"
+    vnet_route_all_enabled                  = false
+
+    dynamic "ip_restriction" {
+      for_each = { for index, cidr in var.blocked_ip_cidrs : index => cidr }
+      content {
+        name        = "blocked-${ip_restriction.key + 1}"
+        action      = "Deny"
+        ip_address  = ip_restriction.value
+        priority    = 1000 + ip_restriction.key
+        description = "Reviewed abusive source CIDR"
+      }
+    }
 
     application_stack {
       docker_image_name   = "laidbackhr-web:${var.image_tag}"
@@ -256,7 +314,7 @@ resource "azurerm_linux_web_app" "web" {
     BOOTSTRAP_ADMIN_EMAIL                      = var.bootstrap_admin_email
     BOOTSTRAP_ADMIN_NAME                       = var.bootstrap_admin_name
     DATABASE_POOL_MAX                          = "10"
-    ANALYTICS_CACHE_TTL_MS                     = "15000"
+    ANALYTICS_CACHE_TTL_MS                     = "30000"
     SEED_DEMO_DATA                             = "false"
     EMPLOYEE_DOCUMENTS_ACCOUNT_URL             = azurerm_storage_account.employee_documents.primary_blob_endpoint
     EMPLOYEE_DOCUMENTS_CONTAINER               = azurerm_storage_container.employee_documents.name
@@ -272,6 +330,9 @@ resource "azurerm_linux_web_app" "web" {
     APPLICATIONINSIGHTS_CONNECTION_STRING      = azurerm_application_insights.app.connection_string
     ApplicationInsightsAgent_EXTENSION_VERSION = "~3"
     OTEL_SERVICE_NAME                          = "laidbackhr-web"
+    AZURE_SUBSCRIPTION_ID                      = var.subscription_id
+    AZURE_RESOURCE_GROUP                       = local.resource_group_name
+    AZURE_LOG_ANALYTICS_WORKSPACE_ID           = azurerm_log_analytics_workspace.app.workspace_id
   }
 }
 

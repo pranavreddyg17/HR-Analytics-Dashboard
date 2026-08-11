@@ -85,6 +85,7 @@ jobs:
           curl --fail --silent http://127.0.0.1:3000/api/v1/ready >/dev/null || { cat /tmp/laidbackhr-next.log; exit 1; }
           LAIDBACKHR_BASE_URL=http://127.0.0.1:3000 pnpm test:live
           LAIDBACKHR_BASE_URL=http://127.0.0.1:3000 pnpm test:ai-redteam
+          LAIDBACKHR_BASE_URL=http://127.0.0.1:3000 pnpm test:concurrency
       - uses: actions/setup-python@v7
         with:
           python-version: "3.12"

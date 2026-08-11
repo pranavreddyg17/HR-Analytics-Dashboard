@@ -6,12 +6,15 @@ import { getRequestActor, type RequestActor } from "@/lib/server/request-user"
 const integrationScopes = [
   "analytics:read",
   "retention:read",
+  "model:invoke",
   "operations:read",
   "agent:invoke",
   "data:write",
 ] as const
 
 export type IntegrationScope = typeof integrationScopes[number]
+
+const SERVICE_RATE_LIMIT = 120
 
 export type IntegrationPrincipal = {
   kind: "session" | "service"
@@ -97,6 +100,12 @@ export async function authorizeIntegrationRequest(request: Request, required: In
     await auditIntegrationRequest(principal, request, 403)
     throw new IntegrationApiError(`The service credential does not grant ${required}.`, 403)
   }
+  const recent = await database.prepare(`SELECT COUNT(*) AS count FROM integration_api_audit
+    WHERE client_id=? AND created_at::timestamptz >= CURRENT_TIMESTAMP - INTERVAL '1 minute'`).bind(row.id).first<{ count: number }>()
+  if (Number(recent?.count ?? 0) >= SERVICE_RATE_LIMIT) {
+    await auditIntegrationRequest(principal, request, 429)
+    throw new IntegrationApiError("The client rate limit was exceeded. Retry after 60 seconds.", 429)
+  }
   await database.prepare("UPDATE integration_clients SET last_used_at=CURRENT_TIMESTAMP, updated_at=CURRENT_TIMESTAMP WHERE id=?").bind(row.id).run()
   return principal
 }
@@ -149,7 +158,7 @@ export async function revokeIntegrationClient(id: string): Promise<{ id: string;
 
 export function integrationFailure(error: unknown): Response {
   const status = error instanceof IntegrationApiError ? error.status : error instanceof Error && error.message === "AUTH_REQUIRED" ? 401 : 500
-  return Response.json({ error: { code: status === 401 ? "unauthorized" : status === 403 ? "forbidden" : status === 422 ? "invalid_request" : status === 404 ? "not_found" : "internal_error", message: error instanceof Error ? error.message : "Integration request failed." } }, { status })
+  return Response.json({ error: { code: status === 401 ? "unauthorized" : status === 403 ? "forbidden" : status === 429 ? "rate_limited" : status === 422 ? "invalid_request" : status === 404 ? "not_found" : "internal_error", message: error instanceof Error ? error.message : "Integration request failed." } }, { status, headers: status === 429 ? { "retry-after": "60" } : undefined })
 }
 
 export async function auditedIntegrationFailure(error: unknown, request: Request, principal?: IntegrationPrincipal): Promise<Response> {

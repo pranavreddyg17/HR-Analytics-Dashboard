@@ -38,6 +38,30 @@ variable "postgres_sku" {
   default     = "B_Standard_B1ms"
 }
 
+variable "virtual_network_cidr" {
+  description = "Address space reserved for LaidbackHR application networking."
+  type        = string
+  default     = "10.42.0.0/16"
+}
+
+variable "app_integration_subnet_cidr" {
+  description = "Dedicated App Service regional VNet integration subnet."
+  type        = string
+  default     = "10.42.1.0/26"
+}
+
+variable "private_endpoint_subnet_cidr" {
+  description = "Reserved subnet for future private endpoints; adding an endpoint remains an explicit cost and migration decision."
+  type        = string
+  default     = "10.42.2.0/27"
+}
+
+variable "blocked_ip_cidrs" {
+  description = "Explicitly reviewed hostile or abusive source CIDRs denied at App Service ingress. Keep threat intelligence outside Terraform and update this list through change control."
+  type        = list(string)
+  default     = []
+}
+
 variable "image_tag" {
   description = "Immutable container image tag produced by GitHub Actions."
   type        = string

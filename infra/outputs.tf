@@ -27,3 +27,13 @@ output "resource_naming" {
     renaming_requires_recreate = true
   }
 }
+
+output "network" {
+  description = "Application VNet and dedicated subnets."
+  value = {
+    virtual_network           = azurerm_virtual_network.app.name
+    app_integration_subnet    = azurerm_subnet.app_integration.id
+    private_endpoint_subnet   = azurerm_subnet.private_endpoints.id
+    blocked_source_cidr_count = length(var.blocked_ip_cidrs)
+  }
+}

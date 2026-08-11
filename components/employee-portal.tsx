@@ -4,7 +4,6 @@ import Link from "next/link"
 import { useState } from "react"
 import { useRouter, useSearchParams } from "next/navigation"
 
-import { BrandLogo } from "@/components/brand-logo"
 import { SignOutControl } from "@/components/sign-out-control"
 import { SessionRevalidator } from "@/components/session-revalidator"
 import { Button } from "@/components/ui/button"
@@ -247,7 +246,6 @@ export function EmployeePortal({ initialData, user }: { initialData: PortalData;
     <SessionRevalidator enabled={user.authenticated} />
     <header className="employee-shell__header">
       <div className="employee-shell__header-inner mx-auto flex min-h-14 max-w-[1280px] items-center gap-4 px-4 sm:px-6">
-        <BrandLogo />
         <nav className="employee-shell__navigation" aria-label="Employee navigation">
           {portalViews.map((item) => <button key={item.value} type="button" aria-current={active === item.value ? "page" : undefined} onClick={() => selectView(item.value)} className={active === item.value ? "employee-shell__navigation-link employee-shell__navigation-link--active" : "employee-shell__navigation-link"}>{item.label}</button>)}
         </nav>

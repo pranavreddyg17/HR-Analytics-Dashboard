@@ -14,6 +14,7 @@ All runtime resources are provisioned in the existing `Laidback.ai` resource gro
 - Azure OpenAI provides grounded synthesis when a chat deployment is configured. The assistant retains a deterministic, evidence-only fallback if generation is unavailable.
 - Azure Container Registry stores immutable web images. The validated prediction artifact runs inside the web application; the Python package remains a test and retraining reference, not a second production service.
 - Application Insights and Log Analytics collect server request, dependency, exception, and trace telemetry through the App Service-managed Node.js agent. The agent starts before the Next.js server and is patched by Azure.
+- A dedicated App Service integration subnet places application egress inside `laidbackhr-production-vnet`; a separate subnet is reserved for a controlled private-endpoint migration. App Service ingress restrictions accept reviewed deny CIDRs from Terraform without hard-coding transient threat feeds.
 - Terraform owns the Azure resources and GitHub Actions is the only deployment pipeline. Azure DevOps validates the mirrored `main` commit and verifies that the same immutable SHA is live; it does not perform a competing deployment.
 
 Production demo seeding is disabled. Existing PostgreSQL records are preserved; new migrations add structures without replacing operational rows.
@@ -30,6 +31,7 @@ Production demo seeding is disabled. Existing PostgreSQL records are preserved; 
 - `/attrition` and `/risk-review` — governed model assessment and review worklists
 - `/assistant` — grounded analytics assistant with conversation memory and a visible evidence trace
 - `/imports` — validated imports, exports, and reporting feeds
+- `/admin` — administrator-only application performance, internal usage, API audit, import status, and Azure cost monitor
 - `/access` — workspace membership and roles
 - `/employee` — employee self-service for profile, leave, reimbursements, HR cases, documents, reviews, and one-to-ones
 
@@ -89,7 +91,19 @@ The employee assistant and future integrations should use these APIs instead of 
 | POST | `/api/v1/chat` | Conversational agent with workspace memory |
 | GET/POST/DELETE | `/api/mcp` | Streamable HTTP MCP tools |
 
-Customer systems use the separately versioned `/api/v1/integrations/v1` surface rather than browser-session endpoints. Administrators create scoped, expiring, revocable service credentials under **Data exchange → Integration API**. The current contract exposes workforce analytics, retention intelligence, bounded operating queues, governed data imports, and read-only agent invocation. Its OpenAPI 3.1 document is available from `/api/v1/integrations/openapi`; mutating HR workflow execution is intentionally excluded so customer integrations cannot bypass human approvals.
+Customer systems use the separately versioned `/api/v1/integrations/v1` surface rather than browser-session endpoints. Administrators create scoped, expiring, revocable service credentials under **Data exchange → Integration API**. The contract exposes discovery, workforce analytics, bounded reporting views, retention cohorts, model governance, explainable model scenarios, operating queues, governed imports, and read-only agents. Service clients are audited and limited to 120 requests per minute. Its OpenAPI 3.1 document is available from `/api/v1/integrations/openapi`; mutating HR workflow execution is intentionally excluded so customer integrations cannot bypass human approvals.
+
+| Method | Integration endpoint | Required scope |
+|---|---|---|
+| GET | `/api/v1/integrations/v1/capabilities` | `analytics:read` |
+| GET | `/api/v1/integrations/v1/workforce` | `analytics:read` |
+| GET | `/api/v1/integrations/v1/insights?view=overview\|workforce-impact\|talent-supply\|capability` | `analytics:read` |
+| GET | `/api/v1/integrations/v1/retention` | `retention:read` |
+| GET | `/api/v1/integrations/v1/retention/model` | `retention:read` |
+| POST | `/api/v1/integrations/v1/retention/predict` | `model:invoke` |
+| GET | `/api/v1/integrations/v1/operations` | `operations:read` |
+| POST | `/api/v1/integrations/v1/agents/{agentId}/invoke` | `agent:invoke` |
+| POST | `/api/v1/integrations/v1/data/import` | `data:write` |
 
 ## Local development
 
@@ -111,6 +125,7 @@ pnpm exec tsc --noEmit
 pnpm test:interactions
 pnpm test:knowledge
 LAIDBACKHR_BASE_URL=http://127.0.0.1:3000 pnpm test:ai-redteam
+LAIDBACKHR_BASE_URL=http://127.0.0.1:3000 pnpm test:concurrency
 DATABASE_URL=postgresql://postgres:postgres@127.0.0.1:5432/laidbackhr_test DATABASE_SSL_MODE=disable pnpm test:operations
 pnpm build
 pnpm model:export

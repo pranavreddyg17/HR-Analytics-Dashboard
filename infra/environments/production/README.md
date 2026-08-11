@@ -16,6 +16,24 @@ The stable suffix `f61hno` was generated once by Terraform to satisfy Azure's gl
 | `laidbackhrf61hno` | Active `laidbackhr-web` container images and rollback tags |
 | `laidbackhrf61hnodocs` | Private employee-document blobs |
 | `laidbackhr-production-insights` and `laidbackhr-production-logs` | App Service-managed Node.js telemetry and its Log Analytics workspace |
+| `laidbackhr-production-vnet` | Application network with dedicated App Service integration and private-endpoint subnets |
+
+## Operations monitor access
+
+The web app managed identity reads application telemetry and resource-group cost through Azure control-plane APIs. These roles are intentionally bootstrapped by a resource-group access administrator rather than by the deployment identity, which does not receive permission to grant roles:
+
+```bash
+WEB_PRINCIPAL_ID="$(az webapp identity show --resource-group Laidback.ai --name laidbackhr-f61hno-web --query principalId -o tsv)"
+RG_SCOPE="/subscriptions/7981312c-4577-455a-8bae-10269b74a97b/resourceGroups/Laidback.ai"
+az role assignment create --assignee-object-id "$WEB_PRINCIPAL_ID" --assignee-principal-type ServicePrincipal --role "Monitoring Reader" --scope "$RG_SCOPE"
+az role assignment create --assignee-object-id "$WEB_PRINCIPAL_ID" --assignee-principal-type ServicePrincipal --role "Cost Management Reader" --scope "$RG_SCOPE"
+```
+
+The production identity already has both assignments. The admin page continues to show internal PostgreSQL usage if an Azure provider is temporarily unavailable.
+
+## Network controls
+
+Terraform creates `10.42.0.0/16`, delegates `10.42.1.0/26` to App Service, and reserves `10.42.2.0/27` for private endpoints. PostgreSQL public access is not disabled by this change; moving the live database to Private Link requires an explicit migration and DNS validation. Reviewed source CIDRs can be denied through `blocked_ip_cidrs`. Do not commit copied public blocklists: use Azure Web Application Firewall threat intelligence when managed threat feeds are required.
 
 ## Employee portal DNS
 

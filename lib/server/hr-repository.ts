@@ -48,7 +48,12 @@ let bootstrapPromise: Promise<void> | null = null
 
 export async function ensureHrDatabase(): Promise<Database> {
   if (!repositoryPromise) {
-    repositoryPromise = import("@/lib/server/postgres-database").then(({ getPostgresDatabase }) => getPostgresDatabase())
+    repositoryPromise = import("@/lib/server/postgres-database")
+      .then(({ getPostgresDatabase }) => getPostgresDatabase())
+      .catch((error) => {
+        repositoryPromise = null
+        throw error
+      })
   }
   const database = await repositoryPromise
   const bootstrapEmail = runtimeEnv.BOOTSTRAP_ADMIN_EMAIL?.trim().toLowerCase()
@@ -57,7 +62,10 @@ export async function ensureHrDatabase(): Promise<Database> {
       INSERT INTO app_users(email, display_name, role, status, invited_by, onboarding_status)
       VALUES (?, ?, 'admin', 'active', 'deployment-bootstrap', 'not_required')
       ON CONFLICT(email) DO NOTHING
-    `).bind(bootstrapEmail, runtimeEnv.BOOTSTRAP_ADMIN_NAME?.trim() || bootstrapEmail.split("@")[0]).run().then(() => undefined)
+    `).bind(bootstrapEmail, runtimeEnv.BOOTSTRAP_ADMIN_NAME?.trim() || bootstrapEmail.split("@")[0]).run().then(() => undefined).catch((error) => {
+      bootstrapPromise = null
+      throw error
+    })
   }
   await bootstrapPromise
   return database

@@ -15,7 +15,7 @@ async function json(path, init) {
 }
 
 test("canonical workspace routes render and legacy routes preserve query state", async () => {
-  const routes = ["/", "/people", "/inbox", "/onboarding", "/leaves", "/courses", "/insights", "/attrition", "/assistant", "/imports", "/access", "/employee"]
+  const routes = ["/", "/people", "/inbox", "/onboarding", "/leaves", "/courses", "/insights", "/attrition", "/assistant", "/imports", "/admin", "/access", "/employee"]
   const responses = await Promise.all(routes.map((path) => request(path)))
   responses.forEach((response, index) => assert.equal(response.status, 200, `${routes[index]} should render`))
 
@@ -126,6 +126,41 @@ test("the explainable prediction runtime validates inputs and returns bounded ou
 
   const invalid = await json("/api/v1/predict", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ ...input, Department: "Unknown" }) })
   assert.equal(invalid.response.status, 422)
+})
+
+test("integration API exposes reporting projections, retention model governance, and scored scenarios", async () => {
+  const [capabilities, overview, workforceImpact, model] = await Promise.all([
+    json("/api/v1/integrations/v1/capabilities"),
+    json("/api/v1/integrations/v1/insights?view=overview&period=quarter"),
+    json("/api/v1/integrations/v1/insights?view=workforce-impact"),
+    json("/api/v1/integrations/v1/retention/model"),
+  ])
+  for (const result of [capabilities, overview, workforceImpact, model]) assert.equal(result.response.status, 200)
+  assert.ok(capabilities.body.data.endpoints.some((endpoint) => endpoint.path.endsWith("/retention/predict")))
+  assert.equal(overview.body.data.view, "overview")
+  assert.ok(Array.isArray(overview.body.data.departments))
+  assert.equal(workforceImpact.body.data.view, "workforce-impact")
+  assert.ok(Array.isArray(workforceImpact.body.data.workforceImpact.roles))
+  assert.ok(model.body.data.metadata.model_name)
+  assert.ok(model.body.data.inputSchema.threshold > 0)
+
+  const prediction = await json("/api/v1/integrations/v1/retention/predict", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ Department: "Sales", DistanceFromHome: 10, Education: 3, EducationField: "Marketing", EnvironmentSatisfaction: 2, JobSatisfaction: 2, MonthlyIncome: 4500, NumCompaniesWorked: 3, WorkLifeBalance: 2, YearsAtCompany: 2 }),
+  })
+  assert.equal(prediction.response.status, 200)
+  assert.ok(prediction.body.data.probability >= 0 && prediction.body.data.probability <= 1)
+  assert.equal(prediction.response.headers.get("cache-control"), "no-store")
+})
+
+test("admin monitor exposes internal usage even when Azure reader roles are unavailable", async () => {
+  const { response, body } = await json("/api/v1/admin/metrics")
+  assert.equal(response.status, 200)
+  assert.equal(body.usage.status, "ready")
+  assert.ok(body.usage.data.users.total >= 1)
+  assert.ok(["ready", "unavailable"].includes(body.application.status))
+  assert.ok(["ready", "unavailable"].includes(body.cost.status))
 })
 
 test("MCP exposes the production HR tools and can call the workforce tool", async () => {

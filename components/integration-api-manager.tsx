@@ -19,14 +19,19 @@ type ApiClient = {
 const availableScopes = [
   { value: "analytics:read", label: "Workforce analytics" },
   { value: "retention:read", label: "Retention intelligence" },
+  { value: "model:invoke", label: "Retention model scenarios" },
   { value: "operations:read", label: "Operational queues" },
   { value: "agent:invoke", label: "Read-only agents" },
   { value: "data:write", label: "Data imports" },
 ]
 
 const endpoints = [
+  ["GET", "/api/v1/integrations/v1/capabilities", "Discover supported endpoints, scopes, and agents"],
   ["GET", "/api/v1/integrations/v1/workforce", "Workforce and decision-support measures"],
+  ["GET", "/api/v1/integrations/v1/insights?view={view}", "Overview, workforce impact, talent supply, or capability projections"],
   ["GET", "/api/v1/integrations/v1/retention", "Retention cohorts and governed review state"],
+  ["GET", "/api/v1/integrations/v1/retention/model", "Model metadata, input contract, and intended-use controls"],
+  ["POST", "/api/v1/integrations/v1/retention/predict", "Explainable historical-model scenario assessment"],
   ["GET", "/api/v1/integrations/v1/operations", "Onboarding, leave, learning, and work queues"],
   ["POST", "/api/v1/integrations/v1/agents/{agentId}/invoke", "Grounded read-only agent invocation"],
   ["POST", "/api/v1/integrations/v1/data/import", "Validate or apply domain records"],
@@ -35,7 +40,7 @@ const endpoints = [
 export function IntegrationApiManager({ canManage }: { canManage: boolean }) {
   const [clients, setClients] = useState<ApiClient[]>([])
   const [name, setName] = useState("")
-  const [scopes, setScopes] = useState(["analytics:read", "retention:read", "operations:read", "agent:invoke"])
+  const [scopes, setScopes] = useState(["analytics:read", "retention:read", "model:invoke", "operations:read", "agent:invoke"])
   const [apiKey, setApiKey] = useState("")
   const [pendingRevoke, setPendingRevoke] = useState<ApiClient | null>(null)
   const [busy, setBusy] = useState(false)
@@ -101,7 +106,7 @@ export function IntegrationApiManager({ canManage }: { canManage: boolean }) {
           <thead><tr className="border-b border-border bg-muted/35"><th className="px-4 py-2">Method</th><th className="px-4 py-2">Endpoint</th><th className="px-4 py-2">Purpose</th></tr></thead>
           <tbody>{endpoints.map(([method, path, purpose]) => <tr key={path} className="border-b border-border/70 last:border-b-0"><td className="px-4 py-3 text-status font-semibold text-primary">{method}</td><td className="px-4 py-3 font-mono text-meta">{path}</td><td className="px-4 py-3 text-body text-muted-foreground">{purpose}</td></tr>)}</tbody>
         </table></div>
-        <div className="flex flex-wrap items-center gap-3 border-t border-border px-4 py-3"><a className="text-button text-primary" href="/api/v1/integrations/openapi" target="_blank" rel="noreferrer">OpenAPI 3.1 contract</a><span className="text-meta text-muted-foreground">Bearer authentication · scoped credentials · audited requests</span></div>
+        <div className="flex flex-wrap items-center gap-3 border-t border-border px-4 py-3"><a className="text-button text-primary" href="/api/v1/integrations/openapi" target="_blank" rel="noreferrer">OpenAPI 3.1 contract</a><span className="text-meta text-muted-foreground">Scoped credentials · request audit · 120 requests per minute</span></div>
       </CardContent>
     </Card>
 

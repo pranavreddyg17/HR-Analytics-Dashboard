@@ -3,7 +3,6 @@
 import Link from "next/link"
 import { useState } from "react"
 
-import { BrandLogo } from "@/components/brand-logo"
 import { SignOutControl } from "@/components/sign-out-control"
 import { SessionRevalidator } from "@/components/session-revalidator"
 import { Button } from "@/components/ui/button"
@@ -46,7 +45,7 @@ export function EmployeeOnboarding({ user, onboarding }: { user: { name: string;
   return <main className="employee-shell min-h-screen text-foreground">
     <SessionRevalidator enabled={user.authenticated} />
     <header className="employee-shell__header">
-      <div className="mx-auto flex min-h-14 max-w-3xl items-center justify-between gap-3 px-4 sm:px-6"><BrandLogo/><div className="flex items-center gap-3">{user.workspaceAccess && <Link href="/" className="employee-shell__sign-out">HR workspace</Link>}<SignOutControl className="employee-shell__sign-out" /></div></div>
+      <div className="mx-auto flex min-h-14 max-w-3xl items-center justify-end gap-3 px-4 sm:px-6"><div className="flex items-center gap-3">{user.workspaceAccess && <Link href="/" className="employee-shell__sign-out">HR workspace</Link>}<SignOutControl className="employee-shell__sign-out" /></div></div>
     </header>
     <div className="mx-auto max-w-3xl px-4 py-8 sm:px-6">
       {onboarding.status === "submitted" ? <section className="surface-card p-6">

@@ -29,8 +29,8 @@ export async function GET(request: Request) {
     openapi: "3.1.0",
     info: {
       title: "LaidbackHR Workforce Intelligence API",
-      version: "1.0.0",
-      description: "Versioned, scope-controlled access to workforce analytics, retention evidence, operations, governed imports, and read-only AI agents.",
+      version: "1.1.0",
+      description: "Versioned, scope-controlled access to workforce analytics, reporting projections, retention evidence and model scenarios, operations, governed imports, and read-only AI agents.",
     },
     servers: [{ url: origin }],
     paths: {
@@ -39,7 +39,18 @@ export async function GET(request: Request) {
         ...operation("Read filtered workforce analytics", "analytics:read", "get"),
         parameters: workforceParameters,
       },
+      "/api/v1/integrations/v1/insights": {
+        ...operation("Read a bounded reporting projection", "analytics:read", "get"),
+        parameters: [...workforceParameters, { name: "view", in: "query", schema: { type: "string", enum: ["overview", "workforce-impact", "talent-supply", "capability"], default: "overview" } }],
+      },
       "/api/v1/integrations/v1/retention": operation("Read retention intelligence and review state", "retention:read", "get"),
+      "/api/v1/integrations/v1/retention/model": operation("Read retention model metadata and input contract", "retention:read", "get"),
+      "/api/v1/integrations/v1/retention/predict": {
+        post: {
+          ...operation("Run an explainable retention-model scenario", "model:invoke", "post").post,
+          requestBody: { required: true, content: { "application/json": { schema: { $ref: "#/components/schemas/PredictionInput" } } } },
+        },
+      },
       "/api/v1/integrations/v1/operations": operation("Read operational queues and domain summaries", "operations:read", "get"),
       "/api/v1/integrations/v1/agents/{agentId}/invoke": {
         ...operation("Invoke a read-only workforce agent", "agent:invoke", "post"),
@@ -76,6 +87,23 @@ export async function GET(request: Request) {
           additionalProperties: false,
           required: ["objective"],
           properties: { objective: { type: "string", minLength: 1, maxLength: 2_000, description: "Purpose-limited workforce question for the selected read-only agent" } },
+        },
+        PredictionInput: {
+          type: "object",
+          additionalProperties: false,
+          required: ["Department", "EducationField", "DistanceFromHome", "MonthlyIncome", "Education", "EnvironmentSatisfaction", "JobSatisfaction", "WorkLifeBalance", "NumCompaniesWorked", "YearsAtCompany"],
+          properties: {
+            Department: { type: "string", enum: ["Human Resources", "Research & Development", "Sales"] },
+            EducationField: { type: "string" },
+            DistanceFromHome: { type: "integer", minimum: 1, maximum: 29 },
+            MonthlyIncome: { type: "integer", minimum: 1009, maximum: 19999 },
+            Education: { type: "integer", minimum: 1, maximum: 5 },
+            EnvironmentSatisfaction: { type: "integer", minimum: 1, maximum: 4 },
+            JobSatisfaction: { type: "integer", minimum: 1, maximum: 4 },
+            WorkLifeBalance: { type: "integer", minimum: 1, maximum: 4 },
+            NumCompaniesWorked: { type: "integer", minimum: 0, maximum: 9 },
+            YearsAtCompany: { type: "integer", minimum: 0, maximum: 40 },
+          },
         },
         ImportRequest: {
           type: "object",

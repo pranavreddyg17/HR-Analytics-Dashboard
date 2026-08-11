@@ -48,6 +48,7 @@ const pageDetails: Record<string, string> = {
   "/attrition": "Retention signals and model analysis",
   "/assistant": "Workforce questions and assisted actions",
   "/imports": "Imports, record coverage, and reporting feeds",
+  "/admin": "Application health, usage, cost, and service performance",
   "/access": "Accounts, roles, and access history",
 }
 

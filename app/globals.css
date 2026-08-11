@@ -525,33 +525,18 @@
   max-width: 1680px;
   height: 100%;
   align-items: center;
-  grid-template-columns: minmax(200px, 248px) minmax(500px, 1fr) minmax(220px, 340px) auto;
+  grid-template-columns: minmax(560px, 1fr) minmax(240px, 360px) auto;
   gap: 12px;
   margin-inline: auto;
   padding-inline: 24px;
 }
 
-.topbar__leading {
+.topbar__navigation-area {
   display: flex;
+  height: 100%;
   min-width: 0;
   align-items: center;
-  gap: 14px;
-}
-
-.topbar__brand {
-  display: inline-flex;
-  flex: 0 0 auto;
-  align-items: center;
-}
-
-.topbar .brand-logo__wordmark,
-.employee-shell__header .brand-logo__wordmark {
-  color: var(--shell-foreground);
-}
-
-.topbar .brand-logo__ai,
-.employee-shell__header .brand-logo__ai {
-  color: #b7a6ff;
+  gap: 10px;
 }
 
 .topbar-back-link,
@@ -564,10 +549,11 @@
 }
 
 .topbar-back-link {
-  max-width: 96px;
+  max-width: 150px;
+  flex: 0 0 auto;
   overflow: hidden;
-  padding-left: 14px;
-  border-left: 1px solid var(--shell-border);
+  padding-right: 12px;
+  border-right: 1px solid var(--shell-border);
   color: var(--shell-muted);
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -968,7 +954,7 @@ textarea:focus {
 
 @media (max-width: 1279px) {
   .topbar__inner {
-    grid-template-columns: minmax(180px, 250px) minmax(260px, 1fr) auto;
+    grid-template-columns: minmax(260px, 1fr) auto;
   }
 
   .enterprise-nav {
@@ -994,13 +980,9 @@ textarea:focus {
   }
 
   .topbar__inner {
-    grid-template-columns: auto minmax(0, 1fr) auto;
+    grid-template-columns: minmax(0, 1fr) auto;
     gap: 8px;
     padding-inline: 14px;
-  }
-
-  .topbar__leading {
-    gap: 0;
   }
 
   .brand-logo__wordmark {
@@ -1154,7 +1136,7 @@ textarea:focus {
   height: 38px;
   align-self: center;
   gap: 2px;
-  margin-left: 16px;
+  margin-left: 0;
   padding: 3px;
   border: 1px solid rgb(255 255 255 / 0.08);
   border-radius: 11px;

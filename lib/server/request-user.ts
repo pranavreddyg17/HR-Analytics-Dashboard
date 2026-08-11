@@ -17,20 +17,24 @@ const localPreviewActor: RequestActor = {
   localPreview: true,
 }
 
-function isLocalHost(value: string): boolean {
+function isLocalPreviewHost(value: string): boolean {
   const hostname = value.split(",")[0]?.trim().split(":")[0]
-  return hostname === "localhost" || hostname === "127.0.0.1"
+  if (hostname === "localhost" || hostname === "127.0.0.1") return true
+  if (/^10(?:\.\d{1,3}){3}$/.test(hostname)) return true
+  if (/^192\.168(?:\.\d{1,3}){2}$/.test(hostname)) return true
+  const private172 = hostname.match(/^172\.(\d{1,2})(?:\.\d{1,3}){2}$/)
+  return Boolean(private172 && Number(private172[1]) >= 16 && Number(private172[1]) <= 31)
 }
 
 async function getLocalPreviewActor(request?: Request): Promise<RequestActor | null> {
   const previewEnabled = runtimeEnv.LOCAL_UI_PREVIEW === "true"
   if (!previewEnabled) return null
 
-  if (request) return isLocalHost(new URL(request.url).hostname) ? localPreviewActor : null
+  if (request) return isLocalPreviewHost(new URL(request.url).hostname) ? localPreviewActor : null
 
   const requestHeaders = await headers()
   const host = requestHeaders.get("x-forwarded-host") ?? requestHeaders.get("host") ?? ""
-  return isLocalHost(host) ? localPreviewActor : null
+  return isLocalPreviewHost(host) ? localPreviewActor : null
 }
 
 export async function getRequestActor(request?: Request): Promise<RequestActor | null> {

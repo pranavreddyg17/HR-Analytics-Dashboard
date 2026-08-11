@@ -49,6 +49,7 @@ const navigationGroups: Array<{ label: string; items: NavigationItem[] }> = [
     label: "System",
     items: [
       { href: "/imports", label: "Data exchange" },
+      { href: "/admin", label: "Operations monitor", adminOnly: true },
       { href: "/access", label: "Access", adminOnly: true },
     ],
   },

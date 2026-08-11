@@ -3,7 +3,6 @@
 import Link from "next/link"
 import { useSearchParams } from "next/navigation"
 
-import { BrandLogo } from "@/components/brand-logo"
 import type { ShellUser } from "@/components/app-navigation"
 import { SignOutControl } from "@/components/sign-out-control"
 import { returnDestinationLabel, safeReturnTo } from "@/lib/navigation"
@@ -19,14 +18,10 @@ export function Topbar({ user, navigation, onOpenPalette, onOpenNavigation }: { 
   return (
     <header className="topbar">
       <div className="topbar__inner">
-        <div className="topbar__leading">
-          <Link href="/" className="topbar__brand" aria-label="LaidbackHR.AI home">
-            <BrandLogo />
-          </Link>
+        <div className="topbar__navigation-area">
           {returnTo && <Link href={returnTo} className="topbar-back-link">Back to {returnDestinationLabel(returnTo)}</Link>}
+          {navigation}
         </div>
-
-        {navigation}
 
         <button
           type="button"
