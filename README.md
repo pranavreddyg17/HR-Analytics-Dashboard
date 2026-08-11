@@ -165,6 +165,7 @@ SQL migrations in `db/postgres` are append-only and run idempotently during appl
 | `0007_employee_service_outcomes.sql` | Durable employee-case resolutions and ownership |
 | `0008_ai_workflow_handoffs.sql` | Assistant-to-workflow handoff state |
 | `0009_integration_api.sql` | Scoped integration clients and request audit |
+| `0010_admin_provider_snapshots.sql` | Persistent Azure provider snapshots and retry state for the operations monitor |
 
 ### Core relational domains
 
@@ -633,6 +634,7 @@ The App Service managed identity requires `Monitoring Reader` and `Cost Manageme
 - PostgreSQL uses a bounded connection pool (`DATABASE_POOL_MAX=10`).
 - Expensive analytics share a 30-second production cache and route responses allow short private caching.
 - Azure AI Search results are cached for five minutes and remote calls have strict timeouts.
+- Azure Cost Management is queried at most once daily; the last successful snapshot and provider retry window are shared through PostgreSQL so refreshes and restarts cannot amplify throttling.
 - MCP runs in-process for the assistant, eliminating a network hop.
 - The prediction model is embedded in the web container, eliminating a second App Service.
 - Docker builds use GitHub cache and immutable SHA tags.

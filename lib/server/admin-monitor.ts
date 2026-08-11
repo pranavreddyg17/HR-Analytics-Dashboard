@@ -1,15 +1,54 @@
 import { DefaultAzureCredential, ManagedIdentityCredential, type TokenCredential } from "@azure/identity"
 
+import {
+  AZURE_COST_STALE_MS,
+  azureRetryAfterAt,
+  isCurrentUtcMonth,
+  providerCacheMode,
+} from "@/lib/server/admin-provider-cache"
 import { cachedAnalyticsRead } from "@/lib/server/analytics-cache"
-import { ensureHrDatabase } from "@/lib/server/hr-repository"
+import { ensureHrDatabase, type Database } from "@/lib/server/hr-repository"
 import { runtimeEnv } from "@/lib/server/runtime-env"
 
 type ProviderState<T> = { status: "ready"; data: T } | { status: "unavailable"; reason: string }
 
+type CostSnapshot = {
+  monthToDate: number
+  currency: string
+  periodStart: string
+  periodEnd: string
+  byService: Array<{ service: string; cost: number }>
+}
+
+type CostMetrics = CostSnapshot & {
+  refreshedAt: string
+  stale: boolean
+}
+
+type StoredProviderRow = {
+  payload_json: unknown
+  fetched_at: string | null
+  retry_after_at: string | null
+  last_status_code: number | null
+}
+
+type CostProviderState = {
+  snapshot: CostSnapshot | null
+  fetchedAt: number | null
+  retryAfterAt: number | null
+  lastStatus: number | null
+}
+
+class AzureCostRequestError extends Error {
+  constructor(readonly status: number, message: string, readonly retryAfterAt: number) {
+    super(message)
+  }
+}
+
 export type AdminMonitor = {
   generatedAt: string
   application: ProviderState<{ requests: number; failedRequests: number; failureRate: number; averageMs: number; p95Ms: number }>
-  cost: ProviderState<{ monthToDate: number; currency: string; periodStart: string; periodEnd: string; byService: Array<{ service: string; cost: number }> }>
+  cost: ProviderState<CostMetrics>
   usage: ProviderState<{
     users: { total: number; active30d: number }
     work: { open: number; overdue: number; completed30d: number }
@@ -24,6 +63,9 @@ export type AdminMonitor = {
 const credential: TokenCredential = runtimeEnv.IDENTITY_ENDPOINT || runtimeEnv.MSI_ENDPOINT
   ? new ManagedIdentityCredential()
   : new DefaultAzureCredential()
+
+let costProviderState: CostProviderState | null = null
+let costRequest: Promise<AdminMonitor["cost"]> | null = null
 
 function unavailable<T>(error: unknown, fallback: string): ProviderState<T> {
   const message = error instanceof Error ? error.message : ""
@@ -64,45 +106,183 @@ async function applicationMetrics(): Promise<AdminMonitor["application"]> {
   }
 }
 
-async function costMetrics(): Promise<AdminMonitor["cost"]> {
+function timestamp(value: string | null): number | null {
+  if (!value) return null
+  const parsed = Date.parse(value)
+  return Number.isFinite(parsed) ? parsed : null
+}
+
+function parseCostSnapshot(value: unknown): CostSnapshot | null {
+  let candidate = value
+  if (typeof candidate === "string") {
+    try { candidate = JSON.parse(candidate) } catch { return null }
+  }
+  if (!candidate || typeof candidate !== "object") return null
+  const record = candidate as Record<string, unknown>
+  if (!Number.isFinite(Number(record.monthToDate)) || typeof record.currency !== "string" || typeof record.periodStart !== "string" || typeof record.periodEnd !== "string" || !Array.isArray(record.byService)) return null
+  const byService = record.byService.flatMap((item) => {
+    if (!item || typeof item !== "object") return []
+    const row = item as Record<string, unknown>
+    const cost = Number(row.cost)
+    return typeof row.service === "string" && Number.isFinite(cost) ? [{ service: row.service, cost }] : []
+  })
+  return {
+    monthToDate: Number(record.monthToDate),
+    currency: record.currency,
+    periodStart: record.periodStart,
+    periodEnd: record.periodEnd,
+    byService,
+  }
+}
+
+async function readCostProviderState(database: Database): Promise<CostProviderState> {
+  const row = await database.prepare(`SELECT payload_json, fetched_at::text, retry_after_at::text, last_status_code
+    FROM admin_provider_snapshots WHERE provider='azure-cost'`).first<StoredProviderRow>()
+  const snapshot = parseCostSnapshot(row?.payload_json)
+  return {
+    snapshot,
+    fetchedAt: snapshot ? timestamp(row?.fetched_at ?? null) : null,
+    retryAfterAt: timestamp(row?.retry_after_at ?? null),
+    lastStatus: row?.last_status_code ?? null,
+  }
+}
+
+async function recordCostSuccess(database: Database, snapshot: CostSnapshot, fetchedAt: number): Promise<void> {
+  await database.prepare(`INSERT INTO admin_provider_snapshots(provider, payload_json, fetched_at, retry_after_at, last_status_code, updated_at)
+    VALUES ('azure-cost', ?::jsonb, ?, NULL, 200, CURRENT_TIMESTAMP)
+    ON CONFLICT(provider) DO UPDATE SET payload_json=EXCLUDED.payload_json, fetched_at=EXCLUDED.fetched_at,
+      retry_after_at=NULL, last_status_code=200, updated_at=CURRENT_TIMESTAMP`)
+    .bind(JSON.stringify(snapshot), new Date(fetchedAt).toISOString()).run()
+}
+
+async function recordCostFailure(database: Database, status: number, retryAfterAt: number): Promise<void> {
+  await database.prepare(`INSERT INTO admin_provider_snapshots(provider, retry_after_at, last_status_code, updated_at)
+    VALUES ('azure-cost', ?, ?, CURRENT_TIMESTAMP)
+    ON CONFLICT(provider) DO UPDATE SET retry_after_at=EXCLUDED.retry_after_at,
+      last_status_code=EXCLUDED.last_status_code, updated_at=CURRENT_TIMESTAMP`)
+    .bind(new Date(retryAfterAt).toISOString(), status || null).run()
+}
+
+async function claimCostRefresh(database: Database, now: number): Promise<boolean> {
+  const leaseUntil = new Date(now + 2 * 60 * 1_000).toISOString()
+  const claimed = await database.prepare(`INSERT INTO admin_provider_snapshots(provider, retry_after_at, last_status_code, updated_at)
+    VALUES ('azure-cost', ?, 102, CURRENT_TIMESTAMP)
+    ON CONFLICT(provider) DO UPDATE SET retry_after_at=EXCLUDED.retry_after_at,
+      last_status_code=102, updated_at=CURRENT_TIMESTAMP
+    WHERE admin_provider_snapshots.retry_after_at IS NULL OR admin_provider_snapshots.retry_after_at <= CURRENT_TIMESTAMP
+    RETURNING provider`).bind(leaseUntil).first<{ provider: string }>()
+  return claimed?.provider === "azure-cost"
+}
+
+function readyCost(state: CostProviderState, stale: boolean): AdminMonitor["cost"] {
+  if (!state.snapshot || state.fetchedAt === null) return { status: "unavailable", reason: "Azure cost data has not completed its first refresh." }
+  return {
+    status: "ready",
+    data: { ...state.snapshot, refreshedAt: new Date(state.fetchedAt).toISOString(), stale },
+  }
+}
+
+function costFailureReason(error: unknown, retryAfterAt: number): string {
+  const retry = new Date(retryAfterAt).toLocaleString("en-US", { timeZone: "UTC", dateStyle: "medium", timeStyle: "short" })
+  if (error instanceof AzureCostRequestError && error.status === 429) return `Azure cost refresh is temporarily throttled. Automatic retry is scheduled after ${retry} UTC.`
+  if (error instanceof AzureCostRequestError && error.status === 503) return `Azure cost data is temporarily unavailable. Automatic retry is scheduled after ${retry} UTC.`
+  if (error instanceof AzureCostRequestError && [401, 403].includes(error.status)) return "Azure cost access is unavailable. Verify the web app has Cost Management Reader on Laidback.ai."
+  return "Azure cost data is temporarily unavailable. The last successful snapshot will be used when available."
+}
+
+async function fetchAzureCost(): Promise<CostSnapshot> {
+  const subscriptionId = runtimeEnv.AZURE_SUBSCRIPTION_ID
+  const resourceGroup = runtimeEnv.AZURE_RESOURCE_GROUP
+  if (!subscriptionId || !resourceGroup) throw new Error("Azure resource scope is not configured.")
+  const token = await azureToken("https://management.azure.com/.default")
+  const scope = `/subscriptions/${subscriptionId}/resourceGroups/${resourceGroup}`
+  const response = await fetch(`https://management.azure.com${scope}/providers/Microsoft.CostManagement/query?api-version=2025-03-01`, {
+    method: "POST",
+    headers: { authorization: `Bearer ${token}`, "content-type": "application/json" },
+    body: JSON.stringify({
+      type: "ActualCost",
+      timeframe: "MonthToDate",
+      dataset: {
+        granularity: "None",
+        aggregation: { totalCost: { name: "Cost", function: "Sum" } },
+        grouping: [{ type: "Dimension", name: "ServiceName" }],
+      },
+    }),
+    signal: AbortSignal.timeout(5_000),
+    cache: "no-store",
+  })
+  if (!response.ok) {
+    const retryAfterAt = [429, 503].includes(response.status) ? azureRetryAfterAt(response.headers) : Date.now() + 6 * 60 * 60 * 1_000
+    throw new AzureCostRequestError(response.status, `Azure Cost Management returned ${response.status}.`, retryAfterAt)
+  }
+  const body = await response.json() as { properties?: { rows?: unknown[][]; columns?: Array<{ name?: string }> } }
+  const columns = body.properties?.columns?.map((column) => column.name ?? "") ?? []
+  const costIndex = columns.findIndex((name) => name.toLowerCase() === "cost")
+  const serviceIndex = columns.findIndex((name) => name.toLowerCase() === "servicename")
+  const currencyIndex = columns.findIndex((name) => name.toLowerCase() === "currency")
+  if (costIndex < 0 || serviceIndex < 0) throw new Error("Azure Cost Management returned an unexpected result shape.")
+  const byService = (body.properties?.rows ?? [])
+    .map((row) => ({ service: String(row[serviceIndex] ?? "Other"), cost: Number(row[costIndex] ?? 0) }))
+    .filter((row) => Number.isFinite(row.cost))
+    .sort((a, b) => b.cost - a.cost)
+  const now = new Date()
+  return {
+    monthToDate: byService.reduce((sum, row) => sum + row.cost, 0),
+    currency: String(body.properties?.rows?.[0]?.[currencyIndex] ?? "USD"),
+    periodStart: new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1)).toISOString(),
+    periodEnd: now.toISOString(),
+    byService,
+  }
+}
+
+async function loadCostMetrics(): Promise<AdminMonitor["cost"]> {
   try {
-    const subscriptionId = runtimeEnv.AZURE_SUBSCRIPTION_ID
-    const resourceGroup = runtimeEnv.AZURE_RESOURCE_GROUP
-    if (!subscriptionId || !resourceGroup) throw new Error("Azure resource scope is not configured.")
-    const token = await azureToken("https://management.azure.com/.default")
-    const scope = `/subscriptions/${subscriptionId}/resourceGroups/${resourceGroup}`
-    const response = await fetch(`https://management.azure.com${scope}/providers/Microsoft.CostManagement/query?api-version=2025-03-01`, {
-      method: "POST",
-      headers: { authorization: `Bearer ${token}`, "content-type": "application/json" },
-      body: JSON.stringify({
-        type: "ActualCost",
-        timeframe: "MonthToDate",
-        dataset: {
-          granularity: "None",
-          aggregation: { totalCost: { name: "Cost", function: "Sum" } },
-          grouping: [{ type: "Dimension", name: "ServiceName" }],
-        },
-      }),
-      signal: AbortSignal.timeout(5_000),
-      cache: "no-store",
-    })
-    if (!response.ok) throw new Error(`Azure Cost Management returned ${response.status}. Grant the web app Cost Management Reader on Laidback.ai.`)
-    const body = await response.json() as { properties?: { rows?: unknown[][]; columns?: Array<{ name?: string }> } }
-    const columns = body.properties?.columns?.map((column) => column.name ?? "") ?? []
-    const costIndex = columns.findIndex((name) => name.toLowerCase() === "cost")
-    const serviceIndex = columns.findIndex((name) => name.toLowerCase() === "servicename")
-    const currencyIndex = columns.findIndex((name) => name.toLowerCase() === "currency")
-    const byService = (body.properties?.rows ?? []).map((row) => ({ service: String(row[serviceIndex] ?? "Other"), cost: Number(row[costIndex] ?? 0) })).sort((a, b) => b.cost - a.cost)
-    const now = new Date()
-    return { status: "ready", data: {
-      monthToDate: byService.reduce((sum, row) => sum + row.cost, 0),
-      currency: String(body.properties?.rows?.[0]?.[currencyIndex] ?? "USD"),
-      periodStart: new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1)).toISOString(),
-      periodEnd: now.toISOString(),
-      byService,
-    } }
+    const database = await ensureHrDatabase()
+    const now = Date.now()
+    const state = costProviderState ?? await readCostProviderState(database)
+    costProviderState = state
+    const currentPeriod = state.snapshot ? isCurrentUtcMonth(state.snapshot.periodStart, now) : false
+    const mode = providerCacheMode({ fetchedAt: currentPeriod ? state.fetchedAt : null, retryAfterAt: state.retryAfterAt, now })
+    if (mode === "fresh") return readyCost(state, false)
+    if (mode === "stale") {
+      if (state.lastStatus === 401 || state.lastStatus === 403) return { status: "unavailable", reason: "Azure cost access is unavailable. Verify the web app has Cost Management Reader on Laidback.ai." }
+      return readyCost(state, true)
+    }
+    if (mode === "blocked") return { status: "unavailable", reason: `Azure cost refresh is temporarily delayed. Automatic retry is scheduled after ${new Date(state.retryAfterAt!).toISOString()}.` }
+
+    if (!await claimCostRefresh(database, now)) {
+      const current = await readCostProviderState(database)
+      costProviderState = current
+      if (current.snapshot && isCurrentUtcMonth(current.snapshot.periodStart, now) && current.fetchedAt !== null && current.fetchedAt + AZURE_COST_STALE_MS > now) return readyCost(current, true)
+      return { status: "unavailable", reason: "Azure cost refresh is already in progress. Refresh this page again shortly." }
+    }
+
+    try {
+      const snapshot = await fetchAzureCost()
+      const fetchedAt = Date.now()
+      await recordCostSuccess(database, snapshot, fetchedAt)
+      costProviderState = { snapshot, fetchedAt, retryAfterAt: null, lastStatus: 200 }
+      return readyCost(costProviderState, false)
+    } catch (error) {
+      const retryAfterAt = error instanceof AzureCostRequestError ? error.retryAfterAt : Date.now() + 15 * 60 * 1_000
+      const status = error instanceof AzureCostRequestError ? error.status : 0
+      await recordCostFailure(database, status, retryAfterAt).catch(() => undefined)
+      costProviderState = { ...state, retryAfterAt, lastStatus: status }
+      const hasUsableSnapshot = state.snapshot && isCurrentUtcMonth(state.snapshot.periodStart) && state.fetchedAt !== null && state.fetchedAt + AZURE_COST_STALE_MS > Date.now()
+      if (hasUsableSnapshot && (status === 0 || status === 429 || status === 503)) return readyCost(costProviderState, true)
+      return { status: "unavailable", reason: costFailureReason(error, retryAfterAt) }
+    }
   } catch (error) {
-    return unavailable(error, "Azure cost data is temporarily unavailable. Verify the web app managed identity can read Cost Management data.")
+    return unavailable(error, "Azure cost data is temporarily unavailable. Verify the database and managed identity configuration.")
+  }
+}
+
+async function costMetrics(): Promise<AdminMonitor["cost"]> {
+  if (costRequest) return costRequest
+  const pending = loadCostMetrics()
+  costRequest = pending
+  try { return await pending } finally {
+    if (costRequest === pending) costRequest = null
   }
 }
 
