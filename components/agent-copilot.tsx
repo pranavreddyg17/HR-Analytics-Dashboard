@@ -4,9 +4,18 @@ import { useEffect, useRef, useState } from "react"
 import { ArrowUp, LoaderCircle } from "lucide-react"
 import Link from "next/link"
 
+import { AssistantRichText } from "@/components/assistant-rich-text"
 import { Button } from "@/components/ui/button"
 import { assistantPagePrompts, type AssistantPageContext } from "@/lib/assistant-page-context"
 import { cn } from "@/lib/utils"
+
+export type AssistantWorkflow = {
+  prompt: string
+  type: "calendar_invite" | "learning_assignment" | "hiring_requisition" | "retention_review"
+  title: string
+  evidence: string
+  requiresConfirmation: true
+}
 
 type ChatMessage = {
   id?: string
@@ -15,13 +24,7 @@ type ChatMessage = {
   tools?: Array<{ tool: string; status: string }>
   context?: Array<{ source: string; section: string }>
   dataMode?: string
-  workflow?: {
-    prompt: string
-    type: "calendar_invite" | "learning_assignment" | "hiring_requisition" | "retention_review"
-    title: string
-    evidence: string
-    requiresConfirmation: true
-  }
+  workflow?: AssistantWorkflow
 }
 
 type ConversationSummary = {
@@ -57,7 +60,7 @@ function welcomeMessage(dataMode: string): ChatMessage {
   }
 }
 
-export function AgentCopilot({ dataMode, pageContext, compact = false }: { dataMode: string; pageContext?: AssistantPageContext; compact?: boolean }) {
+export function AgentCopilot({ dataMode, pageContext, compact = false, onReviewWorkflow }: { dataMode: string; pageContext?: AssistantPageContext; compact?: boolean; onReviewWorkflow?: (workflow: AssistantWorkflow) => void }) {
   const [messages, setMessages] = useState<ChatMessage[]>([welcomeMessage(dataMode)])
   const [conversations, setConversations] = useState<ConversationSummary[]>([])
   const [conversationId, setConversationId] = useState("")
@@ -243,8 +246,8 @@ export function AgentCopilot({ dataMode, pageContext, compact = false }: { dataM
           </select>
         </label>
         </>}
-        <Button type="button" size="sm" variant="outline" onClick={newConversation} disabled={thinking || loadingHistory || deleting}>New chat</Button>
-        {!compact && <Button type="button" size="sm" variant="outline" onClick={() => { setConversationError(""); setDeleteOpen(true) }} disabled={!conversationId || thinking || loadingHistory || deleting}>Delete chat</Button>}
+        <Button type="button" size="sm" variant="outline" onClick={newConversation} disabled={thinking || loadingHistory || deleting}>New conversation</Button>
+        {!compact && <Button type="button" size="sm" variant="outline" onClick={() => { setConversationError(""); setDeleteOpen(true) }} disabled={!conversationId || thinking || loadingHistory || deleting}>Delete</Button>}
       </div>
 
       {conversationError && !deleteOpen && <div role="alert" className="border-b border-border bg-destructive/5 px-4 py-2 text-xs text-destructive">{conversationError}</div>}
@@ -256,29 +259,26 @@ export function AgentCopilot({ dataMode, pageContext, compact = false }: { dataM
           <article key={message.id ?? index} className={cn("flex", message.role === "user" && "justify-end")}>
             <div className="max-w-[88%]">
               <div className={cn(
-                "whitespace-pre-wrap rounded-md px-3.5 py-3 text-sm",
+                "rounded-md px-3.5 py-3",
                 message.role === "assistant" ? "border border-border bg-background text-foreground" : "bg-secondary text-secondary-foreground",
               )}>
-                {message.content.replace(/\*\*/g, "").replace(/_([^_]+)_/g, "$1")}
+                {message.role === "assistant" ? <AssistantRichText content={message.content} /> : <p className="whitespace-pre-wrap text-body">{message.content}</p>}
               </div>
               {message.role === "assistant" && ((message.tools?.length ?? 0) > 0 || (message.context?.length ?? 0) > 0) && (
-                <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 px-1 text-meta text-muted-foreground">
-                  <span>Sources:</span>
-                  {message.tools?.map((trace) => <span key={trace.tool}>{toolLabels[trace.tool] ?? trace.tool}</span>)}
-                  {message.context?.map((item) => <span key={`${item.source}-${item.section}`}>{item.source.startsWith("Azure AI Search") ? `Azure AI Search · ${item.section}` : item.section}</span>)}
-                </div>
+                <details className="mt-2 px-1 text-meta text-muted-foreground">
+                  <summary className="w-fit cursor-pointer select-none hover:text-foreground">Evidence used</summary>
+                  <div className="mt-1.5 flex flex-wrap gap-x-3 gap-y-1">
+                    {message.tools?.map((trace) => <span key={trace.tool}>{toolLabels[trace.tool] ?? trace.tool}</span>)}
+                    {message.context?.map((item) => <span key={`${item.source}-${item.section}`}>{item.source.startsWith("Azure AI Search") ? `Azure AI Search · ${item.section}` : item.section}</span>)}
+                  </div>
+                </details>
               )}
               {message.role === "assistant" && message.workflow && (
                 <div className="mt-3 rounded-md border border-border bg-card p-3">
-                  <p className="text-label font-semibold">Prepared workflow</p>
+                  <p className="text-label font-semibold">Prepared action</p>
                   <p className="mt-1 text-body font-semibold">{message.workflow.title}</p>
                   <p className="mt-1 text-meta text-muted-foreground">{message.workflow.evidence}</p>
-                  <Link
-                    href={`/assistant?view=workflows&prompt=${encodeURIComponent(message.workflow.prompt)}`}
-                    className="mt-3 inline-flex h-8 items-center rounded-md bg-primary px-3 text-control font-semibold text-primary-foreground hover:bg-primary/90"
-                  >
-                    Review and confirm
-                  </Link>
+                  {onReviewWorkflow ? <Button type="button" size="sm" className="mt-3" onClick={() => onReviewWorkflow(message.workflow!)}>Review action</Button> : <Link href={`/assistant?view=actions&prompt=${encodeURIComponent(message.workflow.prompt)}`} className="mt-3 inline-flex h-8 items-center rounded-md bg-primary px-3 text-control font-semibold text-primary-foreground hover:bg-primary/90">Review action</Link>}
                 </div>
               )}
             </div>

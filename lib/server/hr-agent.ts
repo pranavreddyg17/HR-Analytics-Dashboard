@@ -180,9 +180,9 @@ async function synthesizeWithModel({
     purpose: plan.purpose,
     evidence: compactEvidence(data),
   })))
-  const synthesisInstruction = `${systemPrompt}\n\nYou are composing the final answer from completed read-only evidence. Answer the user's exact question and respect the current page scope. Lead with the decision-useful conclusion. Use concise bullets or a compact table when useful. Use only facts in the supplied evidence; do not invent a number, name, status, date, relationship, or cause. Do not say “Current source”, describe tool mechanics, append a generic disclaimer, or repeat the question. State a limitation only when it changes the decision. Observed outcomes, model signals, and planning scenarios must remain distinct.`
+  const synthesisInstruction = `${systemPrompt}\n\nYou are composing the final answer from completed read-only evidence. Answer the user's exact question and respect the current page scope. Lead with the decision-useful conclusion. Return clean Markdown: use no more than two short level-three headings, no more than six bullets per section, and a compact Markdown table only when comparison is materially clearer. Keep a normal response under 180 words unless the user explicitly asks for detail or a complete list. Summarize omitted records and offer the next useful drill-down. Never emit raw HTML or fenced code. Use only facts in the supplied evidence; do not invent a number, name, status, date, relationship, or cause. Do not say “Current source”, describe tool mechanics, append a generic disclaimer, or repeat the question. State a limitation only when it changes the decision. Observed outcomes, model signals, and planning scenarios must remain distinct.`
   const userContent = `Question:\n${query}\n\nStructured evidence:\n${evidenceJson}\n\nDeterministic reference draft:\n${draft}`
-  const azureAnswer = await synthesizeWithAzureResponses({ system: synthesisInstruction, user: userContent, maxOutputTokens: 2_800 }).catch(() => null)
+  const azureAnswer = await synthesizeWithAzureResponses({ system: synthesisInstruction, user: userContent, maxOutputTokens: 1_800 }).catch(() => null)
   if (azureAnswer) {
     const allowedNumbers = numericTokens(`${query}\n${draft}\n${evidenceJson}`)
     const introducedNumber = [...numericTokens(azureAnswer)].some((token) => !allowedNumbers.has(token))

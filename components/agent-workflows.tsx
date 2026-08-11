@@ -172,8 +172,8 @@ export function AgentWorkflows({ canPrepare, initialPrompt = "" }: { canPrepare:
 
   return <section className="grid gap-0 lg:grid-cols-[minmax(0,0.85fr)_minmax(0,1.15fr)]">
     <div className="border-b border-border p-5 lg:border-b-0 lg:border-r">
-      <h3 className="text-subsection font-semibold">Workflow agent</h3>
-      <p className="mt-1 text-description text-muted-foreground">Describe the outcome. The agent resolves workspace records and prepares a reviewable action.</p>
+      <h3 className="text-subsection font-semibold">Prepare an action</h3>
+      <p className="mt-1 text-description text-muted-foreground">Describe the outcome. The assistant will resolve the affected records before asking for confirmation.</p>
       <form onSubmit={(event) => { event.preventDefault(); void createPlan() }} className="mt-5">
         <label className="text-label font-semibold" htmlFor="workflow-agent-request">Request</label>
         <textarea id="workflow-agent-request" value={prompt} onChange={(event) => setPrompt(event.target.value)} rows={5} placeholder="Assign the highest-priority capability course to the relevant role cohort." className="mt-1.5 w-full resize-y rounded-md border border-border bg-background px-3 py-2.5 text-control outline-none focus:ring-2 focus:ring-ring/30" />
