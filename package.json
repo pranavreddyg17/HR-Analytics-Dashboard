@@ -1,7 +1,9 @@
 {
   "name": "laidbackhr-ai",
   "version": "1.0.0",
+  "description": "Azure-native workforce operations, employee self-service, retention intelligence, and governed AI workflows.",
   "private": true,
+  "packageManager": "pnpm@11.20.0",
   "scripts": {
     "dev": "LOCAL_UI_PREVIEW=true next dev --webpack",
     "build": "next build --webpack",

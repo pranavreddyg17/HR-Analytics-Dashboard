@@ -61,3 +61,11 @@ Production uses the verified `gpt-5.2` deployment exposed by the approved shared
 ## Database
 
 The web app reads `DATABASE_URL` from the application Key Vault and requires TLS. Migrations are append-only and run at startup. Demo reconciliation is disabled in production with `SEED_DEMO_DATA=false`.
+
+## Configuration files
+
+- `backend.hcl` identifies the Azure AD-authenticated remote Terraform state.
+- `production.tfvars` contains the non-secret identifiers and settings for this deployed environment.
+- secrets are copied from the protected GitHub `production` environment into the application Key Vault; they are never stored in either Terraform variables file.
+
+GitHub Actions is the only production apply owner. Azure DevOps validates the mirrored commit and waits for that exact SHA to appear at `/api/v1/ready`.

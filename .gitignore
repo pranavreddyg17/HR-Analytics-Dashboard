@@ -1,20 +1,17 @@
-# v0 sandbox internal files
-__v0_runtime_loader.js
-__v0_devtools.tsx
-__v0_jsx-dev-runtime.ts
-.snowflake/
-.v0-trash/
-.vercel/
-
-# Environment variables
-.env*.local
+# Environment variables and local credentials
+.env
+.env.*
+!.env.local.example
 
 # Common ignores
 node_modules
+.pnpm-store/
 .next/
 dist/
 output/
 outputs/
+coverage/
+.nyc_output/
 *.tsbuildinfo
 .DS_Store
 # Python backend
@@ -22,6 +19,8 @@ backend/.venv/
 backend/__pycache__/
 backend/**/__pycache__/
 backend/.pytest_cache/
+.mypy_cache/
+.ruff_cache/
 *.pyc
 
 # Terraform local state and working files

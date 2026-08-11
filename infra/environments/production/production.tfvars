@@ -1,0 +1,12 @@
+# Non-secret, environment-specific values consumed by the production pipeline.
+# Runtime credentials are resolved from the application Key Vault.
+subscription_id               = "7981312c-4577-455a-8bae-10269b74a97b"
+resource_group_name           = "Laidback.ai"
+location                      = "westus2"
+deployment_principal_id       = "224ddf99-bc98-494b-b77d-2299dea6e8e3"
+application_base_url          = "https://www.laidbackhr.cloud"
+employee_portal_url           = "https://employee.laidbackhr.cloud"
+bootstrap_admin_email         = "pranavreddyg17@gmail.com"
+bootstrap_admin_name          = "Pranav Reddy"
+enable_employee_custom_domain = true
+azure_openai_model            = "gpt-5.2"
