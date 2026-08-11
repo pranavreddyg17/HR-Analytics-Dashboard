@@ -326,7 +326,7 @@ export function createHrMcpServer(actor?: RequestActor): McpServer {
           assumptions: analytics.decisionSupport.workforceImpact.assumptions,
           summary: analytics.decisionSupport.workforceImpact.summary,
           roles: analytics.decisionSupport.workforceImpact.roles.slice(0, 12),
-          learningCases: analytics.decisionSupport.workforceImpact.learningCases,
+          capabilityPlans: analytics.decisionSupport.workforceImpact.capabilityPlans,
         },
       },
     })

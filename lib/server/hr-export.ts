@@ -173,10 +173,10 @@ function workforceImpactSheet(analytics: WorkforceAnalytics): Sheet<Buffer> {
 }
 
 function learningEconomicsSheet(analytics: WorkforceAnalytics): Sheet<Buffer> {
-  const rows = analytics.decisionSupport.workforceImpact.learningCases
-  const data: SheetData = [headerRow(["Department", "Employees in review", "Employees with linked gap", "Incomplete assignments", "Assigned hours", "Proposed learning investment", "Replacement scenario", "Cost comparison", "Leading programme", "Decision"])]
-  rows.forEach((row) => data.push([textCell(row.department, { fontWeight: "bold" }), numberCell(row.employeesInReview, "#,##0"), numberCell(row.employeesWithLearningGap, "#,##0"), numberCell(row.incompleteAssignments, "#,##0"), numberCell(row.assignedHours, "0.0"), numberCell(row.proposedLearningInvestment, "$#,##0"), numberCell(row.replacementScenario, "$#,##0"), row.breakEvenPercent === null ? null : percentCell(row.breakEvenPercent), textCell(row.leadingProgram), textCell(row.decision)]))
-  return { data, sheet: "Learning economics", columns: [{ width: 30 }, { width: 20 }, { width: 25 }, { width: 22 }, { width: 18 }, { width: 28 }, { width: 32 }, { width: 16 }, { width: 34 }, { width: 22 }], stickyRowsCount: 1, showGridLines: false, zoomScale: 0.85, orientation: "landscape" }
+  const rows = analytics.decisionSupport.workforceImpact.capabilityPlans
+  const data: SheetData = [headerRow(["Department", "Active employees", "Employees assigned", "Assignments", "Completed", "Completion rate", "Employees incomplete", "Open assignments", "Required gaps", "Required overdue", "Remaining hours", "Estimated remaining cost", "Leading programme", "Status"])]
+  rows.forEach((row) => data.push([textCell(row.department, { fontWeight: "bold" }), numberCell(row.activeEmployees, "#,##0"), numberCell(row.assignedEmployees, "#,##0"), numberCell(row.totalAssignments, "#,##0"), numberCell(row.completedAssignments, "#,##0"), percentCell(row.completionRate), numberCell(row.incompleteEmployees, "#,##0"), numberCell(row.incompleteAssignments, "#,##0"), numberCell(row.mandatoryGaps, "#,##0"), numberCell(row.overdueMandatoryGaps, "#,##0"), numberCell(row.remainingHours, "0.0"), numberCell(row.estimatedRemainingCost, "$#,##0"), textCell(row.leadingProgram), textCell(row.status, { fontWeight: "bold", textColor: row.overdueMandatoryGaps ? ALERT : INK })]))
+  return { data, sheet: "Learning follow-up", columns: [{ width: 30 }, ...Array(11).fill({ width: 18 }), { width: 34 }, { width: 22 }], stickyRowsCount: 1, showGridLines: false, zoomScale: 0.75, orientation: "landscape" }
 }
 
 function departmentSheet(analytics: WorkforceAnalytics): Sheet<Buffer> {
@@ -427,9 +427,9 @@ export async function createExecutivePdf(analytics: WorkforceAnalytics): Promise
   heading("Workforce impact and replacement cost")
   table(["Role", "Department", "Status", "Active", "Exits", "Hires", "Open", "Refill", "Cost / exit", "Pay coverage"], impact.roles.slice(0, 12).map((row) => [row.jobTitle, row.department, row.continuityStatus, String(row.activeEmployees), String(row.recordedExits), String(row.completedHires), String(row.openRequisitions), `${row.refillDays} days`, pdfMoney(row.replacementCostPerExit), pdfPercent(row.payDataCoverage)]), [115, 112, 48, 38, 36, 36, 36, 55, 72, 78], 6.6)
 
-  heading("Learning investment screen")
-  table(["Department", "Linked employees", "Assignments", "Course scenario", "Replacement scenario", "Cost comparison", "Decision"], impact.learningCases.map((row) => [row.department, `${row.employeesWithLearningGap} of ${row.employeesInReview}`, String(row.incompleteAssignments), pdfMoney(row.proposedLearningInvestment), pdfMoney(row.replacementScenario), row.breakEvenPercent === null ? "N/A" : pdfPercent(row.breakEvenPercent), row.decision]), [125, 90, 70, 100, 100, 75, 105], 7)
-  paragraph(`Scenario assumptions: ${pdfMoney(impact.assumptions.recruitingCostPerHire)} direct recruiting cost; ${pdfPercent(impact.assumptions.vacancyProductivityPercent)} vacancy impact; ${impact.assumptions.onboardingDays} ramp days at ${pdfPercent(impact.assumptions.onboardingProductivityPercent)} impact; ${pdfMoney(impact.assumptions.courseFeePerLearner)} course fee plus ${impact.assumptions.courseHoursPerLearner} employee hours. Pay coverage: ${pdfPercent(impact.summary.payDataCoverage)}.`, 7.2)
+  heading("Learning follow-up")
+  table(["Department", "Completion", "Open assignments", "Required", "Overdue", "Remaining hours", "Estimated cost", "Status"], impact.capabilityPlans.map((row) => [row.department, pdfPercent(row.completionRate), String(row.incompleteAssignments), String(row.mandatoryGaps), String(row.overdueMandatoryGaps), row.remainingHours.toFixed(1), pdfMoney(row.estimatedRemainingCost), row.status]), [120, 70, 78, 58, 58, 78, 88, 110], 7)
+  paragraph(`Learning estimate: ${pdfMoney(impact.assumptions.courseFeePerLearner)} per open assignment plus employee time using recorded hours, or ${impact.assumptions.courseHoursPerLearner} fallback hours when hours are missing. Pay coverage: ${pdfPercent(impact.summary.payDataCoverage)}.`, 7.2)
 
   const pages = document.getPages()
   pages.forEach((reportPage, index) => {

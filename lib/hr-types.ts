@@ -351,7 +351,12 @@ export type WorkforceAnalytics = {
       leaveDaysPerActiveEmployee: number
       mobilityReviewShare: number
       trainingCompletionRate: number
+      trainingAssignedEmployees: number
+      incompleteTrainingAssignments: number
+      incompleteTrainingEmployees: number
+      incompleteTrainingHours: number
       mandatoryTrainingGaps: number
+      overdueMandatoryTrainingGaps: number
     }
     departments: Array<{
       department: string
@@ -369,7 +374,12 @@ export type WorkforceAnalytics = {
       pendingLeaveRequests: number
       trainingAssignments: number
       trainingCompletionRate: number
+      trainingAssignedEmployees: number
+      incompleteTrainingAssignments: number
+      incompleteTrainingEmployees: number
+      incompleteTrainingHours: number
       mandatoryTrainingGaps: number
+      overdueMandatoryTrainingGaps: number
       promotions: number
       promotionRate: number
       mobilityReviewCount: number
@@ -426,6 +436,22 @@ export type WorkforceAnalytics = {
         breakEvenPercent: number | null
         leadingProgram: string | null
         decision: "Assess skill fit" | "No linked gap"
+      }>
+      capabilityPlans: Array<{
+        department: string
+        activeEmployees: number
+        assignedEmployees: number
+        totalAssignments: number
+        completedAssignments: number
+        completionRate: number
+        incompleteEmployees: number
+        incompleteAssignments: number
+        mandatoryGaps: number
+        overdueMandatoryGaps: number
+        remainingHours: number
+        estimatedRemainingCost: number
+        leadingProgram: string | null
+        status: "Overdue required" | "Required work open" | "Follow up" | "On track"
       }>
     }
     actions: Array<{

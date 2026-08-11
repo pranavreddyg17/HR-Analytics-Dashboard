@@ -32,7 +32,7 @@ function selectView(analytics: Awaited<ReturnType<typeof getWorkforceDashboardAn
     training: analytics.training,
     promotions: analytics.promotions,
     departments: analytics.decisionSupport.departments,
-    learningCases: analytics.decisionSupport.workforceImpact.learningCases,
+    capabilityPlans: analytics.decisionSupport.workforceImpact.capabilityPlans,
   }
 }
 

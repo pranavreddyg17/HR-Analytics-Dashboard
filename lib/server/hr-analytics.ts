@@ -372,6 +372,8 @@ async function calculateWorkforceAnalytics(filters: HrFilters = {}, options: { r
     const departmentLeave = approvedLeave.filter((record) => record.department === department)
     const departmentTraining = training.filter((record) => record.department === department)
     const departmentCompletedTraining = departmentTraining.filter((record) => record.completion_status.toLowerCase() === "completed")
+    const departmentIncompleteTraining = departmentTraining.filter((record) => record.completion_status.toLowerCase() !== "completed")
+    const departmentMandatoryGaps = departmentIncompleteTraining.filter(mandatoryTraining)
     const departmentPromotions = promotions.filter((record) => record.department === department).length
     const coverage = coverageByDepartment.get(department)
     const openRoles = coverage?.openRequisitions ?? openRequisitions.filter((record) => record.department === department).length
@@ -394,7 +396,12 @@ async function calculateWorkforceAnalytics(filters: HrFilters = {}, options: { r
       pendingLeaveRequests: leave.filter((record) => record.department === department && record.approval_status.toLowerCase() === "pending").length,
       trainingAssignments: departmentTraining.length,
       trainingCompletionRate: percent(departmentCompletedTraining.length, departmentTraining.length),
-      mandatoryTrainingGaps: departmentTraining.filter((record) => record.completion_status.toLowerCase() !== "completed" && mandatoryTraining(record)).length,
+      trainingAssignedEmployees: new Set(departmentTraining.map((record) => record.employee_id)).size,
+      incompleteTrainingAssignments: departmentIncompleteTraining.length,
+      incompleteTrainingEmployees: new Set(departmentIncompleteTraining.map((record) => record.employee_id)).size,
+      incompleteTrainingHours: Number(departmentIncompleteTraining.reduce((sum, record) => sum + record.training_hours, 0).toFixed(1)),
+      mandatoryTrainingGaps: departmentMandatoryGaps.length,
+      overdueMandatoryTrainingGaps: departmentMandatoryGaps.filter((record) => Boolean(record.due_date && record.due_date.slice(0, 10) < today)).length,
       promotions: departmentPromotions,
       promotionRate: percent(departmentPromotions, activeCount),
       mobilityReviewCount: mobilityReviews,
@@ -411,7 +418,12 @@ async function calculateWorkforceAnalytics(filters: HrFilters = {}, options: { r
       : 0,
     mobilityReviewShare: percent(withoutPromotion, activeEmployees.length),
     trainingCompletionRate: percent(completedTraining.length, training.length),
+    trainingAssignedEmployees: new Set(training.map((record) => record.employee_id)).size,
+    incompleteTrainingAssignments: training.filter((record) => record.completion_status.toLowerCase() !== "completed").length,
+    incompleteTrainingEmployees: new Set(training.filter((record) => record.completion_status.toLowerCase() !== "completed").map((record) => record.employee_id)).size,
+    incompleteTrainingHours: Number(training.filter((record) => record.completion_status.toLowerCase() !== "completed").reduce((sum, record) => sum + record.training_hours, 0).toFixed(1)),
     mandatoryTrainingGaps: training.filter((record) => record.completion_status.toLowerCase() !== "completed" && mandatoryTraining(record)).length,
+    overdueMandatoryTrainingGaps: training.filter((record) => record.completion_status.toLowerCase() !== "completed" && mandatoryTraining(record) && Boolean(record.due_date && record.due_date.slice(0, 10) < today)).length,
   }
 
   const tenureCohort = (years: number): string => years < 1 ? "< 1 year" : years < 3 ? "1–2 years" : years < 5 ? "3–4 years" : "5+ years"
@@ -459,9 +471,11 @@ async function calculateWorkforceAnalytics(filters: HrFilters = {}, options: { r
 
   type DecisionAction = Omit<WorkforceAnalytics["decisionSupport"]["actions"][number], "workItem"> & { rank: number }
   const decisionActions: DecisionAction[] = []
+  const criticalRoles = workforceImpact.roles.filter((row) => row.continuityStatus === "Critical").slice(0, 3)
+  const departmentsWithRoleReview = new Set(criticalRoles.map((row) => row.department))
   for (const row of departmentDecisionMetrics) {
     const key = row.department.toLowerCase().replace(/[^a-z0-9]+/g, "-")
-    if (row.coverageStatus === "Gap") decisionActions.push({
+    if (row.coverageStatus === "Gap" && !departmentsWithRoleReview.has(row.department)) decisionActions.push({
       id: `coverage-${key}`,
       department: row.department,
       category: "workforce_coverage",
@@ -506,16 +520,16 @@ async function calculateWorkforceAnalytics(filters: HrFilters = {}, options: { r
       rank: 100 + row.mobilityReviewShare - companyDecisionMetrics.mobilityReviewShare,
     })
   }
-  for (const role of workforceImpact.roles.filter((row) => row.continuityStatus === "Critical").slice(0, 3)) {
+  for (const role of criticalRoles) {
     const key = `${role.department}-${role.jobTitle}`.toLowerCase().replace(/[^a-z0-9]+/g, "-")
     decisionActions.push({
       id: `role-continuity-${key}`,
       department: role.department,
       category: "workforce_coverage",
       severity: "high",
-      title: `${role.jobTitle} continuity review`,
+      title: `${role.jobTitle} coverage review`,
       evidence: `${role.activeEmployees} active, ${role.recordedExits} exits, ${role.openRequisitions} open roles, and ${role.refillDays} estimated refill days`,
-      recommendedAction: "Confirm a named backup and knowledge-transfer plan, then reconcile succession and approved hiring coverage.",
+      recommendedAction: "Name a backup, record a knowledge-transfer owner, and decide whether existing hiring coverage is sufficient.",
       target: "hiring",
       rank: 500 + role.reviewWeightedExposure / 10_000,
     })

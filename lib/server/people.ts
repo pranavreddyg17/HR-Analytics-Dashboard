@@ -379,6 +379,20 @@ export async function listInboxItems(actor?: RequestActor): Promise<InboxItem[]>
   const detailValue = (row: WorkflowPerson, field: string): string | null => {
     try { return String((JSON.parse(row.details_json ?? "{}") as Record<string, unknown>)[field] ?? "") || null } catch { return null }
   }
+  const insightRecordHref = (row: WorkflowPerson & { id: string }): string => {
+    const params = new URLSearchParams({ item: row.id })
+    try {
+      const details = JSON.parse(row.details_json ?? "{}") as { filters?: Record<string, unknown> }
+      const filters = details.filters ?? {}
+      for (const key of ["from", "to", "department", "location", "period", "recruitingCostPerHire", "vacancyProductivityPercent", "onboardingDays", "onboardingProductivityPercent", "courseFeePerLearner", "courseHoursPerLearner"]) {
+        const value = filters[key]
+        if ((typeof value === "string" && value.trim()) || (typeof value === "number" && Number.isFinite(value))) params.set(key, String(value))
+      }
+    } catch {
+      // Older insight workflows may not have a stored reporting scope.
+    }
+    return `/insights?${params.toString()}`
+  }
   const nowIso = new Date().toISOString()
   const today = nowIso.slice(0, 10)
   const dateAfterToday = new Date()
@@ -512,7 +526,7 @@ export async function listInboxItems(actor?: RequestActor): Promise<InboxItem[]>
         createdAt: row.workflow_created_at || row.updated_at || nowIso, completedAt: row.completed_at ?? null, completionNotes: row.completion_notes ?? null, blockedReason: row.blocked_reason ?? null,
         actionable: false, actions: [],
         reviewHref: reviewHref("insight", row.id, isCompleted ? "completed" : "my_work"),
-        recordHref: `/insights?item=${encodeURIComponent(row.id)}`,
+        recordHref: insightRecordHref(row),
       }
     }),
     ...visibleServices.map((row): InboxItem => {

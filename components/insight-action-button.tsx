@@ -1,6 +1,7 @@
 "use client"
 
 import { useState } from "react"
+import Link from "next/link"
 
 import { Button } from "@/components/ui/button"
 import type { WorkforceAnalytics } from "@/lib/hr-types"
@@ -34,6 +35,7 @@ export function InsightActionButton({
   const [note, setNote] = useState("")
   const [error, setError] = useState<string | null>(null)
   const [notice, setNotice] = useState<string | null>(null)
+  const [createdId, setCreatedId] = useState<string | null>(null)
   const workItem = action.workItem
 
   async function createWorkItem() {
@@ -46,9 +48,10 @@ export function InsightActionButton({
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ signalId: action.id, filters }),
       })
-      const body = await response.json() as { error?: string }
+      const body = await response.json() as { id?: string; error?: string }
       if (!response.ok) throw new Error(body.error || "Unable to create the work item.")
-      setNotice(workItem?.status === "completed" ? "Follow-up created." : "Work item created.")
+      setCreatedId(body.id ?? null)
+      setNotice(workItem?.status === "completed" ? "Follow-up created." : "Review added to the work queue.")
       onUpdated()
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : "Unable to create the work item.")
@@ -85,10 +88,12 @@ export function InsightActionButton({
     }
   }
 
-  const buttonLabel = !workItem ? "Create work item"
-    : workItem.status === "pending" ? "Start work"
-      : workItem.status === "in_progress" ? "Complete"
+  const buttonLabel = createdId && !workItem ? "Review created"
+    : !workItem ? "Create review"
+      : workItem.status === "pending" ? "Add work plan"
+      : workItem.status === "in_progress" ? "Record outcome"
         : "Create follow-up"
+  const queueItemId = workItem?.id ?? createdId
 
   return (
     <>
@@ -96,12 +101,13 @@ export function InsightActionButton({
         <Button
           size="sm"
           variant={workItem?.status === "in_progress" ? "default" : "outline"}
-          disabled={loading}
+          disabled={loading || Boolean(createdId && !workItem)}
           onClick={() => workItem && workItem.status !== "completed" ? setDialogOpen(true) : void createWorkItem()}
         >
           {loading ? "Saving…" : buttonLabel}
         </Button>
         {workItem && <span className="text-status text-muted-foreground">{workItem.status === "in_progress" ? "In progress" : workItem.status === "completed" ? "Completed" : "Pending"}{workItem.dueAt && workItem.status !== "completed" ? ` · due ${workItem.dueAt}` : ""}</span>}
+        {queueItemId && <Link className="text-meta font-semibold text-primary hover:underline" href={`/inbox?view=my_work&type=insight&item=${encodeURIComponent(queueItemId)}&returnTo=%2Finsights`}>Open in work queue</Link>}
         {notice && <span className="text-meta text-emerald-700 dark:text-emerald-300">{notice}</span>}
         {error && !dialogOpen && <span className="text-meta text-destructive">{error}</span>}
       </div>
@@ -110,7 +116,7 @@ export function InsightActionButton({
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/35 p-4" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) setDialogOpen(false) }}>
           <section className="w-full max-w-lg rounded-lg border border-border bg-card shadow-xl" role="dialog" aria-modal="true" aria-labelledby="insight-work-item-title">
             <header className="border-b border-border px-5 py-4">
-              <h2 id="insight-work-item-title" className="text-subsection font-semibold">{workItem.status === "pending" ? "Start" : "Complete"} work item</h2>
+              <h2 id="insight-work-item-title" className="text-subsection font-semibold">{workItem.status === "pending" ? "Add work plan" : "Record outcome"}</h2>
               <p className="mt-1 text-meta text-muted-foreground">{action.department} · {action.title}</p>
             </header>
             <div className="space-y-4 px-5 py-4">
@@ -119,13 +125,13 @@ export function InsightActionButton({
                 <p className="mt-0.5 text-muted-foreground">{action.evidence}</p>
               </div>
               <label className="flex flex-col gap-1.5 text-label font-semibold text-muted-foreground">
-                {workItem.status === "pending" ? "Work plan" : "Outcome and follow-up"}
+                {workItem.status === "pending" ? "Owner plan and evidence check" : "Outcome and follow-up"}
                 <textarea
                   autoFocus
                   rows={5}
                   value={note}
                   onChange={(event) => setNote(event.target.value)}
-                  placeholder={workItem.status === "pending" ? "Record the evidence to validate, owner responsibilities, and next step." : "Record the completed work, outcome, and any required follow-up."}
+                  placeholder={workItem.status === "pending" ? "Record what will be validated, who owns each step, and the expected outcome." : "Record completed work, the observed outcome, and any follow-up."}
                   className="w-full resize-y rounded-md border border-input bg-background px-3 py-2 text-control font-normal text-foreground outline-none focus:ring-2 focus:ring-ring/40"
                 />
               </label>
@@ -133,7 +139,7 @@ export function InsightActionButton({
             </div>
             <footer className="flex justify-end gap-2 border-t border-border px-5 py-3">
               <Button variant="outline" disabled={loading} onClick={() => setDialogOpen(false)}>Cancel</Button>
-              <Button disabled={loading || note.trim().length < 10} onClick={updateWorkItem}>{loading ? "Saving…" : workItem.status === "pending" ? "Start work" : "Complete work item"}</Button>
+              <Button disabled={loading || note.trim().length < 10} onClick={updateWorkItem}>{loading ? "Saving…" : workItem.status === "pending" ? "Save and start" : "Complete review"}</Button>
             </footer>
           </section>
         </div>

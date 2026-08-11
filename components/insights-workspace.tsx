@@ -178,10 +178,10 @@ function DepartmentPressure({ data, onSelect }: { data: WorkforceAnalytics; onSe
   const statusRank = { Gap: 0, Watch: 1, Covered: 2 }
   const rows = [...data.decisionSupport.departments].sort((left, right) => statusRank[left.coverageStatus] - statusRank[right.coverageStatus] || right.attritionRate - left.attritionRate)
   if (!rows.length) return <div className="flex h-48 items-center justify-center text-body text-muted-foreground">No department measures in this scope.</div>
-  return <div className="overflow-x-auto"><table className="w-full min-w-[720px] text-left text-body"><thead className="bg-muted/40 text-label font-semibold text-muted-foreground"><tr><th className="px-4 py-2.5">Department</th><th className="px-4 py-2.5">Headcount</th><th className="px-4 py-2.5">Attrition</th><th className="px-4 py-2.5">Vacancy</th><th className="px-4 py-2.5">Movement</th><th className="px-4 py-2.5">Coverage</th></tr></thead><tbody>{rows.map((row) => {
+  return <div className="overflow-x-auto"><table className="w-full min-w-[940px] text-left text-body"><thead className="bg-muted/40 text-label font-semibold text-muted-foreground"><tr><th className="px-4 py-2.5">Department</th><th className="px-4 py-2.5">Workforce</th><th className="px-4 py-2.5">Attrition</th><th className="px-4 py-2.5">Hiring coverage</th><th className="px-4 py-2.5">Required learning</th><th className="px-4 py-2.5">Leave</th><th className="px-4 py-2.5"><span className="sr-only">Filter</span></th></tr></thead><tbody>{rows.map((row) => {
     const attritionDelta = Number((row.attritionRate - data.attrition.rate).toFixed(1))
-    return <tr key={row.department} className="border-t border-border/70 hover:bg-muted/20"><td className="px-4 py-3"><button type="button" onClick={() => onSelect(row.department)} className="font-semibold hover:text-primary hover:underline">{row.department}</button></td><td className="px-4 py-3 tabular-nums">{row.activeEmployees}</td><td className="px-4 py-3"><p className="tabular-nums">{row.attritionRate}%</p><p className="text-meta text-muted-foreground">{attritionDelta > 0 ? "+" : ""}{attritionDelta} pts vs company</p></td><td className="px-4 py-3"><p className="tabular-nums">{row.vacancyRate}%</p><p className="text-meta text-muted-foreground">{row.openRequisitions} open roles</p></td><td className="px-4 py-3"><p className="tabular-nums">{row.netMovement > 0 ? "+" : ""}{row.netMovement}</p><p className="text-meta text-muted-foreground">{row.hires} hires · {row.exits} exits</p></td><td className="px-4 py-3"><Badge variant={row.coverageStatus === "Gap" ? "destructive" : row.coverageStatus === "Watch" ? "secondary" : "outline"}>{row.coverageStatus}</Badge></td></tr>
-  })}</tbody></table></div>
+    return <tr key={row.department} className="border-t border-border/70 hover:bg-muted/20"><td className="px-4 py-3"><p className="font-semibold">{row.department}</p><Badge className="mt-1" variant={row.coverageStatus === "Gap" ? "destructive" : row.coverageStatus === "Watch" ? "secondary" : "outline"}>{row.coverageStatus === "Gap" ? "Coverage gap" : row.coverageStatus === "Watch" ? "Monitor" : "Covered"}</Badge></td><td className="px-4 py-3"><p className="tabular-nums">{row.activeEmployees.toLocaleString()} active</p><p className="text-meta text-muted-foreground">{row.netMovement > 0 ? "+" : ""}{row.netMovement} net · {row.hires} hires / {row.exits} exits</p></td><td className="px-4 py-3"><p className="tabular-nums">{row.attritionRate}%</p><p className="text-meta text-muted-foreground">{attritionDelta > 0 ? "+" : ""}{attritionDelta} points vs company</p></td><td className="px-4 py-3"><p>{row.exits ? `${row.hires} of ${row.exits} exits replaced` : "No exits in scope"}</p><p className="text-meta text-muted-foreground">{row.openRequisitions} open role{row.openRequisitions === 1 ? "" : "s"}</p></td><td className="px-4 py-3"><p>{row.mandatoryTrainingGaps} open</p><p className="text-meta text-muted-foreground">{row.overdueMandatoryTrainingGaps} overdue · {row.trainingCompletionRate}% complete</p></td><td className="px-4 py-3"><p>{row.pendingLeaveRequests} pending</p><p className="text-meta text-muted-foreground">{row.leaveDaysPerActiveEmployee} approved days per active employee</p></td><td className="px-4 py-3 text-right"><Button size="xs" variant="outline" onClick={() => onSelect(row.department)}>Filter report</Button></td></tr>
+  })}</tbody></table><p className="border-t border-border bg-muted/20 px-4 py-2.5 text-meta text-muted-foreground">Net movement is completed hires minus recorded exits. Hiring coverage compares completed hires with exits in the selected period; open roles are shown separately.</p></div>
 }
 
 function TenureAttrition({ data }: { data: WorkforceAnalytics }) {
@@ -263,6 +263,31 @@ function CostAssumptions({ data, onApply }: { data: WorkforceAnalytics; onApply:
       <div className="mt-3 flex items-center justify-between gap-3 border-t border-border pt-3">
         <p className="text-meta text-muted-foreground">Vacancy and ramp impact are percentages of salary cost. Employee pay is available for {data.decisionSupport.workforceImpact.summary.payDataCoverage}% of active records.</p>
         <Button size="sm" disabled={!valid} onClick={() => onApply(parsed)}>Recalculate</Button>
+      </div>
+    </CardContent>
+  </Card>
+}
+
+function CapabilityAssumptions({ data, onApply }: { data: WorkforceAnalytics; onApply: (values: Pick<CostInputs, "courseFeePerLearner" | "courseHoursPerLearner">) => void }) {
+  const assumptions = data.decisionSupport.workforceImpact.assumptions
+  const [fee, setFee] = useState(String(assumptions.courseFeePerLearner))
+  const [fallbackHours, setFallbackHours] = useState(String(assumptions.courseHoursPerLearner))
+  const parsedFee = Number(fee)
+  const parsedHours = Number(fallbackHours)
+  const valid = fee.trim() !== "" && fallbackHours.trim() !== ""
+    && Number.isFinite(parsedFee) && parsedFee >= 0
+    && Number.isFinite(parsedHours) && parsedHours > 0 && parsedHours <= 500
+
+  return <Card className="gap-0 overflow-hidden py-0 shadow-none">
+    <CardHeader className="border-b border-border px-5 py-4"><CardTitle>Learning cost scenario</CardTitle><CardDescription>Estimate the remaining delivery cost for assignments already in the learning register.</CardDescription></CardHeader>
+    <CardContent className="p-4">
+      <div className="grid gap-3 sm:grid-cols-2 lg:max-w-xl">
+        <Filter label="Course fee per assignment"><input type="number" min="0" step="50" value={fee} onChange={(event) => setFee(event.target.value)} /></Filter>
+        <Filter label="Fallback hours"><input type="number" min="0.5" max="500" step="0.5" value={fallbackHours} onChange={(event) => setFallbackHours(event.target.value)} /></Filter>
+      </div>
+      <div className="mt-3 flex flex-wrap items-center justify-between gap-3 border-t border-border pt-3">
+        <p className="text-meta text-muted-foreground">Uses recorded assignment hours when available. Estimated cost equals course fees plus employee time from current pay records.</p>
+        <Button size="sm" disabled={!valid} onClick={() => onApply({ courseFeePerLearner: parsedFee, courseHoursPerLearner: parsedHours })}>Recalculate</Button>
       </div>
     </CardContent>
   </Card>
@@ -397,10 +422,10 @@ function RoleContinuityTable({ data }: { data: WorkforceAnalytics }) {
 }
 
 function LearningEconomics({ data }: { data: WorkforceAnalytics }) {
-  const rows = data.decisionSupport.workforceImpact.learningCases
+  const rows = data.decisionSupport.workforceImpact.capabilityPlans
   return <Card className="gap-0 overflow-hidden py-0 shadow-none">
-    <CardHeader className="border-b border-border px-5 py-4"><CardTitle>Learning investment screen</CardTitle><CardDescription>Course cost for employees with an existing incomplete assignment.</CardDescription></CardHeader>
-    <CardContent className="p-0"><div className="overflow-x-auto"><table className="w-full min-w-[880px] text-left text-body"><thead className="bg-muted/40 text-label font-semibold text-muted-foreground"><tr>{["Department", "Linked evidence", "Course scenario", "Cost comparison", "Decision", "Open"].map((heading) => <th key={heading} className="px-4 py-2.5">{heading}</th>)}</tr></thead><tbody>{rows.map((row) => <tr key={row.department} className="border-t border-border/70"><td className="px-4 py-3 font-semibold">{row.department}</td><td className="px-4 py-3"><p>{row.employeesWithLearningGap} of {row.employeesInReview} employees</p><p className="text-meta text-muted-foreground">{row.incompleteAssignments} assignments · {row.assignedHours} hours{row.leadingProgram ? ` · ${row.leadingProgram}` : ""}</p></td><td className="px-4 py-3"><p className="font-semibold tabular-nums">{currency(row.proposedLearningInvestment)}</p><p className="text-meta text-muted-foreground">{currency(row.replacementScenario)} replacement scenario</p></td><td className="px-4 py-3 tabular-nums">{row.breakEvenPercent === null ? "Not available" : `${row.breakEvenPercent}% of replacement scenario`}</td><td className="px-4 py-3"><Badge variant={row.decision === "Assess skill fit" ? "secondary" : "outline"}>{row.decision}</Badge></td><td className="px-4 py-3"><Link className={actionLinkClass} href={`/courses?department=${encodeURIComponent(row.department)}`}>Assignments</Link></td></tr>)}</tbody></table></div></CardContent>
+    <CardHeader className="border-b border-border px-5 py-4"><CardTitle>Learning follow-up</CardTitle><CardDescription>Completion, required work, remaining effort, and cost calculated from current assignments.</CardDescription></CardHeader>
+    <CardContent className="p-0"><div className="overflow-x-auto"><table className="w-full min-w-[920px] text-left text-body"><thead className="bg-muted/40 text-label font-semibold text-muted-foreground"><tr>{["Department", "Completion", "Open assignments", "Required work", "Remaining effort", "Status", "Open"].map((heading) => <th key={heading} className="px-4 py-2.5">{heading}</th>)}</tr></thead><tbody>{rows.map((row) => <tr key={row.department} className="border-t border-border/70"><td className="px-4 py-3"><p className="font-semibold">{row.department}</p><p className="text-meta text-muted-foreground">{row.assignedEmployees} of {row.activeEmployees} active employees assigned</p></td><td className="px-4 py-3"><p className="font-semibold tabular-nums">{row.completionRate}%</p><div className="mt-1 h-1.5 w-24 overflow-hidden rounded-full bg-muted"><div className="h-full rounded-full bg-primary" style={{ width: `${Math.min(100, row.completionRate)}%` }} /></div><p className="mt-1 text-meta text-muted-foreground">{row.completedAssignments} of {row.totalAssignments}</p></td><td className="px-4 py-3"><p>{row.incompleteAssignments} assignment{row.incompleteAssignments === 1 ? "" : "s"}</p><p className="text-meta text-muted-foreground">{row.incompleteEmployees} employee{row.incompleteEmployees === 1 ? "" : "s"}{row.leadingProgram ? ` · ${row.leadingProgram}` : ""}</p></td><td className="px-4 py-3"><p>{row.mandatoryGaps} required</p><p className={cn("text-meta", row.overdueMandatoryGaps ? "font-semibold text-destructive" : "text-muted-foreground")}>{row.overdueMandatoryGaps} overdue</p></td><td className="px-4 py-3"><p>{row.remainingHours} hours</p><p className="text-meta text-muted-foreground">{currency(row.estimatedRemainingCost)} estimated cost</p></td><td className="px-4 py-3"><Badge variant={row.status === "Overdue required" ? "destructive" : row.status === "Required work open" ? "secondary" : "outline"}>{row.status}</Badge></td><td className="px-4 py-3"><Link className={actionLinkClass} href={`/courses?department=${encodeURIComponent(row.department)}${row.overdueMandatoryGaps ? "&status=overdue" : ""}`}>Review assignments</Link></td></tr>)}</tbody></table></div>{!rows.length && <p className="p-8 text-center text-body text-muted-foreground">No learning assignments match this reporting scope.</p>}</CardContent>
   </Card>
 }
 
@@ -449,7 +474,12 @@ export function InsightsWorkspace({ initialData }: { initialData: WorkforceAnaly
     router.replace(`/insights${params.size ? `?${params.toString()}` : ""}`, { scroll: false })
   }
 
-  const actions = useMemo(() => data?.decisionSupport.actions.slice(0, 6) ?? [], [data])
+  const actions = useMemo(() => {
+    const available = data?.decisionSupport.actions ?? []
+    const selected = selectedWorkItemId ? available.find((action) => action.workItem?.id === selectedWorkItemId) : undefined
+    if (!selected) return available.slice(0, 6)
+    return [selected, ...available.filter((action) => action.id !== selected.id).slice(0, 5)]
+  }, [data, selectedWorkItemId])
 
   useEffect(() => {
     const requestKey = `${requestQuery}:${refreshVersion}`
@@ -489,7 +519,6 @@ export function InsightsWorkspace({ initialData }: { initialData: WorkforceAnaly
   const flow = flowRows(data.hiring.trend, data.attrition.trend)
   const exitReasons = exitReasonRows(data.attrition.byExitReason)
   const company = data.decisionSupport.company
-  const departments = data.decisionSupport.departments
   const impact = data.decisionSupport.workforceImpact
 
   return (
@@ -533,9 +562,17 @@ export function InsightsWorkspace({ initialData }: { initialData: WorkforceAnaly
           { label: "Open roles", value: compact(data.hiring.activeRequisitions), detail: `${company.vacancyRate}% vacancy rate` },
           { label: "Continuity reviews", value: impact.summary.rolesNeedingContinuityReview, detail: "Roles marked critical or watch" },
         ]} />
-        <div className="grid gap-4 xl:grid-cols-[minmax(0,1.35fr)_minmax(320px,0.65fr)]"><Card className="gap-0 overflow-hidden py-0 shadow-none"><CardHeader className="border-b border-border px-5 py-4"><CardTitle>Department operating view</CardTitle><CardDescription>Movement, vacancy, and attrition compared on a common basis.</CardDescription></CardHeader><CardContent className="p-0"><DepartmentPressure data={data} onSelect={(department) => setFilters({ ...filters, department })} /></CardContent></Card><Card className="shadow-none"><CardHeader><CardTitle>Exit reasons</CardTitle><CardDescription>Recorded reasons for exits in this scope.</CardDescription></CardHeader><CardContent><ExitReasonChart rows={exitReasons} /></CardContent></Card></div>
-        <Card className="gap-0 overflow-hidden py-0 shadow-none"><CardHeader className="border-b border-border px-5 py-4"><CardTitle>Action queue</CardTitle><CardDescription>Calculated exceptions with a durable owner and completion record.</CardDescription></CardHeader><CardContent className="divide-y divide-border p-0">{actions.map((action) => <div id={`insight-${action.id}`} key={action.id} className={cn("grid scroll-mt-24 gap-3 px-5 py-3 lg:grid-cols-[minmax(150px,0.7fr)_minmax(240px,1fr)_minmax(280px,1.35fr)_auto] lg:items-center", action.workItem?.id === selectedWorkItemId && "bg-accent/45 ring-1 ring-inset ring-primary/30")}><div><p className="text-card-title font-semibold">{action.department}</p><Badge className="mt-1" variant={action.severity === "high" ? "destructive" : "secondary"}>{action.severity === "high" ? "High" : "Review"}</Badge></div><div><p className="text-body font-semibold">{action.title}</p><p className="mt-0.5 text-meta text-muted-foreground">{action.evidence}</p></div><p className="text-body text-muted-foreground">{action.recommendedAction}</p><InsightActionButton action={action} filters={filters} onUpdated={() => setRefreshVersion((current) => current + 1)} /></div>)}{!actions.length && <p className="px-5 py-8 text-center text-body text-muted-foreground">No calculated exceptions in this reporting scope.</p>}</CardContent></Card>
-        <Card className="gap-0 overflow-hidden py-0 shadow-none"><CardHeader className="border-b border-border px-5 py-4"><CardTitle>Department scorecard</CardTitle><CardDescription>Normalized movement, coverage, learning, mobility, and leave measures.</CardDescription></CardHeader><CardContent className="p-0"><div className="overflow-x-auto"><table className="w-full min-w-[1040px] text-left text-body"><thead className="bg-muted/40 text-label font-semibold text-muted-foreground"><tr>{["Department", "Active", "Movement", "Replacement coverage", "Learning", "Mobility review", "Leave planning"].map((heading) => <th key={heading} className="px-4 py-2.5">{heading}</th>)}</tr></thead><tbody>{departments.map((row) => <tr key={row.department} className="border-t border-border/70 hover:bg-muted/20"><td className="px-4 py-3"><button type="button" onClick={() => setFilters({ ...filters, department: row.department })} className="font-semibold hover:text-primary hover:underline">{row.department}</button></td><td className="px-4 py-3 tabular-nums">{row.activeEmployees}</td><td className="px-4 py-3"><p className="font-semibold tabular-nums">{row.netMovement > 0 ? "+" : ""}{row.netMovement}</p><p className="text-meta text-muted-foreground">{row.hires} hires · {row.exits} exits</p></td><td className="px-4 py-3"><div className="flex items-center gap-2"><Badge variant={row.coverageStatus === "Gap" ? "destructive" : row.coverageStatus === "Watch" ? "secondary" : "outline"}>{row.coverageStatus}</Badge><span className="tabular-nums">{percent(row.replacementRate)}</span></div><p className="mt-1 text-meta text-muted-foreground">{row.openRequisitions} open · {row.vacancyRate}% vacancy</p></td><td className="px-4 py-3"><p className="tabular-nums">{row.trainingCompletionRate}% complete</p><p className="text-meta text-muted-foreground">{row.mandatoryTrainingGaps} mandatory gaps</p></td><td className="px-4 py-3"><p className="tabular-nums">{row.mobilityReviewCount} employees</p><p className="text-meta text-muted-foreground">{row.mobilityReviewShare}% of active</p></td><td className="px-4 py-3"><p className="tabular-nums">{row.leaveDaysPerActiveEmployee} days / active</p><p className="text-meta text-muted-foreground">{row.pendingLeaveRequests} pending</p></td></tr>)}</tbody></table></div>{!departments.length && <p className="p-10 text-center text-body text-muted-foreground">No departments match the selected reporting scope.</p>}</CardContent></Card>
+        <Card className="gap-0 overflow-hidden py-0 shadow-none"><CardHeader className="border-b border-border px-5 py-4"><CardTitle>Department comparison</CardTitle><CardDescription>Current workforce, movement, hiring coverage, required learning, and leave in one view.</CardDescription></CardHeader><CardContent className="p-0"><DepartmentPressure data={data} onSelect={(department) => setFilters({ ...filters, department })} /></CardContent></Card>
+        <div className="grid gap-4 xl:grid-cols-[minmax(0,1.45fr)_minmax(300px,0.55fr)]">
+          <Card className="gap-0 overflow-hidden py-0 shadow-none">
+            <CardHeader className="gap-3 border-b border-border px-5 py-4 sm:flex-row sm:items-center sm:justify-between">
+              <div><CardTitle>Priority reviews</CardTitle><CardDescription>Generated from current operating records. Creating a review adds a durable item to the work queue.</CardDescription></div>
+              <Link className={actionLinkClass} href="/inbox?view=my_work&type=insight&returnTo=%2Finsights">Open work queue</Link>
+            </CardHeader>
+            <CardContent className="divide-y divide-border p-0">{actions.map((action) => <div id={`insight-${action.id}`} key={action.id} className={cn("grid scroll-mt-24 gap-3 px-5 py-4 lg:grid-cols-[minmax(150px,0.65fr)_minmax(220px,1fr)_minmax(260px,1.2fr)_auto] lg:items-center", action.workItem?.id === selectedWorkItemId && "bg-accent/45 ring-1 ring-inset ring-primary/30")}><div><p className="text-card-title font-semibold">{action.department}</p><Badge className="mt-1" variant={action.severity === "high" ? "destructive" : "secondary"}>{action.severity === "high" ? "High priority" : "Review"}</Badge></div><div><p className="text-body font-semibold">{action.title}</p><p className="mt-0.5 text-meta text-muted-foreground">Trigger: {action.evidence}</p></div><div><p className="text-label font-semibold text-muted-foreground">Recommended check</p><p className="mt-0.5 text-body">{action.recommendedAction}</p></div><InsightActionButton action={action} filters={filters} onUpdated={() => setRefreshVersion((current) => current + 1)} /></div>)}{!actions.length && <p className="px-5 py-8 text-center text-body text-muted-foreground">No exceptions meet the review rules in this reporting scope.</p>}</CardContent>
+          </Card>
+          <Card className="shadow-none"><CardHeader><CardTitle>Exit reasons</CardTitle><CardDescription>Recorded reasons for exits in this scope.</CardDescription></CardHeader><CardContent><ExitReasonChart rows={exitReasons} /></CardContent></Card>
+        </div>
       </>}
 
       {analysisView === "impact" && <>
@@ -566,14 +603,13 @@ export function InsightsWorkspace({ initialData }: { initialData: WorkforceAnaly
       {analysisView === "capability" && <>
         <MetricStrip metrics={[
           { label: "Learning completion", value: `${company.trainingCompletionRate}%`, detail: `${data.training.totalAssignments} assignments in scope` },
-          { label: "Mandatory gaps", value: company.mandatoryTrainingGaps, detail: "Incomplete required learning" },
-          { label: "Mobility review", value: data.promotions.withoutPromotionOver36Months, detail: "Tenure and no promotion record" },
-          { label: "Recorded promotions", value: data.promotions.total, detail: `${data.promotions.rate}% of active employees` },
-          { label: "Course scenario", value: currency(impact.assumptions.courseFeePerLearner), detail: `${impact.assumptions.courseHoursPerLearner} employee hours` },
+          { label: "Employees assigned", value: company.trainingAssignedEmployees, detail: "Unique employees in this scope" },
+          { label: "Open assignments", value: company.incompleteTrainingAssignments, detail: `${company.incompleteTrainingEmployees} employees` },
+          { label: "Required learning", value: company.mandatoryTrainingGaps, detail: `${company.overdueMandatoryTrainingGaps} overdue` },
+          { label: "Remaining effort", value: `${company.incompleteTrainingHours}h`, detail: "Recorded assignment hours" },
         ]} />
-        <CostAssumptions key={`capability-${Object.values(impact.assumptions).join("-")}`} data={data} onApply={(values) => setFilters((current) => ({ ...current, ...values }))} />
+        <CapabilityAssumptions key={`capability-${impact.assumptions.courseFeePerLearner}-${impact.assumptions.courseHoursPerLearner}`} data={data} onApply={(values) => setFilters((current) => ({ ...current, ...values }))} />
         <LearningEconomics data={data} />
-        <Card className="gap-0 overflow-hidden py-0 shadow-none"><CardHeader className="border-b border-border px-5 py-4"><CardTitle>Capability coverage</CardTitle><CardDescription>Department learning completion and internal-mobility coverage.</CardDescription></CardHeader><CardContent className="p-0"><div className="overflow-x-auto"><table className="w-full min-w-[760px] text-left text-body"><thead className="bg-muted/40 text-label font-semibold text-muted-foreground"><tr>{["Department", "Active", "Learning", "Mandatory gaps", "Mobility review", "Promotions"].map((heading) => <th key={heading} className="px-4 py-2.5">{heading}</th>)}</tr></thead><tbody>{departments.map((row) => <tr key={row.department} className="border-t border-border/70"><td className="px-4 py-3 font-semibold">{row.department}</td><td className="px-4 py-3">{row.activeEmployees}</td><td className="px-4 py-3">{row.trainingCompletionRate}% · {row.trainingAssignments} assignments</td><td className="px-4 py-3">{row.mandatoryTrainingGaps}</td><td className="px-4 py-3">{row.mobilityReviewCount} · {row.mobilityReviewShare}%</td><td className="px-4 py-3">{row.promotions} · {row.promotionRate}%</td></tr>)}</tbody></table></div></CardContent></Card>
       </>}
     </WorkspacePage>
   )

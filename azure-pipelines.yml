@@ -58,6 +58,7 @@ stages:
               pnpm install --frozen-lockfile
               pnpm test:interactions
               pnpm test:providers
+              pnpm test:insights
               docker run --detach --rm --name laidbackhr-test-postgres \
                 --env POSTGRES_USER=postgres \
                 --env POSTGRES_PASSWORD=postgres \

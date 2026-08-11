@@ -276,6 +276,56 @@ export function buildWorkforceImpact(input: ImpactInput): WorkforceAnalytics["de
     }
   }).sort((left, right) => right.reviewWeightedExposure - left.reviewWeightedExposure || left.department.localeCompare(right.department))
 
+  const today = new Date().toISOString().slice(0, 10)
+  const activeTraining = input.training.filter((assignment) => activeIds.has(assignment.employee_id))
+  const capabilityDepartments = [...new Set([
+    ...input.activeEmployees.map((employee) => employee.department),
+    ...activeTraining.map((assignment) => assignment.department),
+  ])].filter(Boolean)
+  const capabilityPlans: WorkforceAnalytics["decisionSupport"]["workforceImpact"]["capabilityPlans"] = capabilityDepartments.map((department) => {
+    const departmentEmployees = input.activeEmployees.filter((employee) => employee.department === department)
+    const assignments = activeTraining.filter((assignment) => assignment.department === department)
+    const completed = assignments.filter((assignment) => assignment.completion_status.toLowerCase() === "completed")
+    const incomplete = assignments.filter((assignment) => assignment.completion_status.toLowerCase() !== "completed")
+    const mandatory = incomplete.filter((assignment) => Boolean(Number(assignment.is_mandatory)))
+    const overdueMandatory = mandatory.filter((assignment) => Boolean(assignment.due_date && assignment.due_date.slice(0, 10) < today))
+    const programCounts = new Map<string, number>()
+    for (const assignment of incomplete) {
+      programCounts.set(assignment.training_program, (programCounts.get(assignment.training_program) ?? 0) + 1)
+    }
+    const estimatedRemainingCost = incomplete.reduce((sum, assignment) => {
+      const annualPay = input.annualPayByEmployee.get(assignment.employee_id) ?? 0
+      const hours = assignment.training_hours > 0 ? assignment.training_hours : input.assumptions.courseHoursPerLearner
+      return sum + input.assumptions.courseFeePerLearner + (annualPay / 2080) * hours
+    }, 0)
+    const status = overdueMandatory.length > 0 ? "Overdue required" as const
+      : mandatory.length > 0 ? "Required work open" as const
+        : incomplete.length > 0 ? "Follow up" as const
+          : "On track" as const
+    return {
+      department,
+      activeEmployees: departmentEmployees.length,
+      assignedEmployees: new Set(assignments.map((assignment) => assignment.employee_id)).size,
+      totalAssignments: assignments.length,
+      completedAssignments: completed.length,
+      completionRate: percent(completed.length, assignments.length),
+      incompleteEmployees: new Set(incomplete.map((assignment) => assignment.employee_id)).size,
+      incompleteAssignments: incomplete.length,
+      mandatoryGaps: mandatory.length,
+      overdueMandatoryGaps: overdueMandatory.length,
+      remainingHours: Number(incomplete.reduce((sum, assignment) => sum + (assignment.training_hours > 0 ? assignment.training_hours : input.assumptions.courseHoursPerLearner), 0).toFixed(1)),
+      estimatedRemainingCost: money(estimatedRemainingCost),
+      leadingProgram: [...programCounts.entries()].sort((left, right) => right[1] - left[1] || left[0].localeCompare(right[0]))[0]?.[0] ?? null,
+      status,
+    }
+  }).sort((left, right) => {
+    const rank = { "Overdue required": 0, "Required work open": 1, "Follow up": 2, "On track": 3 }
+    return rank[left.status] - rank[right.status]
+      || right.overdueMandatoryGaps - left.overdueMandatoryGaps
+      || right.mandatoryGaps - left.mandatoryGaps
+      || left.department.localeCompare(right.department)
+  })
+
   const payDataCoverage = percent(input.activeEmployees.filter((employee) => (input.annualPayByEmployee.get(employee.employee_id) ?? 0) > 0).length, input.activeEmployees.length)
   const recordedExitCosts = input.attrition.map((event) => {
     const employee = workforceByEmployee.get(event.employee_id)
@@ -298,5 +348,6 @@ export function buildWorkforceImpact(input: ImpactInput): WorkforceAnalytics["de
     roles: roles.slice(0, 30),
     employees,
     learningCases,
+    capabilityPlans,
   }
 }
