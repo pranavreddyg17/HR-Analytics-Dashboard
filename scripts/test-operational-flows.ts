@@ -14,6 +14,7 @@ import { assignLearningCourse, completeLearningAssignment, createLearningCourse,
 import { createPerson, getPerson } from "@/lib/server/people"
 import type { RequestActor } from "@/lib/server/request-user"
 import { actOnWorkflow, createWorkflow } from "@/lib/server/workflows"
+import { assignAsset, cancelEmployeeExit, completeEmployeeExit, createAsset, createEmployeeExit, getAsset, listAssets, listEmployeeExits, updateOffboardingTask } from "@/lib/server/exit-assets"
 
 if (!process.env.DATABASE_URL) throw new Error("DATABASE_URL is required for operational integration tests.")
 
@@ -263,7 +264,66 @@ await assert.rejects(
   /must remain visible to the employee and HR/i,
 )
 
-console.log("Operational integration passed: employee services, actor-scoped queues, reviews, one-on-ones, AI workflows, learning, hiring, onboarding, and document visibility.")
+const departing = await createPerson({
+  employee_id: "INT-EXIT",
+  first_name: "Erin",
+  last_name: "Exit",
+  work_email: "erin.exit.integration@example.com",
+  department: "Engineering",
+  job_title: "Software Engineer I",
+  location: "Remote",
+  manager_id: managerRecord.employee_id,
+  hire_date: "2025-01-13",
+  employment_type: "Full-time",
+  employment_status: "Active",
+}, hr)
+const asset = await createAsset({ assetTag: "INT-LT-0001", assetType: "Laptop", manufacturer: "Lenovo", model: "ThinkPad T14", serialNumber: "INT-SERIAL-0001", status: "Available", condition: "Good", acquiredOn: "2025-01-01", warrantyExpiresOn: "2028-01-01", replacementDueOn: "2029-01-01" }, admin)
+await assignAsset(asset.id, { employeeId: departing.employee_id }, admin)
+assert.equal((await getAsset(asset.id)).currentAssignment?.employeeId, departing.employee_id)
+assert.ok((await getPerson(departing.employee_id, hr)).assets.some((row) => row.id === asset.id))
+
+let exit = await createEmployeeExit({ employeeId: departing.employee_id, exitType: "Resignation", expectedExitDate: "2027-08-31", notes: "Integration offboarding validation." }, hr)
+assert.ok(exit.tasks.some((task) => task.taskType === "asset_return" && task.assetTag === "INT-LT-0001"))
+assert.equal((await getPerson(departing.employee_id, hr)).employee.employment_status, "Notice Period")
+hrInbox = await getInboxOperations(hr)
+assert.equal(inboxItem(hrInbox, exit.id).type, "offboarding")
+
+const knownExitAnswer = await runHrAgent({ message: "Who is scheduled to leave in the next 90 days?", actor: hr, pageContext: { key: "exits", route: "/exits", label: "Exit management", filters: {} } })
+assert.equal(knownExitAnswer.tools[0]?.tool, "review_exit_and_asset_operations")
+assert.match(knownExitAnswer.answer, /confirmed exit|offboarding/i)
+
+for (const task of exit.tasks) {
+  exit = await updateOffboardingTask(exit.id, task.id, { status: "Completed", ...(task.assetAssignmentId ? { returnCondition: "Good" } : {}), notes: "Integration task completed." }, hr)
+}
+assert.equal(exit.progress, 100)
+assert.equal((await getAsset(asset.id)).currentAssignment, null)
+exit = await completeEmployeeExit(exit.id, "2027-08-31", hr)
+assert.equal(exit.status, "Completed")
+assert.equal((await getPerson(departing.employee_id, hr)).employee.employment_status, "Resigned")
+assert.equal((await db.prepare("SELECT COUNT(*) AS count FROM attrition_events WHERE employee_id=?").bind(departing.employee_id).first<{ count: number }>())?.count, 1)
+assert.ok((await listAssets({ search: "INT-LT-0001" })).items.some((row) => row.status === "Returned"))
+assert.ok((await listEmployeeExits({ search: departing.employee_id })).items.some((row) => row.status === "Completed"))
+
+const retained = await createPerson({
+  employee_id: "INT-EXIT-CANCEL",
+  first_name: "Casey",
+  last_name: "Retained",
+  work_email: "casey.retained.integration@example.com",
+  department: "Engineering",
+  job_title: "Software Engineer I",
+  location: "Remote",
+  manager_id: managerRecord.employee_id,
+  hire_date: "2024-06-17",
+  employment_type: "Full-time",
+  employment_status: "On Bench",
+}, hr)
+const cancelledExit = await createEmployeeExit({ employeeId: retained.employee_id, exitType: "Contract end", expectedExitDate: "2027-10-15", notes: "Cancellation state restoration validation." }, hr)
+assert.equal((await getPerson(retained.employee_id, hr)).employee.employment_status, "Scheduled Exit")
+await cancelEmployeeExit(cancelledExit.id, hr)
+assert.equal((await getPerson(retained.employee_id, hr)).employee.employment_status, "On Bench")
+assert.ok((await listEmployeeExits({ search: retained.employee_id })).items.some((row) => row.status === "Cancelled"))
+
+console.log("Operational integration passed: employee services, actor-scoped queues, reviews, one-on-ones, AI workflows, learning, hiring, onboarding, document visibility, assets, and offboarding.")
 }
 
 void main().catch((error) => {

@@ -34,6 +34,7 @@ function renderWorkQueue(plan: ToolPlan, data: Record<string, unknown>): string 
     leaves: "Leave operations",
     courses: "Learning operations",
     insights: "Workforce exception actions",
+    exits: "Employee offboarding",
   }
   const scope = String(page.scope ?? "inbox")
   const selection = String(page.queue ?? "priority")
@@ -361,6 +362,32 @@ function renderCapabilityPlan(plan: ToolPlan, data: Record<string, unknown>): st
   ].join("\n")
 }
 
+function renderExitAssetOperations(plan: ToolPlan, data: Record<string, unknown>): string {
+  const domain = String(data.domain ?? "")
+  const summary = object(data.summary)
+  if (domain === "assets") {
+    const rows = records(data.assets).slice(0, plan.limit)
+    return [
+      "Asset operations",
+      `- ${number(summary, "total")} assets: ${number(summary, "assigned")} assigned, ${number(summary, "available")} available, and ${number(summary, "broken") + number(summary, "lost")} broken or lost.`,
+      `- ${number(summary, "replacementDue")} are due for replacement and ${number(summary, "warrantyExpiring")} have a warranty expiring within 90 days.`,
+      ...(rows.length ? rows.map((row) => `- ${String(row.assetTag)} · ${String(row.type)} · ${String(row.status)} · ${String(row.lifecycle)}${row.assignedEmployee ? ` · assigned to ${String(row.assignedEmployee)} (${String(row.assignedEmployeeId)})` : ""}.`) : ["- No assets match the current search and filters."]),
+    ].join("\n")
+  }
+  if (domain === "exits") {
+    const rows = records(data.exits).slice(0, plan.limit)
+    return [
+      "Confirmed exit operations",
+      `- ${number(summary, "leaving30Days")} exits are scheduled in 30 days; ${number(summary, "leaving60Days")} in 60 days; ${number(summary, "leaving90Days")} in 90 days.`,
+      `- ${number(summary, "incompleteOffboarding")} workflows are incomplete, including ${number(summary, "outstandingAssets")} asset returns and ${number(summary, "pendingAccessRemoval")} access-removal tasks.`,
+      ...(rows.length ? rows.map((row) => `- ${String(row.employee)} (${String(row.employeeId)}) · ${String(row.expectedExitDate)} · ${String(row.progress)}% complete · ${Number(row.outstandingHrTasks) + Number(row.outstandingItTasks)} tasks open.`) : ["- No confirmed exit workflows match the current search and filters."]),
+      "These are confirmed exit workflows, not attrition-model predictions.",
+    ].join("\n")
+  }
+  const rows = records(data.statuses)
+  return ["Workforce status", ...rows.map((row) => `- ${String(row.label)}: ${Number(row.value).toLocaleString()}`)].join("\n")
+}
+
 export function renderHrEvidence(plan: ToolPlan, data: Record<string, unknown>): string {
   if (plan.name === "review_work_queue") return renderWorkQueue(plan, data)
   if (plan.name === "workforce_overview") return renderWorkforce(plan, data)
@@ -369,6 +396,7 @@ export function renderHrEvidence(plan: ToolPlan, data: Record<string, unknown>):
   if (plan.name === "review_people_operations") return renderPeopleOperations(plan, data)
   if (plan.name === "review_onboarding_readiness") return renderOnboardingReadiness(plan, data)
   if (plan.name === "review_capability_plan") return renderCapabilityPlan(plan, data)
+  if (plan.name === "review_exit_and_asset_operations") return renderExitAssetOperations(plan, data)
   if (plan.name === "find_employee_records") return renderEmployeeLookup(plan, data)
   return `${sourceLine(data)} The requested analysis completed.`
 }

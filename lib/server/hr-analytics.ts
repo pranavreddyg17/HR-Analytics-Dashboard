@@ -236,7 +236,7 @@ async function calculateWorkforceAnalytics(filters: HrFilters = {}, options: { r
   const currentlyAway = approvedLeave.filter((record) => record.start_date <= today && record.end_date >= today)
   const upcomingLeave = leave.filter((record) => ["approved", "pending"].includes(record.approval_status.toLowerCase()) && record.start_date >= today).sort((left, right) => left.start_date.localeCompare(right.start_date))
   const completedTraining = training.filter((record) => record.completion_status.toLowerCase() === "completed")
-  const activeEmployees = employees.filter((employee) => ["active", "on leave"].includes(employee.employment_status.toLowerCase()))
+  const activeEmployees = employees.filter((employee) => ["active", "on leave", "on bench", "notice period", "scheduled exit"].includes(employee.employment_status.toLowerCase()))
   const attritionRate = percent(attrition.length, activeEmployees.length + attrition.length)
   const promotedIds = new Set(allPromotions.filter(isIncluded).map((promotion) => promotion.employee_id))
   const withoutPromotion = activeEmployees.filter((employee) => employee.tenure_years >= 3 && !promotedIds.has(employee.employee_id)).length
@@ -626,10 +626,10 @@ async function calculateWorkforceAnalytics(filters: HrFilters = {}, options: { r
     },
     employeeAnalytics: {
       total: employees.length,
-      active: employees.filter((record) => record.employment_status.toLowerCase() === "active").length,
+      active: activeEmployees.length,
       onLeave: employees.filter((record) => record.employment_status.toLowerCase() === "on leave").length,
       preboarding: employees.filter((record) => record.employment_status.toLowerCase() === "preboarding").length,
-      terminated: employees.filter((record) => record.employment_status.toLowerCase() === "terminated").length,
+      terminated: employees.filter((record) => ["terminated", "resigned"].includes(record.employment_status.toLowerCase())).length,
       byDepartment: employeeByDepartment,
       activeByDepartment: groupBy(activeEmployees, (record) => record.department),
       byJobTitle: groupBy(employees, (record) => record.job_title),

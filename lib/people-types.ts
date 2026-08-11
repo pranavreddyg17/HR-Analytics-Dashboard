@@ -1,4 +1,5 @@
 import type { AttritionModelProfile, AttritionRecord, EmployeeRecord, LeaveRecord, PromotionRecord, TrainingRecord } from "@/lib/hr-types"
+import type { AssetRecord, EmployeeExitRecord } from "@/lib/exit-asset-types"
 
 export type ManagedEmployee = EmployeeRecord & {
   display_name: string
@@ -49,6 +50,8 @@ export type EmployeeProfileResponse = {
   projects: Array<Record<string, unknown>>
   compensation: Record<string, unknown> | null
   documents: Array<Record<string, unknown>>
+  assets: AssetRecord[]
+  exits: EmployeeExitRecord[]
   reimbursements: Array<Record<string, unknown>>
   cases: Array<Record<string, unknown>>
   reviews: Array<Record<string, unknown>>
@@ -74,7 +77,7 @@ export type EmployeeInput = {
 
 export type InboxItem = {
   id: string
-  type: "leave" | "hiring" | "training" | "insight" | "reimbursement" | "case" | "onboarding"
+  type: "leave" | "hiring" | "training" | "insight" | "reimbursement" | "case" | "onboarding" | "offboarding"
   title: string
   detail: string
   person: string | null

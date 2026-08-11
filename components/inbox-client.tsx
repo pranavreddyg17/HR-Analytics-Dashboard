@@ -37,9 +37,10 @@ const domainOptions: Array<{ id: DomainFilter; label: string }> = [
   { id: "reimbursement", label: "Reimbursements" },
   { id: "case", label: "Employee requests" },
   { id: "onboarding", label: "Onboarding" },
+  { id: "offboarding", label: "Exit management" },
 ]
 
-const domainLabel: Record<InboxItem["type"], string> = { leave: "Leave", hiring: "Talent acquisition", training: "Learning", insight: "Insights", reimbursement: "Reimbursement", case: "Employee request", onboarding: "Onboarding" }
+const domainLabel: Record<InboxItem["type"], string> = { leave: "Leave", hiring: "Talent acquisition", training: "Learning", insight: "Insights", reimbursement: "Reimbursement", case: "Employee request", onboarding: "Onboarding", offboarding: "Exit management" }
 const PAGE_SIZE = 10
 const MIN_AUDIT_NOTE_LENGTH = 10
 const inputClass = "h-9 w-full rounded-md border border-border bg-background px-3 text-control outline-none focus:border-ring focus:ring-2 focus:ring-ring/20"

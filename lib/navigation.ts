@@ -21,6 +21,8 @@ export function returnDestinationLabel(href: string): string {
   if (path === "/") return "Home"
   const labels: Record<string, string> = {
     "/people": "People",
+    "/exits": "Exit management",
+    "/assets": "Asset inventory",
     "/inbox": "Inbox",
     "/hiring": "Onboarding",
     "/onboarding": "Onboarding",

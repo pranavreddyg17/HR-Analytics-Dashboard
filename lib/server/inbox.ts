@@ -27,6 +27,7 @@ export async function getInboxOperations(actor: RequestActor): Promise<InboxOper
         reimbursement: open.filter((item) => item.type === "reimbursement").length,
         case: open.filter((item) => item.type === "case").length,
         onboarding: open.filter((item) => item.type === "onboarding").length,
+        offboarding: open.filter((item) => item.type === "offboarding").length,
       },
     },
     items,

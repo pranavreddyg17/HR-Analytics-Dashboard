@@ -4,6 +4,7 @@ import type { AttritionModelProfile, AttritionRecord, LeaveRecord, PromotionReco
 import type { EmployeeActivity, EmployeeDirectoryResponse, EmployeeInput, EmployeeProfileResponse, InboxItem, ManagedEmployee } from "@/lib/people-types"
 import type { RequestActor } from "@/lib/server/request-user"
 import { ensureHrDatabase, inferJobLevel, type Database } from "@/lib/server/hr-repository"
+import { getAsset, listEmployeeExits } from "@/lib/server/exit-assets"
 
 export class PeopleError extends Error {
   constructor(message: string, public status = 400) { super(message) }
@@ -32,7 +33,7 @@ const employeeSchema = z.object({
   manager_id: optionalText(40),
   hire_date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
   employment_type: z.enum(["Full-time", "Part-time", "Contract", "Intern", "Temporary"]),
-  employment_status: z.enum(["Preboarding", "Active", "On leave", "Terminated"]),
+  employment_status: z.enum(["Preboarding", "Active", "On Bench", "Notice Period", "Scheduled Exit", "On leave", "Terminated", "Resigned"]),
   version: z.number().int().positive().optional(),
 })
 
@@ -121,7 +122,7 @@ export async function listPeople({
   const safeLimit = Math.max(1, Math.min(250, limit))
   const safeOffset = Math.max(0, offset)
   const [itemsResult, countResult, dimensionResult, compositionResult] = await Promise.all([
-    database.prepare(`${employeeSelect}${clause} ORDER BY CASE e.employment_status WHEN 'Preboarding' THEN 0 WHEN 'Active' THEN 1 WHEN 'On leave' THEN 2 ELSE 3 END, display_name LIMIT ? OFFSET ?`)
+    database.prepare(`${employeeSelect}${clause} ORDER BY CASE e.employment_status WHEN 'Preboarding' THEN 0 WHEN 'Active' THEN 1 WHEN 'On Bench' THEN 2 WHEN 'On leave' THEN 3 WHEN 'Notice Period' THEN 4 WHEN 'Scheduled Exit' THEN 5 ELSE 6 END, display_name LIMIT ? OFFSET ?`)
       .bind(...bindings, safeLimit, safeOffset).all<ManagedEmployee>(),
     database.prepare(`SELECT COUNT(*) AS count FROM employee_directory_view e${clause}`).bind(...bindings).first<{ count: number }>(),
     database.prepare("SELECT department, location, employment_status, employment_type FROM employee_directory_view WHERE archived_at IS NULL").all<{ department: string; location: string; employment_status: string; employment_type: string }>(),
@@ -154,7 +155,7 @@ export async function getPerson(employeeId: string, actor?: RequestActor): Promi
     : null
   const canManageMeetings = canViewSensitiveHrData || Boolean(actorEmployee?.employee_id && employee.manager_id === actorEmployee.employee_id)
   const canManageReviews = canManageMeetings
-  const [manager, directReports, leave, training, promotions, attrition, attritionModel, activity, projects, compensation, documents, reimbursements, cases, reviews, meetings] = await Promise.all([
+  const [manager, directReports, leave, training, promotions, attrition, attritionModel, activity, projects, compensation, documents, reimbursements, cases, reviews, meetings, assignedAssets, exits] = await Promise.all([
     employee.manager_id ? database.prepare(`${employeeSelect} WHERE e.employee_id = ?`).bind(employee.manager_id).first<ManagedEmployee>() : Promise.resolve(null),
     database.prepare(`${employeeSelect} WHERE e.manager_id = ? AND e.archived_at IS NULL ORDER BY display_name`).bind(employeeId).all<ManagedEmployee>(),
     database.prepare("SELECT * FROM leave_requests_view WHERE employee_id = ? ORDER BY start_date DESC LIMIT 100").bind(employeeId).all<LeaveRecord>(),
@@ -174,7 +175,10 @@ export async function getPerson(employeeId: string, actor?: RequestActor): Promi
       FROM performance_reviews r JOIN review_cycles c ON c.id=r.cycle_id WHERE r.employee_id=? ORDER BY c.ends_on DESC LIMIT 20`).bind(employeeId).all<Record<string, unknown>>()
       : Promise.resolve({ results: [] as Record<string, unknown>[] }),
     canManageMeetings ? database.prepare("SELECT id, scheduled_at, held_at, status, employee_notes, manager_notes, ai_summary, summary_approved_at, follow_up_sent_at FROM one_on_one_meetings WHERE employee_id=? ORDER BY scheduled_at DESC LIMIT 30").bind(employeeId).all<Record<string, unknown>>() : Promise.resolve({ results: [] as Record<string, unknown>[] }),
+    database.prepare("SELECT a.id FROM assets a JOIN asset_assignments aa ON aa.asset_id=a.id WHERE aa.employee_id=? AND aa.status='Assigned' AND aa.returned_at IS NULL ORDER BY a.asset_tag").bind(employeeId).all<{ id: string }>(),
+    listEmployeeExits({ search: employeeId, limit: 20 }).then((result) => result.items.filter((item) => item.employeeId === employeeId)),
   ])
+  const assets = await Promise.all((assignedAssets.results ?? []).map((asset) => getAsset(asset.id)))
   return {
     permissions: { canManageEmployment: canViewSensitiveHrData, canManageMeetings, canManageReviews },
     employee,
@@ -189,6 +193,8 @@ export async function getPerson(employeeId: string, actor?: RequestActor): Promi
     projects: projects.results ?? [],
     compensation: (compensation.results ?? [])[0] ?? null,
     documents: documents.results ?? [],
+    assets,
+    exits,
     reimbursements: reimbursements.results ?? [],
     cases: cases.results ?? [],
     reviews: reviews.results ?? [],
@@ -297,6 +303,7 @@ export async function listInboxItems(actor?: RequestActor): Promise<InboxItem[]>
   type InsightWorkflow = WorkflowPerson & { id: string; title: string; source_entity_id: string | null }
   type ServiceWorkflow = WorkflowPerson & { id: string; type: "reimbursement" | "employee_case"; title: string; employee_id: string; first_name?: string; last_name?: string; preferred_name?: string | null; work_email?: string | null; manager_id?: string | null; manager_email?: string | null; service_description?: string | null; receipt_document_id?: string | null }
   type OnboardingWorkflow = WorkflowPerson & { id: string; title: string; employee_id: string; first_name: string; last_name: string; preferred_name: string | null; organization_name: string; department: string; job_title: string; job_level: string; location: string; manager_name: string | null; requested_annual_salary: number; salary_currency: string }
+  type OffboardingWorkflow = WorkflowPerson & { id: string; title: string; employee_id: string; first_name: string; last_name: string; preferred_name: string | null; department: string; job_title: string; expected_exit_date: string; exit_type: string; exit_status: string; open_tasks: number; open_assets: number }
   const workflowColumns = `
     w.requested_by_email,
     w.details_json,
@@ -312,7 +319,7 @@ export async function listInboxItems(actor?: RequestActor): Promise<InboxItem[]>
     w.created_at AS workflow_created_at,
     w.updated_at AS workflow_updated_at,
     COALESCE(NULLIF(au.display_name, ''), NULLIF(TRIM(COALESCE(oe.preferred_name, oe.first_name, '') || ' ' || COALESCE(oe.last_name, '')), '')) AS owner_name`
-  const [leave, hiring, training, insight, services, onboarding, actorEmployee] = await Promise.all([
+  const [leave, hiring, training, insight, services, onboarding, offboarding, actorEmployee] = await Promise.all([
     database.prepare(`SELECT l.*, e.first_name, e.last_name, e.preferred_name, e.work_email, e.manager_id, m.work_email AS manager_email, ${workflowColumns}
       FROM leave_requests_view l
       JOIN workflow_requests w ON w.id=l.id AND w.type='leave'
@@ -364,6 +371,20 @@ export async function listInboxItems(actor?: RequestActor): Promise<InboxItem[]>
       LEFT JOIN employee_directory_view oe ON LOWER(oe.work_email)=LOWER(w.owner_email) AND oe.archived_at IS NULL
       WHERE w.type='employee_onboarding'
       ORDER BY COALESCE(w.completed_at, w.updated_at) DESC LIMIT 160`).all<OnboardingWorkflow>(),
+    database.prepare(`SELECT w.id, w.title, w.employee_id, e.first_name, e.last_name, e.preferred_name,
+        e.department, e.job_title, x.expected_exit_date::text, x.exit_type, x.status AS exit_status,
+        COUNT(t.id) FILTER (WHERE t.status<>'Completed') AS open_tasks,
+        COUNT(t.id) FILTER (WHERE t.status<>'Completed' AND t.asset_assignment_id IS NOT NULL) AS open_assets,
+        ${workflowColumns}
+      FROM workflow_requests w
+      JOIN employee_exits x ON x.id=w.source_entity_id
+      JOIN employee_directory_view e ON e.employee_id=w.employee_id
+      LEFT JOIN offboarding_tasks t ON t.employee_exit_id=x.id
+      LEFT JOIN app_users au ON LOWER(au.email)=LOWER(w.owner_email)
+      LEFT JOIN employee_directory_view oe ON LOWER(oe.work_email)=LOWER(w.owner_email) AND oe.archived_at IS NULL
+      WHERE w.type='offboarding'
+      GROUP BY w.id, e.employee_id, e.first_name, e.last_name, e.preferred_name, e.department, e.job_title, x.id, au.display_name, oe.preferred_name, oe.first_name, oe.last_name
+      ORDER BY COALESCE(w.completed_at, w.updated_at) DESC LIMIT 160`).all<OffboardingWorkflow>(),
     actor ? database.prepare("SELECT employee_id FROM employee_directory_view WHERE LOWER(work_email)=LOWER(?) AND archived_at IS NULL").bind(actor.email).first<{ employee_id: string }>() : Promise.resolve(null),
   ])
   const personName = (row: { first_name?: string; last_name?: string; preferred_name?: string | null; employee_id: string }) => `${row.preferred_name || row.first_name || row.employee_id} ${row.last_name || ""}`.trim()
@@ -376,6 +397,7 @@ export async function listInboxItems(actor?: RequestActor): Promise<InboxItem[]>
   const visibleInsight = (insight.results ?? []).filter((row) => isPeopleTeam || row.owner_email?.toLowerCase() === ownEmail || row.requested_by_email?.toLowerCase() === ownEmail)
   const visibleServices = (services.results ?? []).filter((row) => isPeopleTeam || row.work_email?.toLowerCase() === ownEmail || row.owner_email?.toLowerCase() === ownEmail)
   const visibleOnboarding = isPeopleTeam ? onboarding.results ?? [] : []
+  const visibleOffboarding = isPeopleTeam ? offboarding.results ?? [] : []
   const detailValue = (row: WorkflowPerson, field: string): string | null => {
     try { return String((JSON.parse(row.details_json ?? "{}") as Record<string, unknown>)[field] ?? "") || null } catch { return null }
   }
@@ -594,6 +616,31 @@ export async function listInboxItems(actor?: RequestActor): Promise<InboxItem[]>
         actionable: canDecide, actions: canDecide ? ["reject", "approve"] : [],
         reviewHref: reviewHref("onboarding", row.id, isCompleted ? "completed" : "decisions"),
         recordHref: `/people/${encodeURIComponent(row.employee_id)}`,
+      }
+    }),
+    ...visibleOffboarding.map((row): InboxItem => {
+      const isCompleted = Boolean(row.completed_at) || ["completed", "cancelled", "closed"].includes((row.exit_status || row.workflow_status || "").toLowerCase())
+      const dueDate = row.due_at?.slice(0, 10) || row.expected_exit_date
+      const sla = slaStatus(dueDate, isCompleted)
+      return {
+        id: row.id, type: "offboarding", title: `${personName(row)} offboarding`, detail: `${row.exit_type} · ${row.job_title} · last day ${row.expected_exit_date}`,
+        person: personName(row), employeeId: row.employee_id, dueDate, status: row.exit_status || row.workflow_status || "Scheduled",
+        priority: priority(row, sla), owner: ownerLabel(row, "People Operations"), ownerEmail: row.owner_email ?? null,
+        nextAction: row.next_action || "Complete the employee offboarding checklist.",
+        attentionReason: row.blocked_reason || `${Number(row.open_tasks)} checklist item${Number(row.open_tasks) === 1 ? "" : "s"} remain open.`,
+        completionEffect: "The completed exit updates employee status, asset custody, access tasks, and attrition history.",
+        requestContext: [
+          { label: "Exit", value: `${row.exit_type} · ${row.expected_exit_date}` },
+          { label: "Open checklist", value: `${Number(row.open_tasks)} tasks · ${Number(row.open_assets)} assets` },
+          { label: "Department", value: row.department },
+        ],
+        assignedTo: "hr", requiresDecision: false, isCompleted, slaStatus: sla,
+        timeInStatusDays: daysSince(row.assigned_at || row.workflow_updated_at || row.workflow_created_at),
+        createdAt: row.workflow_created_at || nowIso, completedAt: row.completed_at ?? null,
+        completionNotes: row.completion_notes ?? null, blockedReason: row.blocked_reason ?? null,
+        actionable: false, actions: [],
+        reviewHref: reviewHref("offboarding", row.id, isCompleted ? "completed" : "my_work"),
+        recordHref: `/exits?exit=${encodeURIComponent(row.id)}`,
       }
     }),
   ].sort((left, right) => Number(left.isCompleted) - Number(right.isCompleted)

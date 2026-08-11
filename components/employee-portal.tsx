@@ -29,6 +29,8 @@ type PortalData = {
   meetings: Array<Record<string, unknown>>
   documents: Array<Record<string, unknown>>
   learning: Array<Record<string, unknown>>
+  assets: Array<Record<string, unknown>>
+  exit: Record<string, unknown> | null
 }
 
 type PortalView = "overview" | "requests" | "learning" | "reviews"
@@ -279,6 +281,10 @@ export function EmployeePortal({ initialData, user }: { initialData: PortalData;
           <div className="surface-card p-5"><p className="text-kpi-label text-muted-foreground">Open requests</p><p className="mt-1 text-kpi-value">{openRequestCount}</p><button type="button" onClick={() => selectView("requests")} className="mt-2 text-button">View requests</button></div>
           <div className="surface-card p-5"><p className="text-kpi-label text-muted-foreground">Learning assigned</p><p className="mt-1 text-kpi-value">{data.learning.filter((row) => String(row.status).toLowerCase() !== "completed").length}</p><p className="text-meta text-muted-foreground">Incomplete courses</p></div>
         </section>
+        {(data.assets.length > 0 || data.exit) && <section className="grid gap-4 lg:grid-cols-2">
+          <div className="surface-card overflow-hidden"><div className="border-b border-border px-5 py-4"><h2 className="text-section-title">Assigned equipment</h2></div><div className="divide-y divide-border">{data.assets.length ? data.assets.map((asset) => <div key={String(asset.id)} className="grid gap-1 px-5 py-3 sm:grid-cols-[1fr_auto] sm:items-center"><div><p className="text-card-title">{String(asset.asset_tag)}</p><p className="text-meta text-muted-foreground">{String(asset.asset_type)} · {[asset.manufacturer, asset.model].filter(Boolean).map(String).join(" ") || "Model not recorded"}</p></div><Status value={asset.condition} /></div>) : <p className="px-5 py-8 text-body text-muted-foreground">No equipment is assigned.</p>}</div></div>
+          {data.exit && <div className="surface-card p-5"><div className="flex items-start justify-between gap-3"><div><h2 className="text-section-title">Offboarding</h2><p className="mt-1 text-body text-muted-foreground">{String(data.exit.exit_type)} · last working date {date(data.exit.expected_exit_date)}</p></div><Status value={data.exit.status} /></div><div className="mt-5"><div className="flex justify-between text-meta"><span>Checklist progress</span><span>{Number(data.exit.completed_task_count)} of {Number(data.exit.task_count)}</span></div><div className="mt-2 h-2 overflow-hidden rounded-full bg-muted"><div className="h-full rounded-full bg-primary" style={{ width: `${Number(data.exit.task_count) ? Math.round(Number(data.exit.completed_task_count) / Number(data.exit.task_count) * 100) : 0}%` }} /></div></div><p className="mt-3 text-meta text-muted-foreground">HR, your manager, IT, and payroll own the checklist. Contact HR if the exit details are incorrect.</p></div>}
+        </section>}
         <section className="grid gap-4 lg:grid-cols-[1fr_1.4fr]">
           <form onSubmit={submitDocument} className="surface-card p-5">
             <h2 className="text-section-title">Documents</h2>

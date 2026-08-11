@@ -55,8 +55,12 @@ async function identity(db: Database, actor: RequestActor): Promise<EmployeeIden
       m.work_email AS manager_email
     FROM employee_directory_view e
     LEFT JOIN employee_directory_view m ON m.employee_id=e.manager_id
-    WHERE LOWER(e.work_email)=LOWER(?) AND e.archived_at IS NULL
-  `).bind(actor.email).first<EmployeeIdentity>()
+    LEFT JOIN app_users u ON LOWER(u.email)=LOWER(?) AND u.status='active'
+    WHERE e.archived_at IS NULL
+      AND (e.employee_id=u.employee_id OR (u.employee_id IS NULL AND LOWER(e.work_email)=LOWER(?)))
+    ORDER BY CASE WHEN e.employee_id=u.employee_id THEN 0 ELSE 1 END
+    LIMIT 1
+  `).bind(actor.email, actor.email).first<EmployeeIdentity>()
   if (!employee) throw new PeopleError("Your account is not linked to an employee profile. Ask HR to set your work email on the employee record.", 409)
   return employee
 }
@@ -64,7 +68,7 @@ async function identity(db: Database, actor: RequestActor): Promise<EmployeeIden
 export async function getEmployeePortal(actor: RequestActor) {
   const db = await database()
   const employee = await identity(db, actor)
-  const [projects, compensation, leave, claims, cases, reviews, meetings, documents, learning] = await Promise.all([
+  const [projects, compensation, leave, claims, cases, reviews, meetings, documents, learning, assets, employeeExit] = await Promise.all([
     db.prepare(`
       SELECT p.id, p.code, p.name, p.client_name, a.role_title, a.allocation_percent, a.starts_on, a.ends_on, a.is_primary
       FROM employee_project_assignments a
@@ -117,6 +121,20 @@ export async function getEmployeePortal(actor: RequestActor) {
       FROM course_assignments a JOIN learning_courses c ON c.id=a.course_id
       WHERE a.employee_id=? ORDER BY COALESCE(a.due_date, a.completed_at, a.assigned_at) DESC LIMIT 20
     `).bind(employee.employee_id).all<Record<string, unknown>>(),
+    db.prepare(`
+      SELECT a.id, a.asset_tag, a.asset_type, a.manufacturer, a.model, a.serial_number, a.condition,
+        aa.assigned_at, aa.status AS assignment_status
+      FROM asset_assignments aa JOIN assets a ON a.id=aa.asset_id
+      WHERE aa.employee_id=? AND aa.status='Assigned' AND aa.returned_at IS NULL
+      ORDER BY a.asset_type, a.asset_tag
+    `).bind(employee.employee_id).all<Record<string, unknown>>(),
+    db.prepare(`
+      SELECT x.id, x.exit_type, x.expected_exit_date, x.status,
+        COUNT(t.id) AS task_count, COUNT(t.id) FILTER (WHERE t.status='Completed') AS completed_task_count
+      FROM employee_exits x LEFT JOIN offboarding_tasks t ON t.employee_exit_id=x.id
+      WHERE x.employee_id=? AND x.status IN ('Scheduled','In Progress')
+      GROUP BY x.id ORDER BY x.expected_exit_date LIMIT 1
+    `).bind(employee.employee_id).first<Record<string, unknown>>(),
   ])
 
   return {
@@ -131,6 +149,8 @@ export async function getEmployeePortal(actor: RequestActor) {
     meetings: meetings.results ?? [],
     documents: documents.results ?? [],
     learning: learning.results ?? [],
+    assets: assets.results ?? [],
+    exit: employeeExit,
   }
 }
 

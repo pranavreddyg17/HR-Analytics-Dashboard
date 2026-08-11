@@ -83,7 +83,7 @@ const nullableFields = new Set(["preferred_name", "work_email", "phone", "manage
 const numberFields = new Set(["tenure_years", "leave_days", "training_hours", "assessment_score", "months_since_previous_promotion"])
 const dateFields = new Set(["hire_date", "application_date", "hiring_date", "exit_date", "start_date", "end_date", "completion_date", "promotion_date"])
 const enumValues: Partial<Record<HrDomain, Record<string, string[]>>> = {
-  employees: { employment_status: ["Active", "On Leave", "Preboarding", "Terminated"] },
+  employees: { employment_status: ["Active", "On leave", "On Bench", "Notice Period", "Scheduled Exit", "Preboarding", "Terminated", "Resigned"] },
   hiring: { recruitment_status: ["Requested", "Approved", "Open", "Applied", "Screening", "Interview", "Offer", "Hired", "Rejected", "Closed", "Cancelled"] },
   attrition: { exit_type: ["Voluntary", "Involuntary"] },
   leave: { approval_status: ["Pending", "Approved", "Rejected", "Cancelled"] },

@@ -4,10 +4,10 @@ import type { RequestActor } from "@/lib/server/request-user"
 
 export const agentCatalog = [
   { id: "workforce-intelligence", name: "Workforce intelligence", capability: "Headcount, workforce movement, departmental comparison, data quality, and current work queues", tools: ["workforce_overview", "compare_departments", "review_work_queue"] },
-  { id: "retention-planner", name: "Retention planner", capability: "Attrition evidence, explainable model signals, mobility context, and bounded follow-up analysis", tools: ["analyze_attrition_signals", "review_people_operations"] },
+  { id: "retention-planner", name: "Retention planner", capability: "Attrition evidence, confirmed exits, continuity, explainable model signals, and bounded follow-up analysis", tools: ["analyze_attrition_signals", "review_exit_and_asset_operations", "review_people_operations"] },
   { id: "recruiting-operations", name: "Onboarding operations", capability: "New-joiner readiness, recruiting handoffs, requisitions, candidate pipeline, and overdue work", tools: ["review_onboarding_readiness", "review_people_operations", "compare_departments", "review_work_queue"] },
   { id: "learning-compliance", name: "Learning and capability", capability: "Role capability requirements, mandatory gaps, completion evidence, and cohort recommendations", tools: ["review_capability_plan", "review_people_operations", "find_employee_records"] },
-  { id: "people-operations", name: "People operations", capability: "Leave, promotions, employee records, and cross-domain operational summaries", tools: ["review_people_operations", "find_employee_records", "review_work_queue"] },
+  { id: "people-operations", name: "People operations", capability: "Leave, promotions, employee records, exits, assets, and cross-domain operational summaries", tools: ["review_people_operations", "review_exit_and_asset_operations", "find_employee_records", "review_work_queue"] },
 ] as const
 
 type AgentId = typeof agentCatalog[number]["id"]

@@ -59,6 +59,7 @@ const toolNames = [
   "review_work_queue",
   "review_onboarding_readiness",
   "review_capability_plan",
+  "review_exit_and_asset_operations",
 ] as const
 
 const purposes = [
@@ -81,6 +82,7 @@ const purposes = [
   "directory_summary",
   "capability_recommendations",
   "onboarding_readiness",
+  "exit_asset_operations",
 ] as const
 
 const modelPlanSchema = z.object({
@@ -166,6 +168,7 @@ const defaultPurpose: Record<HrToolName, PlanPurpose> = {
   review_work_queue: "work_queue_review",
   review_onboarding_readiness: "onboarding_readiness",
   review_capability_plan: "capability_recommendations",
+  review_exit_and_asset_operations: "exit_asset_operations",
 }
 
 const allowedPurposes: Record<HrToolName, readonly PlanPurpose[]> = {
@@ -177,6 +180,7 @@ const allowedPurposes: Record<HrToolName, readonly PlanPurpose[]> = {
   review_work_queue: ["work_queue_review"],
   review_onboarding_readiness: ["onboarding_readiness"],
   review_capability_plan: ["capability_recommendations"],
+  review_exit_and_asset_operations: ["exit_asset_operations"],
 }
 
 function exactDimension(value: string | null, allowed: string[]): string | undefined {
@@ -253,12 +257,12 @@ function sanitizePlan(plan: ModelPlan["plans"][number], dimensions: Dimensions, 
     }
   }
   if (plan.tool === "review_work_queue") {
-    const pageScope = pageContext && ["home", "people", "person", "inbox", "hiring", "leaves", "courses", "insights"].includes(pageContext.key)
+    const pageScope = pageContext && ["home", "people", "person", "inbox", "hiring", "leaves", "courses", "insights", "exits"].includes(pageContext.key)
       ? pageContext.key
       : "inbox"
-    const scope = enumValue(plan.scope, ["home", "people", "person", "inbox", "hiring", "leaves", "courses", "insights"] as const) ?? pageScope
+    const scope = enumValue(plan.scope, ["home", "people", "person", "inbox", "hiring", "leaves", "courses", "insights", "exits"] as const) ?? pageScope
     const queue = enumValue(plan.queue ?? pageContext?.filters.view ?? null, ["my_work", "decisions", "overdue", "managers", "employees", "open", "completed"] as const)
-    const domain = enumValue(plan.domain ?? pageContext?.filters.type ?? null, ["leave", "hiring", "training", "insight", "reimbursement", "case", "onboarding"] as const)
+    const domain = enumValue(plan.domain ?? pageContext?.filters.type ?? null, ["leave", "hiring", "training", "insight", "reimbursement", "case", "onboarding", "offboarding"] as const)
     const itemId = cleanText(plan.itemId, 120)
       ?? cleanText(pageContext?.filters.item ?? pageContext?.filters.requisition ?? pageContext?.filters.request ?? pageContext?.filters.assignment ?? null, 120)
     const employeeId = cleanText(plan.employeeId, 80) ?? cleanText(pageContext?.filters.employeeId ?? null, 80)
@@ -278,6 +282,21 @@ function sanitizePlan(plan: ModelPlan["plans"][number], dimensions: Dimensions, 
   }
   if (plan.tool === "review_onboarding_readiness") {
     return { name: plan.tool, input: { ...common, includeRecruitingHandoff: plan.includeRecruitingHandoff !== false, limit }, purpose, limit }
+  }
+  if (plan.tool === "review_exit_and_asset_operations") {
+    const domain = enumValue(plan.domain, ["assets", "exits", "workforce_status"] as const) ?? "exits"
+    return {
+      name: plan.tool,
+      input: {
+        domain,
+        ...(cleanText(plan.query, 120) ? { query: cleanText(plan.query, 120) } : {}),
+        ...(cleanText(plan.status, 60) ? { status: cleanText(plan.status, 60) } : {}),
+        ...(domain === "exits" ? { horizon: 90 } : {}),
+        limit,
+      },
+      purpose,
+      limit,
+    }
   }
   return { name: plan.tool, input: { ...common, limit }, purpose, limit }
 }
@@ -316,6 +335,7 @@ Tool routing:
 - find_employee_records: named people, employee IDs, directory searches, or profile facts.
 - review_onboarding_readiness: new joiners and recruiting-to-onboarding handoffs.
 - review_capability_plan: role skills, course evidence, and governed cohort learning recommendations.
+- review_exit_and_asset_operations: confirmed/scheduled employee exits, offboarding tasks, device custody, asset lifecycle, warranty, or replacement exceptions.
 
 Rules:
 - Treat the current page and its validated filters as scope, never as employee search text.
@@ -324,6 +344,7 @@ Rules:
 - Use recordScope high_risk only for an explicit model-risk request, exited for former employees, and summary for aggregate questions.
 - For a selected attrition cohort asking why or what to do, request explanations and preserve the selected IDs.
 - Use work_queue for actionable decisions; do not substitute aggregate analytics.
+- Never use attrition-model scores to answer a question about confirmed departures. Use exit operations for known exits and attrition signals only for predicted risk.
 - Set inScope false only when the request is unrelated to HR, workforce, employee service, analytics, or supported workflows.
 - This planner is read-only. It cannot approve, reject, change pay, assign training, schedule meetings, or make an employment decision.`
 

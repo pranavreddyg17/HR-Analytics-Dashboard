@@ -1,7 +1,7 @@
 import type { HrFilters } from "@/lib/hr-types"
 import type { AssistantPageContext } from "@/lib/assistant-page-context"
 
-export type HrToolName = "workforce_overview" | "compare_departments" | "analyze_attrition_signals" | "review_people_operations" | "find_employee_records" | "review_work_queue" | "review_onboarding_readiness" | "review_capability_plan"
+export type HrToolName = "workforce_overview" | "compare_departments" | "analyze_attrition_signals" | "review_people_operations" | "find_employee_records" | "review_work_queue" | "review_onboarding_readiness" | "review_capability_plan" | "review_exit_and_asset_operations"
 
 type StoredToolContext = {
   tool: string
@@ -39,6 +39,7 @@ export type PlanPurpose =
   | "directory_summary"
   | "capability_recommendations"
   | "onboarding_readiness"
+  | "exit_asset_operations"
 
 export type ToolPlan = {
   name: HrToolName
@@ -47,7 +48,7 @@ export type ToolPlan = {
   limit: number
 }
 
-type Topic = "workforce" | "work_queue" | "manager_exits" | "replacement" | "attrition" | "hiring" | "leave" | "training" | "promotions" | "employee"
+type Topic = "workforce" | "work_queue" | "manager_exits" | "replacement" | "attrition" | "hiring" | "leave" | "training" | "promotions" | "employee" | "exits" | "assets"
 
 type Dimensions = {
   departments: string[]
@@ -62,9 +63,11 @@ type ResolvedHrIntent = {
   contextQuery: string
 }
 
-const scopePattern = /employee|people|workforce|headcount|department|location|manager|hire|hiring|onboard|new joiner|recruit|attrition|turnover|exit|retention|risk|leave|pto|absence|vacation|training|learning|course|skill|capabilit|upskill|mandatory|promotion|career|mobility|data quality|demo|import|summary|brief|company|status|replacement|coverage/i
+const scopePattern = /employee|people|workforce|headcount|department|location|manager|hire|hiring|onboard|offboard|new joiner|recruit|attrition|turnover|exit|retention|risk|leave|pto|absence|vacation|training|learning|course|skill|capabilit|upskill|mandatory|promotion|career|mobility|asset|equipment|laptop|warranty|access revocation|data quality|demo|import|summary|brief|company|status|replacement|coverage/i
 
 function directTopic(message: string): Topic | null {
+  if (/asset|equipment|laptop|monitor|phone|badge|serial number|warranty|device|custody/i.test(message)) return "assets"
+  if (/offboard|scheduled exits?|known exits?|notice period|last working day|departing employees?|leaving in (?:the )?(?:next|coming)|access revocation|exit checklist/i.test(message)) return "exits"
   if (/manager/i.test(message) && /exit|attrition|turnover|retention/i.test(message)) return "manager_exits"
   if (/replacement/i.test(message) && /coverage|gap|pipeline|hiring/i.test(message)) return "replacement"
   if (/promotion|promote|career progression|mobility/i.test(message)) return "promotions"
@@ -93,6 +96,10 @@ function priorState(history: AgentHistoryMessage[]): { topic: Topic | null; inpu
   if (trace.tool === "find_employee_records") return { topic: "employee", input: trace.input ?? {}, ...shared }
   if (trace.tool === "review_onboarding_readiness") return { topic: "hiring", input: trace.input ?? {}, ...shared }
   if (trace.tool === "review_capability_plan") return { topic: "training", input: trace.input ?? {}, ...shared }
+  if (trace.tool === "review_exit_and_asset_operations") {
+    const domain = trace.input?.domain
+    return { topic: domain === "assets" ? "assets" : "exits", input: trace.input ?? {}, ...shared }
+  }
   if (trace.tool === "review_people_operations") {
     const domain = trace.input?.domain
     const topic = domain === "hiring" || domain === "leave" || domain === "training" || domain === "promotions" ? domain : null
@@ -197,18 +204,24 @@ function pageWorkPlan(query: string, context?: AssistantPageContext): ToolPlan |
   if (context.key === "hiring" && /summarize|onboard|new joiner|readiness|handoff|need action|what should/i.test(query)) {
     return { name: "review_onboarding_readiness", input: { department: context.filters.department, location: context.filters.location, includeRecruitingHandoff: true, limit: 10 }, purpose: "onboarding_readiness", limit: 10 }
   }
+  if (context.key === "exits") {
+    return { name: "review_exit_and_asset_operations", input: { domain: "exits", query: context.filters.q ?? "", ...(context.filters.status ? { status: context.filters.status } : {}), horizon: 90, limit: 10 }, purpose: "exit_asset_operations", limit: 10 }
+  }
+  if (context.key === "assets") {
+    return { name: "review_exit_and_asset_operations", input: { domain: "assets", query: context.filters.q ?? "", ...(context.filters.status ? { status: context.filters.status } : {}), limit: 10 }, purpose: "exit_asset_operations", limit: 10 }
+  }
   const asksForPageWork = /\bdecisions?\b|\bapprovals?\b|\bexceptions?\b|\boverdue\b|\bpriorit(?:y|ies|ize)\b|\bwhat should (?:i|we|hr) (?:review|act on|do) (?:first|next|today)?\b|\bneeds? (?:action|attention|follow-up)\b/i.test(query)
     || /\bsummarize\b/i.test(query) && ["home", "inbox"].includes(context.key)
     || context.key === "person" && /\bopen (?:hr )?work\b|\blinked to (?:this|the) employee\b/i.test(query)
   if (!asksForPageWork) return null
 
-  const scope = ["home", "people", "person", "inbox", "hiring", "leaves", "courses", "insights"].includes(context.key)
+  const scope = ["home", "people", "person", "inbox", "hiring", "leaves", "courses", "insights", "exits"].includes(context.key)
     ? context.key
     : "inbox"
   const view = ["my_work", "decisions", "overdue", "managers", "employees", "open", "completed"].includes(context.filters.view)
     ? context.filters.view
     : undefined
-  const domain = ["leave", "hiring", "training", "insight", "reimbursement", "case", "onboarding"].includes(context.filters.type)
+  const domain = ["leave", "hiring", "training", "insight", "reimbursement", "case", "onboarding", "offboarding"].includes(context.filters.type)
     ? context.filters.type
     : undefined
   return {
@@ -244,6 +257,23 @@ export function resolveHrIntent(message: string, history: AgentHistoryMessage[],
 
   if (topic === "manager_exits") return { plans: [{ name: "workforce_overview", input: filters, purpose: "manager_concentration", limit }], inScope, isFollowUp: followUp, contextQuery }
   if (topic === "replacement") return { plans: [{ name: "workforce_overview", input: filters, purpose: "replacement_coverage", limit }], inScope, isFollowUp: followUp, contextQuery }
+  if (topic === "assets" || topic === "exits") return {
+    plans: [{
+      name: "review_exit_and_asset_operations",
+      input: {
+        domain: topic,
+        query: employeeIdentifier(query) ?? query,
+        ...(followUp && typeof previous.input.status === "string" ? { status: previous.input.status } : {}),
+        ...(topic === "exits" ? { horizon: /30\s*days?/i.test(query) ? 30 : /60\s*days?/i.test(query) ? 60 : 90 } : {}),
+        limit,
+      },
+      purpose: "exit_asset_operations",
+      limit,
+    }],
+    inScope,
+    isFollowUp: followUp,
+    contextQuery,
+  }
   if (topic === "work_queue") return { plans: [{ name: "review_work_queue", input: { ...previous.input, limit }, purpose: "work_queue_review", limit }], inScope, isFollowUp: followUp, contextQuery }
   if (topic === "attrition") {
     const analysis = wantsExplanation(query)

@@ -52,6 +52,8 @@ export async function GET(request: Request) {
         },
       },
       "/api/v1/integrations/v1/operations": operation("Read operational queues and domain summaries", "operations:read", "get"),
+      "/api/v1/integrations/v1/exits": operation("Read confirmed employee exits and offboarding progress", "operations:read", "get"),
+      "/api/v1/integrations/v1/assets": operation("Read asset inventory, custody, and lifecycle status", "operations:read", "get"),
       "/api/v1/integrations/v1/agents/{agentId}/invoke": {
         ...operation("Invoke a read-only workforce agent", "agent:invoke", "post"),
         parameters: [{ name: "agentId", in: "path", required: true, schema: { type: "string", enum: ["workforce-intelligence", "retention-planner", "recruiting-operations", "learning-compliance", "people-operations"] } }],

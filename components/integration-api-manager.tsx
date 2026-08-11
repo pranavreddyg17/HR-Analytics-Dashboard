@@ -33,6 +33,8 @@ const endpoints = [
   ["GET", "/api/v1/integrations/v1/retention/model", "Model metadata, input contract, and intended-use controls"],
   ["POST", "/api/v1/integrations/v1/retention/predict", "Explainable historical-model scenario assessment"],
   ["GET", "/api/v1/integrations/v1/operations", "Onboarding, leave, learning, and work queues"],
+  ["GET", "/api/v1/integrations/v1/exits", "Confirmed exits, offboarding progress, asset recovery, and access removal"],
+  ["GET", "/api/v1/integrations/v1/assets", "Equipment inventory, custody, condition, warranty, and lifecycle"],
   ["POST", "/api/v1/integrations/v1/agents/{agentId}/invoke", "Grounded read-only agent invocation"],
   ["POST", "/api/v1/integrations/v1/data/import", "Validate or apply domain records"],
 ]

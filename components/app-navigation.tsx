@@ -35,6 +35,7 @@ const navigationGroups: Array<{ label: string; items: NavigationItem[] }> = [
       { href: "/onboarding", label: "Onboarding" },
       { href: "/leaves", label: "Leaves" },
       { href: "/courses", label: "Learning" },
+      { href: "/exits", label: "Exit management" },
     ],
   },
   {
@@ -49,6 +50,7 @@ const navigationGroups: Array<{ label: string; items: NavigationItem[] }> = [
     label: "System",
     items: [
       { href: "/imports", label: "Data exchange" },
+      { href: "/assets", label: "Asset inventory" },
       { href: "/admin", label: "Operations monitor", adminOnly: true },
       { href: "/access", label: "Access", adminOnly: true },
     ],

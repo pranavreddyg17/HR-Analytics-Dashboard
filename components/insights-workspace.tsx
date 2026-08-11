@@ -28,6 +28,7 @@ import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import type { BreakdownPoint, EmployeeImpactScenario, EmployeeImpactSearchResult, TimePoint, WorkforceAnalytics } from "@/lib/hr-types"
 import { cn } from "@/lib/utils"
+import { categoricalChartColors, chartSeries } from "@/lib/chart-theme"
 
 type Filters = {
   from: string
@@ -47,7 +48,13 @@ type CostInputs = Required<Pick<Filters, "recruitingCostPerHire" | "vacancyProdu
 
 type AnalysisView = "overview" | "impact" | "talent" | "capability"
 
-const chartColors = ["var(--chart-1)", "var(--chart-2)", "var(--chart-3)", "var(--chart-4)", "var(--chart-5)"]
+const viewGuidance: Record<AnalysisView, { title: string; description: string }> = {
+  overview: { title: "Operating overview", description: "Start with department exceptions, then create or open the work item that owns the follow-up." },
+  impact: { title: "Workforce impact", description: "Test replacement-cost assumptions and inspect role coverage for a selected active employee." },
+  talent: { title: "Talent supply", description: "Compare hiring supply with recorded exits, refill speed, tenure cohorts, and manager-level concentration." },
+  capability: { title: "Capability", description: "Review current learning completion, required work, remaining effort, and assignment cost." },
+}
+
 const actionLinkClass = "inline-flex h-7 items-center justify-center rounded-md border border-border bg-background px-2.5 text-control hover:bg-muted"
 
 function rollingYear(): Pick<Filters, "from" | "to"> {
@@ -138,8 +145,8 @@ function FlowChart({ rows }: { rows: ReturnType<typeof flowRows> }) {
           <YAxis allowDecimals={false} axisLine={false} tickLine={false} tick={{ fill: "var(--muted-foreground)", fontSize: 12 }} />
           <Tooltip content={<FlowTooltip />} />
           <Legend />
-          <Bar dataKey="hires" name="Completed hires" fill="var(--chart-1)" radius={[3, 3, 0, 0]} />
-          <Bar dataKey="exits" name="Recorded exits" fill="var(--destructive)" radius={[3, 3, 0, 0]} />
+          <Bar dataKey="hires" name="Completed hires" fill={chartSeries.positive} radius={[3, 3, 0, 0]} />
+          <Bar dataKey="exits" name="Recorded exits" fill={chartSeries.negative} radius={[3, 3, 0, 0]} />
         </BarChart>
       </ResponsiveContainer>
     </div>
@@ -155,7 +162,7 @@ function ExitReasonChart({ rows }: { rows: BreakdownPoint[] }) {
         <ResponsiveContainer width="100%" height="100%" minWidth={0} initialDimension={{ width: 180, height: 192 }}>
           <PieChart>
             <Pie data={rows} dataKey="value" nameKey="label" innerRadius={45} outerRadius={76} paddingAngle={1} stroke="var(--card)">
-              {rows.map((row, index) => <Cell key={row.label} fill={chartColors[index % chartColors.length]} />)}
+              {rows.map((row, index) => <Cell key={row.label} fill={categoricalChartColors[index % categoricalChartColors.length]} />)}
             </Pie>
             <Tooltip formatter={(value) => [`${value} exits`, "Recorded"]} />
           </PieChart>
@@ -164,7 +171,7 @@ function ExitReasonChart({ rows }: { rows: BreakdownPoint[] }) {
       <div className="space-y-2">
         {rows.map((row, index) => (
           <div key={row.label} className="grid grid-cols-[10px_1fr_auto] items-center gap-2 text-meta">
-            <span className="size-2.5 rounded-sm" style={{ background: chartColors[index % chartColors.length] }} />
+            <span className="size-2.5 rounded-sm" style={{ background: categoricalChartColors[index % categoricalChartColors.length] }} />
             <span className="truncate text-muted-foreground">{row.label}</span>
             <span className="tabular-nums">{row.value} · {Math.round((row.value / total) * 100)}%</span>
           </div>
@@ -193,7 +200,7 @@ function TenureAttrition({ data }: { data: WorkforceAnalytics }) {
       <YAxis unit="%" axisLine={false} tickLine={false} tick={{ fill: "var(--muted-foreground)", fontSize: 11 }} />
       <Tooltip formatter={(value, name, item) => name === "Attrition rate" ? [`${value}% (${item.payload.exits} exits / ${item.payload.population})`, name] : [value, name]} />
       <ReferenceLine y={data.attrition.rate} stroke="var(--muted-foreground)" strokeDasharray="4 4" label={{ value: "Company", position: "right", fill: "var(--muted-foreground)", fontSize: 10 }} />
-      <Bar dataKey="attritionRate" name="Attrition rate" fill="var(--chart-1)" radius={[3, 3, 0, 0]} />
+      <Bar dataKey="attritionRate" name="Attrition rate" fill={chartSeries.negative} radius={[3, 3, 0, 0]} />
     </BarChart>
   </ResponsiveContainer></div>
 }
@@ -209,8 +216,8 @@ function SourceEfficiency({ data }: { data: WorkforceAnalytics }) {
       <YAxis yAxisId="days" orientation="right" unit="d" axisLine={false} tickLine={false} tick={{ fill: "var(--muted-foreground)", fontSize: 11 }} />
       <Tooltip />
       <Legend />
-      <Bar yAxisId="hires" dataKey="hires" name="Completed hires" fill="var(--chart-1)" radius={[3, 3, 0, 0]} />
-      <Line yAxisId="days" type="monotone" dataKey="averageDays" name="Average days to hire" stroke="var(--chart-5)" strokeWidth={2} dot={{ r: 3 }} />
+      <Bar yAxisId="hires" dataKey="hires" name="Completed hires" fill={chartSeries.positive} radius={[3, 3, 0, 0]} />
+      <Line yAxisId="days" type="monotone" dataKey="averageDays" name="Average days to hire" stroke={chartSeries.primary} strokeWidth={2} dot={{ r: 3 }} />
     </ComposedChart>
   </ResponsiveContainer></div>
 }
@@ -306,7 +313,7 @@ function ReplacementCostChart({ data }: { data: WorkforceAnalytics }) {
       <XAxis type="number" tickFormatter={(value) => currency(Number(value))} axisLine={false} tickLine={false} tick={{ fill: "var(--muted-foreground)", fontSize: 10 }} />
       <YAxis type="category" dataKey="label" width={142} axisLine={false} tickLine={false} tick={{ fill: "var(--muted-foreground)", fontSize: 10 }} />
       <Tooltip formatter={(value) => [currency(Number(value)), "Replacement scenario"]} labelFormatter={(_, payload) => payload?.[0]?.payload ? `${payload[0].payload.jobTitle} · ${payload[0].payload.department}` : ""} />
-      <Bar dataKey="replacementCostPerExit" fill="var(--chart-1)" radius={[0, 3, 3, 0]} />
+      <Bar dataKey="replacementCostPerExit" fill={chartSeries.primary} radius={[0, 3, 3, 0]} />
     </BarChart>
   </ResponsiveContainer></div>
 }
@@ -549,9 +556,10 @@ export function InsightsWorkspace({ initialData }: { initialData: WorkforceAnaly
       {error && <div className="rounded-md border border-rose-200 bg-rose-50 px-4 py-3 text-meta text-rose-800 dark:border-rose-900/40 dark:bg-rose-950/20 dark:text-rose-200">{error}</div>}
 
       <Card className="gap-0 overflow-hidden py-0 shadow-none">
-        <CardContent className="flex flex-wrap gap-1 p-2" role="tablist" aria-label="Insights view">
+        <CardContent className="flex flex-wrap gap-1 border-b border-border p-2" role="tablist" aria-label="Insights view">
           {([['overview', 'Overview'], ['impact', 'Workforce impact'], ['talent', 'Talent supply'], ['capability', 'Capability']] as Array<[AnalysisView, string]>).map(([id, label]) => <Button key={id} size="sm" variant={analysisView === id ? "secondary" : "ghost"} role="tab" aria-selected={analysisView === id} onClick={() => selectAnalysisView(id)}>{label}</Button>)}
         </CardContent>
+        <CardContent className="px-4 py-3"><p className="text-card-title font-semibold">{viewGuidance[analysisView].title}</p><p className="mt-0.5 text-meta text-muted-foreground">{viewGuidance[analysisView].description}</p></CardContent>
       </Card>
 
       {analysisView === "overview" && <>
@@ -563,16 +571,14 @@ export function InsightsWorkspace({ initialData }: { initialData: WorkforceAnaly
           { label: "Continuity reviews", value: impact.summary.rolesNeedingContinuityReview, detail: "Roles marked critical or watch" },
         ]} />
         <Card className="gap-0 overflow-hidden py-0 shadow-none"><CardHeader className="border-b border-border px-5 py-4"><CardTitle>Department comparison</CardTitle><CardDescription>Current workforce, movement, hiring coverage, required learning, and leave in one view.</CardDescription></CardHeader><CardContent className="p-0"><DepartmentPressure data={data} onSelect={(department) => setFilters({ ...filters, department })} /></CardContent></Card>
-        <div className="grid gap-4 xl:grid-cols-[minmax(0,1.45fr)_minmax(300px,0.55fr)]">
-          <Card className="gap-0 overflow-hidden py-0 shadow-none">
+        <Card className="gap-0 overflow-hidden py-0 shadow-none">
             <CardHeader className="gap-3 border-b border-border px-5 py-4 sm:flex-row sm:items-center sm:justify-between">
               <div><CardTitle>Priority reviews</CardTitle><CardDescription>Generated from current operating records. Creating a review adds a durable item to the work queue.</CardDescription></div>
               <Link className={actionLinkClass} href="/inbox?view=my_work&type=insight&returnTo=%2Finsights">Open work queue</Link>
             </CardHeader>
             <CardContent className="divide-y divide-border p-0">{actions.map((action) => <div id={`insight-${action.id}`} key={action.id} className={cn("grid scroll-mt-24 gap-3 px-5 py-4 lg:grid-cols-[minmax(150px,0.65fr)_minmax(220px,1fr)_minmax(260px,1.2fr)_auto] lg:items-center", action.workItem?.id === selectedWorkItemId && "bg-accent/45 ring-1 ring-inset ring-primary/30")}><div><p className="text-card-title font-semibold">{action.department}</p><Badge className="mt-1" variant={action.severity === "high" ? "destructive" : "secondary"}>{action.severity === "high" ? "High priority" : "Review"}</Badge></div><div><p className="text-body font-semibold">{action.title}</p><p className="mt-0.5 text-meta text-muted-foreground">Trigger: {action.evidence}</p></div><div><p className="text-label font-semibold text-muted-foreground">Recommended check</p><p className="mt-0.5 text-body">{action.recommendedAction}</p></div><InsightActionButton action={action} filters={filters} onUpdated={() => setRefreshVersion((current) => current + 1)} /></div>)}{!actions.length && <p className="px-5 py-8 text-center text-body text-muted-foreground">No exceptions meet the review rules in this reporting scope.</p>}</CardContent>
-          </Card>
-          <Card className="shadow-none"><CardHeader><CardTitle>Exit reasons</CardTitle><CardDescription>Recorded reasons for exits in this scope.</CardDescription></CardHeader><CardContent><ExitReasonChart rows={exitReasons} /></CardContent></Card>
-        </div>
+        </Card>
+        <Card className="shadow-none"><CardHeader><CardTitle>Exit reasons</CardTitle><CardDescription>Recorded outcomes in the reporting period. Use these categories to select a cohort for review, not to infer an individual cause.</CardDescription></CardHeader><CardContent className="max-w-3xl"><ExitReasonChart rows={exitReasons} /></CardContent></Card>
       </>}
 
       {analysisView === "impact" && <>
@@ -584,7 +590,7 @@ export function InsightsWorkspace({ initialData }: { initialData: WorkforceAnaly
           { label: "Pay data coverage", value: `${impact.summary.payDataCoverage}%`, detail: "Active employee profiles" },
         ]} />
         <CostAssumptions key={Object.values(impact.assumptions).join("-")} data={data} onApply={(values) => setFilters((current) => ({ ...current, ...values }))} />
-        <div className="grid gap-4 xl:grid-cols-[minmax(0,0.75fr)_minmax(0,1.25fr)]"><Card className="shadow-none"><CardHeader><CardTitle>Replacement cost by role</CardTitle><CardDescription>Average pay, refill time, and the current cost assumptions.</CardDescription></CardHeader><CardContent><ReplacementCostChart data={data} /></CardContent></Card><EmployeeImpactPanel data={data} filters={filters} /></div>
+        <div className="grid items-start gap-4 xl:grid-cols-2"><Card className="shadow-none"><CardHeader><CardTitle>Replacement cost by role</CardTitle><CardDescription>Scenario cost calculated from average pay, refill history, and the assumptions above.</CardDescription></CardHeader><CardContent><ReplacementCostChart data={data} /></CardContent></Card><EmployeeImpactPanel data={data} filters={filters} /></div>
         <RoleContinuityTable data={data} />
       </>}
 

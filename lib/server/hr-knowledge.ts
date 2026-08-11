@@ -12,6 +12,7 @@ import aiCopilotOperatingModelMarkdown from "@/knowledge/ai-copilot-operating-mo
 import actorApprovalModelMarkdown from "@/knowledge/actor-and-approval-model.md?raw"
 import aiSafetyEvaluationMarkdown from "@/knowledge/ai-safety-and-evaluation.md?raw"
 import integrationApiMarkdown from "@/knowledge/integration-api.md?raw"
+import exitAssetOperationsMarkdown from "@/knowledge/exit-and-asset-operations.md?raw"
 import { searchAzureKnowledge } from "@/lib/server/azure-ai"
 import { sanitizeRetrievedGuidance } from "@/lib/server/ai-safety"
 
@@ -79,6 +80,7 @@ const knowledgeChunks = [
   ...chunksFromMarkdown("Actor and approval model", actorApprovalModelMarkdown),
   ...chunksFromMarkdown("AI safety and evaluation", aiSafetyEvaluationMarkdown),
   ...chunksFromMarkdown("Workforce integration API", integrationApiMarkdown),
+  ...chunksFromMarkdown("Exit and asset operations", exitAssetOperationsMarkdown),
 ]
 
 function retrieveHrContext(query: string, limit = 3): KnowledgeMatch[] {

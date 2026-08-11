@@ -42,7 +42,7 @@ function rangeClause(column: string, filters: HrFilters): { sql: string; binding
 
 export async function searchEmployeeImpactPeople(query: string, filters: HrFilters = {}, limit = 20): Promise<EmployeeImpactSearchResult[]> {
   const database = await ensureHrDatabase()
-  const where = ["e.archived_at IS NULL", "LOWER(e.employment_status) IN ('active', 'on leave')"]
+  const where = ["e.archived_at IS NULL", "LOWER(e.employment_status) IN ('active', 'on leave', 'on bench', 'notice period', 'scheduled exit')"]
   const bindings: unknown[] = []
   if (filters.department) { where.push("e.department = ?"); bindings.push(filters.department) }
   if (filters.location) { where.push("e.location = ?"); bindings.push(filters.location) }
@@ -71,7 +71,7 @@ export async function searchEmployeeImpactPeople(query: string, filters: HrFilte
 
 export async function getEmployeeImpactScenario(employeeId: string, filters: HrFilters = {}): Promise<EmployeeImpactScenario | null> {
   const database = await ensureHrDatabase()
-  const scope = ["e.employee_id = ?", "e.archived_at IS NULL", "LOWER(e.employment_status) IN ('active', 'on leave')"]
+  const scope = ["e.employee_id = ?", "e.archived_at IS NULL", "LOWER(e.employment_status) IN ('active', 'on leave', 'on bench', 'notice period', 'scheduled exit')"]
   const scopeBindings: unknown[] = [employeeId]
   if (filters.department) { scope.push("e.department = ?"); scopeBindings.push(filters.department) }
   if (filters.location) { scope.push("e.location = ?"); scopeBindings.push(filters.location) }
@@ -116,10 +116,10 @@ export async function getEmployeeImpactScenario(employeeId: string, filters: HrF
       COUNT(model.employee_id)::int AS scored
       FROM employee_directory_view e
       LEFT JOIN attrition_model_profiles_view model ON model.employee_id=e.employee_id${modelSourceClause}
-      WHERE e.archived_at IS NULL AND LOWER(e.employment_status) IN ('active', 'on leave')
+      WHERE e.archived_at IS NULL AND LOWER(e.employment_status) IN ('active', 'on leave', 'on bench', 'notice period', 'scheduled exit')
         AND e.department=? AND LOWER(e.job_title)=LOWER(?)${liveEmployeeClause}`).bind(employee.department, employee.job_title).first<{ active: number; high_review: number; scored: number }>(),
     database.prepare(`SELECT COUNT(*)::int AS count FROM employee_directory_view
-      WHERE archived_at IS NULL AND LOWER(employment_status) IN ('active', 'on leave') AND manager_id=?`).bind(employee.employee_id).first<{ count: number }>(),
+      WHERE archived_at IS NULL AND LOWER(employment_status) IN ('active', 'on leave', 'on bench', 'notice period', 'scheduled exit') AND manager_id=?`).bind(employee.employee_id).first<{ count: number }>(),
     database.prepare(`SELECT COUNT(*)::int AS count FROM hiring_requisitions_view
       WHERE department=? AND LOWER(position)=LOWER(?) AND LOWER(recruitment_status) IN ('requested', 'open', 'offer')${liveHiringClause}`).bind(employee.department, employee.job_title).first<{ count: number }>(),
     Promise.all([

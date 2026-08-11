@@ -14,6 +14,7 @@ import type { InboxItem } from "@/lib/people-types"
 import { listLearningOperations } from "@/lib/server/learning"
 import { listHiringOperations } from "@/lib/server/hiring"
 import { listOnboardingOperations } from "@/lib/server/onboarding"
+import { listAssets, listEmployeeExits } from "@/lib/server/exit-assets"
 
 const filtersShape = {
   from: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional().describe("Start date in YYYY-MM-DD format"),
@@ -174,10 +175,15 @@ const mcpToolCatalog = [
     title: "Review workforce capabilities",
     description: "Role-based capability requirements, learning evidence, course mappings, and internal hiring demand for a governed cohort.",
   },
+  {
+    name: "review_exit_and_asset_operations",
+    title: "Review exits and assets",
+    description: "Confirmed exit workflows, incomplete offboarding, asset custody, lifecycle, warranty, and replacement exceptions from persisted operational records.",
+  },
 ] as const
 
 type WorkQueue = "my_work" | "decisions" | "overdue" | "managers" | "employees" | "open" | "completed"
-type WorkScope = "home" | "people" | "person" | "inbox" | "hiring" | "leaves" | "courses" | "insights"
+type WorkScope = "home" | "people" | "person" | "inbox" | "hiring" | "leaves" | "courses" | "insights" | "exits"
 
 function assignedToActor(item: InboxItem, actor: RequestActor): boolean {
   return !item.isCompleted && (item.actionable || item.ownerEmail?.toLowerCase() === actor.email.toLowerCase())
@@ -198,6 +204,7 @@ function inPageScope(item: InboxItem, scope: WorkScope): boolean {
   if (scope === "leaves") return item.type === "leave"
   if (scope === "courses") return item.type === "training"
   if (scope === "insights") return item.type === "insight"
+  if (scope === "exits") return item.type === "offboarding"
   if (scope === "people" || scope === "person") return ["onboarding", "case", "reimbursement"].includes(item.type)
   return true
 }
@@ -212,9 +219,9 @@ export function createHrMcpServer(actor?: RequestActor): McpServer {
     title: mcpToolCatalog[0].title,
     description: mcpToolCatalog[0].description,
     inputSchema: {
-      scope: z.enum(["home", "people", "person", "inbox", "hiring", "leaves", "courses", "insights"]),
+      scope: z.enum(["home", "people", "person", "inbox", "hiring", "leaves", "courses", "insights", "exits"]),
       queue: z.enum(["my_work", "decisions", "overdue", "managers", "employees", "open", "completed"]).optional(),
-      domain: z.enum(["leave", "hiring", "training", "insight", "reimbursement", "case", "onboarding"]).optional(),
+      domain: z.enum(["leave", "hiring", "training", "insight", "reimbursement", "case", "onboarding", "offboarding"]).optional(),
       itemId: z.string().trim().min(1).max(120).optional(),
       employeeId: z.string().trim().min(1).max(80).optional(),
       limit: z.number().int().min(1).max(20).optional(),
@@ -295,7 +302,7 @@ export function createHrMcpServer(actor?: RequestActor): McpServer {
     annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false },
   }, async (filters: FilterArgs) => {
     const [analytics, workflows] = await Promise.all([getWorkforceAnalytics(filters), workflowSnapshot()])
-    const activeDirectory = analytics.directoryEmployees.filter((employee) => !employee.archived_at && ["active", "on leave", "preboarding"].includes(employee.employment_status.toLowerCase()))
+    const activeDirectory = analytics.directoryEmployees.filter((employee) => !employee.archived_at && ["active", "on leave", "on bench", "notice period", "scheduled exit", "preboarding"].includes(employee.employment_status.toLowerCase()))
     return result({
       ...evidence(analytics),
       kpis: analytics.kpis,
@@ -633,6 +640,95 @@ export function createHrMcpServer(actor?: RequestActor): McpServer {
     })
   })
 
+  server.registerTool("review_exit_and_asset_operations", {
+    title: mcpToolCatalog[8].title,
+    description: mcpToolCatalog[8].description,
+    inputSchema: {
+      domain: z.enum(["assets", "exits", "workforce_status"]),
+      query: z.string().trim().max(120).optional(),
+      status: z.string().trim().max(60).optional(),
+      horizon: z.number().int().min(1).max(365).optional(),
+      limit: z.number().int().min(1).max(20).optional(),
+    },
+    annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false },
+  }, async ({ domain, query = "", status = "", horizon = 90, limit = 10 }: { domain: "assets" | "exits" | "workforce_status"; query?: string; status?: string; horizon?: number; limit?: number }) => {
+    const normalizedQuery = query
+      .replace(/\b(?:show|find|list|summarize|review|which|what|all|the|assets?|equipment|devices?|exits?|employees?|people|offboarding|scheduled|known|next|need|action)\b/gi, " ")
+      .replace(/\s+/g, " ")
+      .trim()
+    if (domain === "assets") {
+      const inventory = await listAssets({ search: normalizedQuery, status, limit })
+      return result({
+        generatedAt: inventory.generatedAt,
+        dataMode: "imported/operational",
+        domain,
+        summary: inventory.summary,
+        matchCount: inventory.total,
+        assets: inventory.items.map((asset) => ({
+          assetId: asset.id,
+          assetTag: asset.assetTag,
+          type: asset.assetType,
+          manufacturer: asset.manufacturer,
+          model: asset.model,
+          status: asset.status,
+          condition: asset.condition,
+          lifecycle: asset.lifecycle,
+          assignedEmployeeId: asset.currentAssignment?.employeeId ?? null,
+          assignedEmployee: asset.currentAssignment?.employeeName ?? null,
+          warrantyExpiresOn: asset.warrantyExpiresOn,
+          replacementDueOn: asset.replacementDueOn,
+        })),
+        definitions: {
+          replacementSoon: "Warranty, configured replacement date, or configured age threshold falls within the lifecycle warning window.",
+          custody: "Only the current open assignment is reported as current custody; prior assignments remain in history.",
+        },
+      })
+    }
+    if (domain === "exits") {
+      const exits = await listEmployeeExits({ search: normalizedQuery, status, horizon, limit })
+      return result({
+        generatedAt: exits.generatedAt,
+        dataMode: "imported/operational",
+        domain,
+        horizonDays: horizon,
+        summary: exits.summary,
+        matchCount: exits.total,
+        exits: exits.items.map((exit) => ({
+          exitId: exit.id,
+          employeeId: exit.employeeId,
+          employee: exit.employeeName,
+          department: exit.department,
+          jobTitle: exit.jobTitle,
+          exitType: exit.exitType,
+          expectedExitDate: exit.expectedExitDate,
+          status: exit.status,
+          progress: exit.progress,
+          outstandingHrTasks: exit.outstandingHrTasks,
+          outstandingItTasks: exit.outstandingItTasks,
+          outstandingAssets: exit.outstandingAssets,
+          pendingAccessTasks: exit.pendingAccessTasks,
+        })),
+        distinction: "These are confirmed HR exit workflows. They are separate from attrition-model review profiles.",
+      })
+    }
+    const analytics = await getWorkforceAnalytics({})
+    const statuses = new Map<string, number>()
+    for (const employee of analytics.directoryEmployees.filter((employee) => !employee.archived_at)) {
+      statuses.set(employee.employment_status, (statuses.get(employee.employment_status) ?? 0) + 1)
+    }
+    return result({
+      ...evidence(analytics),
+      domain,
+      statuses: [...statuses.entries()].map(([label, value]) => ({ label, value })).sort((a, b) => b.value - a.value),
+      definitions: {
+        active: "Currently employed and working.",
+        onBench: "Employed and temporarily not allocated to active delivery work.",
+        noticePeriod: "A resignation is recorded and the employee remains employed until the last working date.",
+        scheduledExit: "A confirmed non-resignation exit workflow is open.",
+      },
+    })
+  })
+
   server.registerTool("find_employee_records", {
     title: mcpToolCatalog[5].title,
     description: mcpToolCatalog[5].description,
@@ -681,7 +777,7 @@ export function createHrMcpServer(actor?: RequestActor): McpServer {
       uri: uri.href,
       mimeType: "application/json",
       text: JSON.stringify({
-        domains: ["employees", "hiring", "attrition", "leave", "training", "promotions"],
+        domains: ["employees", "hiring", "attrition", "leave", "training", "promotions", "employee_exits", "assets", "asset_assignments", "offboarding_tasks"],
         tools: mcpToolCatalog.map((tool) => tool.name),
         sourceModes: ["demo", "mixed", "imported/operational"],
         governance: "No automated employment decisions. Human review is required for employee-level action.",

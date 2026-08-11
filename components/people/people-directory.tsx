@@ -13,6 +13,7 @@ import { EmployeeDrawer } from "@/components/people/employee-drawer"
 import { PersonAvatar, StatusPill } from "@/components/people/people-ui"
 import type { EmployeeDirectoryResponse, ManagedEmployee } from "@/lib/people-types"
 import { cn } from "@/lib/utils"
+import { categoricalChartColors } from "@/lib/chart-theme"
 import { WorkspaceHeader, WorkspacePage } from "@/components/workspace-ui"
 import { safeReturnTo, withReturnTo } from "@/lib/navigation"
 
@@ -27,7 +28,7 @@ type Filters = {
 
 const initialFilters: Filters = { department: "", location: "", status: "", employmentType: "", tenure: "", includeArchived: false }
 const PAGE_SIZE = 25
-const compositionColors = ["var(--chart-1)", "var(--chart-2)", "var(--chart-3)", "var(--chart-4)", "var(--chart-5)", "var(--chart-6)"]
+const compositionColors = categoricalChartColors
 const tenureOptions = [
   { value: "under1", label: "Under 1 year" },
   { value: "1to2", label: "1–2 years" },

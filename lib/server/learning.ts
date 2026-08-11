@@ -114,7 +114,7 @@ export async function listLearningOperations(actor: RequestActor, filters: { dep
     db.prepare("SELECT id, code, title, default_duration_hours, is_mandatory FROM learning_courses WHERE LOWER(status)='active' ORDER BY is_mandatory DESC, title")
       .all<{ id: string; code: string | null; title: string; default_duration_hours: number; is_mandatory: number }>(),
     db.prepare(`SELECT e.employee_id, TRIM(COALESCE(NULLIF(e.preferred_name, ''), e.first_name) || ' ' || e.last_name) AS display_name, e.department, e.job_title, e.job_level, e.location, e.job_profile_id
-      FROM employee_directory_view e WHERE e.archived_at IS NULL AND LOWER(e.employment_status) IN ('active','preboarding','on leave') AND ${scopeSql}
+      FROM employee_directory_view e WHERE e.archived_at IS NULL AND LOWER(e.employment_status) IN ('active','preboarding','on leave','on bench','notice period','scheduled exit') AND ${scopeSql}
       ORDER BY display_name LIMIT 5000`).bind(...(actor.role === "manager" && employeeId ? [employeeId, employeeId] : !["admin", "hr"].includes(actor.role) && employeeId ? [employeeId] : [])).all<{ employee_id: string; display_name: string; department: string; job_title: string; job_level: string; location: string; job_profile_id: string }>(),
     db.prepare("SELECT id, name, category FROM capability_skills WHERE organization_id='org:laidbackhr' AND status='active' ORDER BY category, name")
       .all<{ id: string; name: string; category: string }>(),
@@ -267,7 +267,7 @@ export async function assignLearningCourse(value: unknown, actor: RequestActor):
 
   const targetValue = input.targetType === "employee" ? input.employeeId : input.targetValue
   if (input.targetType !== "manager_team" && !targetValue) throw new PeopleError("Choose who should receive the assignment.", 422)
-  const conditions = ["e.archived_at IS NULL", "LOWER(e.employment_status) IN ('active','preboarding','on leave')"]
+  const conditions = ["e.archived_at IS NULL", "LOWER(e.employment_status) IN ('active','preboarding','on leave','on bench','notice period','scheduled exit')"]
   const bindings: unknown[] = []
   if (actor.role === "manager") { conditions.push("e.manager_id=?"); bindings.push(managerId ?? "") }
   if (input.targetType === "employee") { conditions.push("e.employee_id=?"); bindings.push(targetValue) }

@@ -286,6 +286,12 @@ function OverviewTab({ data }: { data: EmployeeProfileResponse }) {
         <InfoLine label="Current project" value={currentProject ? String(currentProject.name) : "Not assigned"} />
         {data.compensation && <InfoLine label="Annual salary" value={formatMoney(data.compensation.annual_salary, data.compensation.currency)} />}
       </InfoCard>
+      <InfoCard title="Assigned assets">
+        {data.assets.length ? data.assets.map((asset) => <Link key={asset.id} href={`/assets/${encodeURIComponent(asset.assetTag)}`} className="flex items-center justify-between gap-3 border-b border-border/60 pb-3 last:border-0 last:pb-0 hover:text-primary"><span><span className="block text-sm font-semibold">{asset.assetTag}</span><span className="text-xs text-muted-foreground">{asset.assetType} · {asset.condition}</span></span><ArrowUpRight className="size-4" /></Link>) : <p className="text-sm text-muted-foreground">No assets currently assigned</p>}
+      </InfoCard>
+      <InfoCard title="Exit status">
+        {data.exits.length ? data.exits.slice(0, 2).map((exit) => <Link key={exit.id} href={`/exits?exit=${encodeURIComponent(exit.id)}`} className="flex items-center justify-between gap-3 border-b border-border/60 pb-3 last:border-0 last:pb-0 hover:text-primary"><span><span className="block text-sm font-semibold">{exit.status}</span><span className="text-xs text-muted-foreground">{exit.exitType} · {formatDate(exit.expectedExitDate)}</span></span><ArrowUpRight className="size-4" /></Link>) : <p className="text-sm text-muted-foreground">No exit workflow recorded</p>}
+      </InfoCard>
     </div>
     <Card className="gap-0 overflow-hidden rounded-lg border-border/70 shadow-none">
       <div className="border-b border-border/60 px-5 py-4"><h3 className="font-semibold">Recent activity</h3><p className="mt-1 text-xs text-muted-foreground">Latest recorded profile and workflow changes</p></div>

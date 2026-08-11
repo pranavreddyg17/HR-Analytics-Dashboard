@@ -38,11 +38,13 @@ Production runs at [www.laidbackhr.cloud](https://www.laidbackhr.cloud). The emp
 | `/onboarding` | Requisition-to-employee handoff and new-joiner verification | Requisitions, candidates, onboarding submissions, employees, and workflow records |
 | `/leaves` | Leave register, approval decisions, absence schedule, and coverage | Leave and workflow records |
 | `/courses` | Course catalog, capability mappings, cohort assignment, due dates, completion, and compliance | Courses, campaigns, assignments, and workflow records |
+| `/exits` | Scheduled exits, accountable offboarding checklists, asset recovery, access removal, and completion | Employee exits, offboarding tasks, asset assignments, workflow records, and recorded exit outcomes |
 | `/insights` | Workforce movement, continuity, talent supply, capability, cost, and action queues | Calculated read models plus durable insight work items |
 | `/attrition` | Historical model validation, cohort evidence, and explainable scenario testing | Model metadata, historical profiles, and retention reviews |
 | `/risk-review` | Employee-linked review worklist with governed follow-up | Retention reviews and review status |
 | `/assistant` | Context-aware workforce chat and workflow preparation | Conversations, messages, agent runs, tool steps, and approved workflow drafts |
 | `/imports` | Validated imports, PDF/XLSX exports, Power BI feeds, and integration clients | Import jobs, imported domain records, API clients, and API audit |
+| `/assets` | Equipment inventory, custody, assignment history, warranty, replacement, return, and condition | Assets and immutable assignment history |
 | `/admin` | Application usage, API activity, import health, Azure telemetry, and cost | PostgreSQL operational metrics plus Azure management-plane data |
 | `/access` | Workspace membership, roles, suspension, and removal | Application users and access audit |
 
@@ -60,6 +62,7 @@ The employee portal is not a separate database or duplicated frontend. The signe
 - Upload and retrieve authorized employee documents.
 - View and complete assigned learning.
 - Participate in performance reviews and one-to-one follow-up.
+- Review assigned equipment and a confirmed offboarding schedule when applicable.
 
 Employee submissions create the operational record and its corresponding work item in one transaction. HR decisions update that same record, so both portals display the same state.
 
@@ -77,7 +80,7 @@ flowchart LR
     PG["Azure Database for PostgreSQL\nSystem of record"]
     Blob["Azure Blob Storage\nPrivate employee documents"]
     Model["Embedded gradient-boosting\nprediction runtime"]
-    MCP["Actor-scoped MCP server\n8 read-only tools"]
+    MCP["Actor-scoped MCP server\n9 read-only tools"]
     Search["Azure AI Search\nHybrid and vector retrieval"]
     OpenAI["Azure OpenAI\nPlanning, synthesis, embeddings"]
     KV["Azure Key Vault\nRuntime configuration"]
@@ -166,6 +169,7 @@ SQL migrations in `db/postgres` are append-only and run idempotently during appl
 | `0008_ai_workflow_handoffs.sql` | Assistant-to-workflow handoff state |
 | `0009_integration_api.sql` | Scoped integration clients and request audit |
 | `0010_admin_provider_snapshots.sql` | Persistent Azure provider snapshots and retry state for the operations monitor |
+| `0011_exit_and_assets.sql` | Employee exits, accountable offboarding tasks, IT assets, custody history, and lifecycle settings |
 
 ### Core relational domains
 
@@ -175,6 +179,7 @@ SQL migrations in `db/postgres` are append-only and run idempotently during appl
 - **Time, services, and employee relations:** `leave_records`, `expense_claims`, `employee_cases`.
 - **Capability and performance:** `learning_courses`, `learning_assignment_campaigns`, `course_assignments`, `capability_skills`, job/course skill mappings, `review_cycles`, `performance_reviews`, `one_on_one_meetings`, `promotion_records`.
 - **Retention intelligence:** `attrition_events`, `attrition_model_profiles`, `model_versions`, and persisted retention review workflows.
+- **Exit and asset operations:** `employee_exits`, `offboarding_tasks`, `assets`, `asset_assignments`, and `asset_lifecycle_settings`.
 - **Workflow and audit:** `workflow_requests`, employee/hiring activity, `access_audit`, `data_imports`, `integration_api_audit`.
 - **AI:** `ai_conversations`, `ai_conversation_messages`, `ai_workflow_drafts`, `agent_runs`, `agent_run_steps`.
 
@@ -243,10 +248,10 @@ At query time the assistant combines keyword retrieval with vector retrieval and
 | Agent ID | Responsibility | Allowed MCP tools |
 |---|---|---|
 | `workforce-intelligence` | Headcount, movement, department comparison, data quality, and work queues | `workforce_overview`, `compare_departments`, `review_work_queue` |
-| `retention-planner` | Attrition evidence, model contributors, mobility context, and bounded retention follow-up | `analyze_attrition_signals`, `review_people_operations` |
+| `retention-planner` | Attrition evidence, confirmed exits, model contributors, continuity, and bounded retention follow-up | `analyze_attrition_signals`, `review_exit_and_asset_operations`, `review_people_operations` |
 | `recruiting-operations` | Onboarding readiness, recruiting handoffs, requisitions, candidates, and overdue work | `review_onboarding_readiness`, `review_people_operations`, `compare_departments`, `review_work_queue` |
 | `learning-compliance` | Capability requirements, mandatory gaps, completion evidence, and cohort recommendations | `review_capability_plan`, `review_people_operations`, `find_employee_records` |
-| `people-operations` | Leave, promotions, employee records, and cross-domain summaries | `review_people_operations`, `find_employee_records`, `review_work_queue` |
+| `people-operations` | Leave, promotions, exits, assets, employee records, and cross-domain summaries | `review_people_operations`, `review_exit_and_asset_operations`, `find_employee_records`, `review_work_queue` |
 
 Every run records the actor, objective, provider, status, timing, and ordered tool steps in PostgreSQL.
 
@@ -264,8 +269,9 @@ Every run records the actor, objective, provider, status, timing, and ordered to
 | `find_employee_records` | Limited, role-appropriate employee directory results |
 | `review_onboarding_readiness` | New-joiner verification, manager/start-date readiness, and recruiting handoff |
 | `review_capability_plan` | Role requirements, learning evidence, course mappings, and hiring-demand context |
+| `review_exit_and_asset_operations` | Confirmed exits, offboarding progress, access-removal work, asset custody, warranty, condition, and replacement exceptions |
 
-All eight tools are read-only, idempotent, closed-world operations. Tool output is still filtered by the authenticated actor.
+All nine tools are read-only, idempotent, closed-world operations. Tool output is still filtered by the authenticated actor. Confirmed exit workflows and attrition-model review cohorts remain separate evidence types.
 
 ### Agentic workflows
 
@@ -339,6 +345,13 @@ The route files under `app/api` are the implementation source of truth. The cust
 | GET/POST | `/api/v1/hr/learning` | HR/manager | Read operations or create cohort assignments |
 | POST | `/api/v1/hr/learning/courses` | HR | Create a course and capability mapping |
 | PATCH | `/api/v1/hr/learning/assignments/{assignment_id}` | Authorized actor | Complete or update an assignment |
+| GET/POST | `/api/v1/hr/exits` | HR | List or schedule an employee exit and create its accountable checklist |
+| GET/PATCH | `/api/v1/hr/exits/{exit_id}` | HR/manager | Read, update, cancel, or complete an exit workflow |
+| PATCH | `/api/v1/hr/exits/{exit_id}/tasks/{task_id}` | Assigned actor | Advance an accountable offboarding task |
+| GET/POST | `/api/v1/hr/assets` | Workspace/HR | Search inventory or create an asset |
+| GET/PATCH | `/api/v1/hr/assets/{asset_id}` | Workspace/HR | Read custody history or update asset metadata |
+| POST | `/api/v1/hr/assets/{asset_id}/assign` | HR | Assign an available asset to an employee |
+| POST | `/api/v1/hr/assets/{asset_id}/return` | HR | Record return, condition, notes, and assignment closure |
 | POST | `/api/v1/insights/actions` | HR | Persist an insight exception as owned work |
 | PATCH | `/api/v1/insights/actions/{work_item_id}` | Authorized owner | Advance, resolve, or close an insight work item |
 | GET | `/api/v1/insights/employee-impact` | HR | Searchable employee continuity and replacement scenario |
@@ -410,6 +423,8 @@ Use `Authorization: Bearer <service-credential>` and optionally pass `X-Request-
 | GET | `/api/v1/integrations/v1/retention/model` | `retention:read` | Model card, metrics, input schema, and prohibited uses |
 | POST | `/api/v1/integrations/v1/retention/predict` | `model:invoke` | Explainable historical-profile scenario score |
 | GET | `/api/v1/integrations/v1/operations` | `operations:read` | Onboarding, leave, learning, and work queues |
+| GET | `/api/v1/integrations/v1/exits` | `operations:read` | Confirmed exit register and offboarding progress |
+| GET | `/api/v1/integrations/v1/assets` | `operations:read` | Asset inventory, custody, lifecycle, warranty, and replacement state |
 | POST | `/api/v1/integrations/v1/agents/{agentId}/invoke` | `agent:invoke` | Audited read-only specialist agent |
 | POST | `/api/v1/integrations/v1/data/import` | `data:write` | Validate or apply domain records through the governed importer |
 | GET | `/api/v1/integrations/openapi` | Public contract | OpenAPI 3.1 contract |

@@ -65,7 +65,7 @@ export async function listLeaveOperations(actor: RequestActor, filters: { id?: s
       e.work_email AS employee_email, e.manager_id, l.leave_type, l.start_date, l.end_date, l.leave_days,
       l.approval_status, e.department, e.location, COALESCE(w.created_at, l.updated_at) AS requested_at,
       w.requested_by_email, w.completion_notes,
-      (SELECT COUNT(*) FROM employee_directory_view team WHERE team.department=e.department AND team.archived_at IS NULL AND LOWER(team.employment_status) IN ('active','on leave')) AS department_headcount,
+      (SELECT COUNT(*) FROM employee_directory_view team WHERE team.department=e.department AND team.archived_at IS NULL AND LOWER(team.employment_status) IN ('active','on leave','on bench','notice period','scheduled exit')) AS department_headcount,
       (SELECT COUNT(DISTINCT other.employee_id) FROM leave_requests_view other
         JOIN employee_directory_view other_employee ON other_employee.employee_id=other.employee_id
         WHERE other_employee.department=e.department AND other.employee_id<>l.employee_id

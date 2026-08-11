@@ -11,6 +11,8 @@ const capabilities = {
     { method: "GET", path: "/api/v1/integrations/v1/retention/model", scope: "retention:read", purpose: "Prediction model metadata, input contract, and intended-use controls" },
     { method: "POST", path: "/api/v1/integrations/v1/retention/predict", scope: "model:invoke", purpose: "Explainable historical-model scenario assessment" },
     { method: "GET", path: "/api/v1/integrations/v1/operations", scope: "operations:read", purpose: "Actor-neutral operational counts for onboarding, leave, learning, and work queues" },
+    { method: "GET", path: "/api/v1/integrations/v1/exits", scope: "operations:read", purpose: "Confirmed exit workflows, offboarding progress, asset recovery, and access-removal exceptions" },
+    { method: "GET", path: "/api/v1/integrations/v1/assets", scope: "operations:read", purpose: "Equipment inventory, custody, condition, warranty, and lifecycle exceptions" },
     { method: "POST", path: "/api/v1/integrations/v1/agents/{agentId}/invoke", scope: "agent:invoke", purpose: "Read-only grounded agent invocation with evidence trace" },
     { method: "POST", path: "/api/v1/integrations/v1/data/import", scope: "data:write", purpose: "Validate or apply a governed domain import" },
   ],

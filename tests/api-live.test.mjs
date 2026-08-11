@@ -15,7 +15,7 @@ async function json(path, init) {
 }
 
 test("canonical workspace routes render and legacy routes preserve query state", async () => {
-  const routes = ["/", "/people", "/inbox", "/onboarding", "/leaves", "/courses", "/insights", "/attrition", "/assistant", "/imports", "/admin", "/access", "/employee"]
+  const routes = ["/", "/people", "/inbox", "/onboarding", "/leaves", "/courses", "/exits", "/assets", "/insights", "/attrition", "/assistant", "/imports", "/admin", "/access", "/employee"]
   const responses = await Promise.all(routes.map((path) => request(path)))
   responses.forEach((response, index) => assert.equal(response.status, 200, `${routes[index]} should render`))
 
@@ -128,21 +128,27 @@ test("the explainable prediction runtime validates inputs and returns bounded ou
   assert.equal(invalid.response.status, 422)
 })
 
-test("integration API exposes reporting projections, retention model governance, and scored scenarios", async () => {
-  const [capabilities, overview, workforceImpact, model] = await Promise.all([
+test("integration API exposes reporting, retention, exit, asset, and model contracts", async () => {
+  const [capabilities, overview, workforceImpact, model, exits, assets] = await Promise.all([
     json("/api/v1/integrations/v1/capabilities"),
     json("/api/v1/integrations/v1/insights?view=overview&period=quarter"),
     json("/api/v1/integrations/v1/insights?view=workforce-impact"),
     json("/api/v1/integrations/v1/retention/model"),
+    json("/api/v1/integrations/v1/exits"),
+    json("/api/v1/integrations/v1/assets"),
   ])
-  for (const result of [capabilities, overview, workforceImpact, model]) assert.equal(result.response.status, 200)
+  for (const result of [capabilities, overview, workforceImpact, model, exits, assets]) assert.equal(result.response.status, 200)
   assert.ok(capabilities.body.data.endpoints.some((endpoint) => endpoint.path.endsWith("/retention/predict")))
+  assert.ok(capabilities.body.data.endpoints.some((endpoint) => endpoint.path.endsWith("/exits")))
+  assert.ok(capabilities.body.data.endpoints.some((endpoint) => endpoint.path.endsWith("/assets")))
   assert.equal(overview.body.data.view, "overview")
   assert.ok(Array.isArray(overview.body.data.departments))
   assert.equal(workforceImpact.body.data.view, "workforce-impact")
   assert.ok(Array.isArray(workforceImpact.body.data.workforceImpact.roles))
   assert.ok(model.body.data.metadata.model_name)
   assert.ok(model.body.data.inputSchema.threshold > 0)
+  assert.ok(Array.isArray(exits.body.data.items))
+  assert.ok(Array.isArray(assets.body.data.items))
 
   const prediction = await json("/api/v1/integrations/v1/retention/predict", {
     method: "POST",
@@ -167,8 +173,8 @@ test("MCP exposes the production HR tools and can call the workforce tool", asyn
   const headers = { "content-type": "application/json", accept: "application/json, text/event-stream", "mcp-protocol-version": "2025-06-18" }
   const listed = await json("/api/mcp", { method: "POST", headers, body: JSON.stringify({ jsonrpc: "2.0", id: 1, method: "tools/list", params: {} }) })
   assert.equal(listed.response.status, 200)
-  assert.ok(listed.body.result.tools.length >= 5)
-  for (const name of ["workforce_overview", "review_work_queue", "review_people_operations", "find_employee_records"]) {
+  assert.ok(listed.body.result.tools.length >= 9)
+  for (const name of ["workforce_overview", "review_work_queue", "review_people_operations", "find_employee_records", "review_exit_and_asset_operations"]) {
     assert.ok(listed.body.result.tools.some((tool) => tool.name === name), `${name} should be available`)
   }
   const called = await json("/api/mcp", { method: "POST", headers, body: JSON.stringify({ jsonrpc: "2.0", id: 2, method: "tools/call", params: { name: "workforce_overview", arguments: {} } }) })

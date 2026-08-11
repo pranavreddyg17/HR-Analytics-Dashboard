@@ -28,7 +28,7 @@ export async function getHomeSnapshot(_actor: RequestActor): Promise<HomeSnapsho
   const through = end.toISOString().slice(0, 10)
 
   const [activeEmployees, awayToday, requisitions, starts, leave, learning] = await Promise.all([
-    database.prepare("SELECT COUNT(*) AS count FROM employee_directory_view WHERE archived_at IS NULL AND LOWER(employment_status) IN ('active', 'on leave')")
+    database.prepare("SELECT COUNT(*) AS count FROM employee_directory_view WHERE archived_at IS NULL AND LOWER(employment_status) IN ('active', 'on leave', 'on bench', 'notice period', 'scheduled exit')")
       .first<CountRow>(),
     database.prepare("SELECT COUNT(DISTINCT employee_id) AS count FROM leave_requests_view WHERE LOWER(approval_status)='approved' AND start_date<=CAST(? AS TEXT) AND end_date>=CAST(? AS TEXT)")
       .bind(today, today).first<CountRow>(),

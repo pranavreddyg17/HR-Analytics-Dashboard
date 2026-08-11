@@ -10,6 +10,7 @@ import employeeServiceOutcomesMigration from "@/db/postgres/0007_employee_servic
 import aiWorkflowHandoffsMigration from "@/db/postgres/0008_ai_workflow_handoffs.sql?raw"
 import integrationApiMigration from "@/db/postgres/0009_integration_api.sql?raw"
 import adminProviderSnapshotsMigration from "@/db/postgres/0010_admin_provider_snapshots.sql?raw"
+import exitAndAssetsMigration from "@/db/postgres/0011_exit_and_assets.sql?raw"
 import type { Database, Statement } from "@/lib/server/hr-repository"
 import { invalidateAnalyticsReads, sqlAffectsAnalytics } from "@/lib/server/analytics-cache"
 import { runtimeEnv } from "@/lib/server/runtime-env"
@@ -134,6 +135,7 @@ async function initialize(pool: Pool): Promise<void> {
       { id: "0008_ai_workflow_handoffs", sql: aiWorkflowHandoffsMigration },
       { id: "0009_integration_api", sql: integrationApiMigration },
       { id: "0010_admin_provider_snapshots", sql: adminProviderSnapshotsMigration },
+      { id: "0011_exit_and_assets", sql: exitAndAssetsMigration },
     ]
     for (const migration of migrations) {
       const applied = await client.query<QueryResultRow>("SELECT id FROM schema_migrations WHERE id=$1", [migration.id])

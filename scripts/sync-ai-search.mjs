@@ -131,6 +131,7 @@ const qualityProbes = [
   { query: "what can the workflow agent prepare and what requires confirmation", expected: "ai-copilot-operating-model.md" },
   { query: "how are prompt injection and excessive agency tested", expected: "ai-safety-and-evaluation.md" },
   { query: "how can an external system call workforce analytics APIs", expected: "integration-api.md" },
+  { query: "who is leaving and which assets must be returned during offboarding", expected: "exit-and-asset-operations.md" },
 ]
 
 async function runQualityProbes() {

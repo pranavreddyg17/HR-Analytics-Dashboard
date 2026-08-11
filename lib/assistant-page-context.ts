@@ -8,6 +8,8 @@ type AssistantPageKey =
   | "courses"
   | "insights"
   | "attrition"
+  | "exits"
+  | "assets"
   | "imports"
   | "access"
   | "workspace"
@@ -28,6 +30,8 @@ const pageLabels: Record<Exclude<AssistantPageKey, "person" | "workspace">, stri
   courses: "Learning",
   insights: "Insights",
   attrition: "Retention risk",
+  exits: "Exit management",
+  assets: "Asset inventory",
   imports: "Data exchange",
   access: "Access",
 }
@@ -43,6 +47,8 @@ const routeKeys: Record<string, Exclude<AssistantPageKey, "person" | "workspace"
   "/insights": "insights",
   "/attrition": "attrition",
   "/risk-review": "attrition",
+  "/exits": "exits",
+  "/assets": "assets",
   "/imports": "imports",
   "/access": "access",
 }
@@ -67,6 +73,8 @@ const allowedFilterKeys = new Set([
   "candidateRecord",
   "candidateQ",
   "status",
+  "exit",
+  "asset",
 ])
 
 function safeFilters(value: unknown): Record<string, string> {
@@ -112,6 +120,8 @@ export function assistantPagePrompts(context: AssistantPageContext): string[] {
     courses: ["Which capability gaps should HR review?", "Which learning cohorts need action next?"],
     insights: ["Summarize open workforce exceptions", "Which insight actions are overdue?"],
     attrition: ["Summarize the current retention signals", "Which cohort should HR review first?"],
+    exits: ["Summarize scheduled exits and incomplete offboarding", "Which exit tasks need action next?"],
+    assets: ["Summarize asset custody and lifecycle exceptions", "Which assets need action next?"],
     imports: ["Summarize data coverage and quality issues", "Which HR domain needs data attention?"],
     access: ["Summarize workspace access", "What access administration should be reviewed?"],
     workspace: ["Summarize the current workforce and open HR work", "What should HR review next?"],
