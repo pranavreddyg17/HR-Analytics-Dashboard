@@ -8,6 +8,7 @@ import operatingModelMigration from "@/db/postgres/0005_operating_model.sql?raw"
 import onboardingAndCapabilityMigration from "@/db/postgres/0006_onboarding_and_capability.sql?raw"
 import employeeServiceOutcomesMigration from "@/db/postgres/0007_employee_service_outcomes.sql?raw"
 import aiWorkflowHandoffsMigration from "@/db/postgres/0008_ai_workflow_handoffs.sql?raw"
+import integrationApiMigration from "@/db/postgres/0009_integration_api.sql?raw"
 import type { Database, Statement } from "@/lib/server/hr-repository"
 import { invalidateAnalyticsReads, sqlAffectsAnalytics } from "@/lib/server/analytics-cache"
 import { runtimeEnv } from "@/lib/server/runtime-env"
@@ -130,6 +131,7 @@ async function initialize(pool: Pool): Promise<void> {
       { id: "0006_onboarding_and_capability", sql: onboardingAndCapabilityMigration },
       { id: "0007_employee_service_outcomes", sql: employeeServiceOutcomesMigration },
       { id: "0008_ai_workflow_handoffs", sql: aiWorkflowHandoffsMigration },
+      { id: "0009_integration_api", sql: integrationApiMigration },
     ]
     for (const migration of migrations) {
       const applied = await client.query<QueryResultRow>("SELECT id FROM schema_migrations WHERE id=$1", [migration.id])
@@ -160,6 +162,7 @@ export async function getPostgresDatabase(): Promise<Database> {
       max: Number(runtimeEnv.DATABASE_POOL_MAX ?? 10),
       idleTimeoutMillis: 30_000,
       connectionTimeoutMillis: 10_000,
+      allowExitOnIdle: true,
       ssl: runtimeEnv.DATABASE_SSL_MODE === "disable" ? false : { rejectUnauthorized: runtimeEnv.DATABASE_SSL_REJECT_UNAUTHORIZED !== "false" },
     })
     await pool.query("SELECT 1")

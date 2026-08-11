@@ -12,6 +12,7 @@ import { ensureHrDatabase } from "@/lib/server/hr-repository"
 import { runtimeEnv } from "@/lib/server/runtime-env"
 import { synthesizeWithAzureResponses } from "@/lib/server/azure-ai"
 import { planAiWorkflow } from "@/lib/server/ai-workflows"
+import { evaluateAssistantInput, isSafeModelSynthesis, normalizeAssistantInput } from "@/lib/server/ai-safety"
 import type { AssistantPageContext } from "@/lib/assistant-page-context"
 import type { RequestActor } from "@/lib/server/request-user"
 
@@ -186,7 +187,7 @@ async function synthesizeWithModel({
   if (azureAnswer) {
     const allowedNumbers = numericTokens(`${query}\n${draft}\n${evidenceJson}`)
     const introducedNumber = [...numericTokens(azureAnswer)].some((token) => !allowedNumbers.has(token))
-    if (azureAnswer.length <= 8_000 && !introducedNumber) return azureAnswer
+    if (!introducedNumber && isSafeModelSynthesis(azureAnswer)) return azureAnswer
   }
   return null
 }
@@ -225,7 +226,17 @@ async function finishRun(runId: string | null, status: "completed" | "failed", p
 
 export async function runHrAgent({ message, history = [], actor, conversationId, agentId, pageContext, onProgress }: { message: unknown; history?: AgentHistoryMessage[]; actor?: RequestActor; conversationId?: string; agentId?: string; pageContext?: AssistantPageContext; onProgress?: (progress: AgentProgress) => void | Promise<void> }): Promise<AgentAnswer> {
   if (typeof message !== "string" || !message.trim() || message.length > 2000) throw new Error("message must contain between 1 and 2,000 characters.")
-  const query = message.trim()
+  const query = normalizeAssistantInput(message)
+  const safety = evaluateAssistantInput(query, actor)
+  if (!safety.allowed) {
+    return {
+      answer: safety.response ?? outOfScopeResponse,
+      provider: `safety-guard:${safety.category ?? "policy"}`,
+      tools: [],
+      context: [],
+      groundedAt: new Date().toISOString(),
+    }
+  }
   if (/^(?:hi|hello|hey|good (?:morning|afternoon|evening))[!.?\s]*$/i.test(query)) {
     return {
       answer: "Hi. What would you like to review—workforce, attrition risk, hiring, leave, learning or employee records?",
@@ -238,6 +249,8 @@ export async function runHrAgent({ message, history = [], actor, conversationId,
   const runId = await startRun({ actorEmail: actor?.email, conversationId, agentId, objective: query })
   const safeHistory = history
     .filter((item): item is AgentHistoryMessage => Boolean(item) && (item.role === "user" || item.role === "assistant") && typeof item.content === "string")
+    .filter((item) => item.role === "assistant" ? isSafeModelSynthesis(item.content) : evaluateAssistantInput(item.content, actor).allowed)
+    .map((item) => ({ ...item, content: normalizeAssistantInput(item.content).slice(0, 2_000) }))
     .slice(-12)
   if (actor && actor.role !== "employee" && isWorkflowCommand(query)) {
     try {

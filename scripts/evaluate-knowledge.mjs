@@ -34,6 +34,8 @@ const probes = [
   { query: "reimbursement employee service resolution", expected: "employee-services-and-portal.md" },
   { query: "replacement scenario workforce impact", expected: "insights-decision-support.md" },
   { query: "workflow confirmation copilot planner", expected: "ai-copilot-operating-model.md" },
+  { query: "prompt injection service credential excessive agency", expected: "ai-safety-and-evaluation.md" },
+  { query: "external workforce API bearer scopes OpenAPI", expected: "integration-api.md" },
 ]
 const failures = []
 for (const probe of probes) {

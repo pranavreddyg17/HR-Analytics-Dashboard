@@ -129,6 +129,8 @@ const qualityProbes = [
   { query: "how should HR triage reimbursement and employee service cases", expected: "employee-services-and-portal.md" },
   { query: "how should workforce impact and replacement scenarios be interpreted", expected: "insights-decision-support.md" },
   { query: "what can the workflow agent prepare and what requires confirmation", expected: "ai-copilot-operating-model.md" },
+  { query: "how are prompt injection and excessive agency tested", expected: "ai-safety-and-evaluation.md" },
+  { query: "how can an external system call workforce analytics APIs", expected: "integration-api.md" },
 ]
 
 async function runQualityProbes() {

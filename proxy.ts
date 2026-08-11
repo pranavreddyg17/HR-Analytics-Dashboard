@@ -12,6 +12,9 @@ const legacyRoutes: Record<string, string> = {
 
 export default auth((request) => {
   if (["/api/v1/health", "/api/v1/ready"].includes(request.nextUrl.pathname)) return
+  // Integration routes authenticate scoped service credentials themselves.
+  // The OpenAPI contract is intentionally public; all data routes remain protected.
+  if (request.nextUrl.pathname.startsWith("/api/v1/integrations/")) return
 
   const publicHost = (request.headers.get("x-forwarded-host") ?? request.headers.get("host") ?? request.nextUrl.host).split(":")[0].toLowerCase()
   if (publicHost === "laidbackhr-f61hno-web.azurewebsites.net" && ["/", "/login"].includes(request.nextUrl.pathname)) {

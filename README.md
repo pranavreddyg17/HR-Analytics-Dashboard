@@ -89,6 +89,8 @@ The employee assistant and future integrations should use these APIs instead of 
 | POST | `/api/v1/chat` | Conversational agent with workspace memory |
 | GET/POST/DELETE | `/api/mcp` | Streamable HTTP MCP tools |
 
+Customer systems use the separately versioned `/api/v1/integrations/v1` surface rather than browser-session endpoints. Administrators create scoped, expiring, revocable service credentials under **Data exchange → Integration API**. The current contract exposes workforce analytics, retention intelligence, bounded operating queues, governed data imports, and read-only agent invocation. Its OpenAPI 3.1 document is available from `/api/v1/integrations/openapi`; mutating HR workflow execution is intentionally excluded so customer integrations cannot bypass human approvals.
+
 ## Local development
 
 Prerequisites are Node.js 22+, pnpm, Python 3.12, and PostgreSQL 16.
@@ -108,6 +110,7 @@ pnpm lint
 pnpm exec tsc --noEmit
 pnpm test:interactions
 pnpm test:knowledge
+LAIDBACKHR_BASE_URL=http://127.0.0.1:3000 pnpm test:ai-redteam
 DATABASE_URL=postgresql://postgres:postgres@127.0.0.1:5432/laidbackhr_test DATABASE_SSL_MODE=disable pnpm test:operations
 pnpm build
 pnpm model:export

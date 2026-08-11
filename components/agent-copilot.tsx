@@ -259,8 +259,8 @@ export function AgentCopilot({ dataMode, pageContext, compact = false, onReviewW
           <article key={message.id ?? index} className={cn("flex", message.role === "user" && "justify-end")}>
             <div className="max-w-[88%]">
               <div className={cn(
-                "rounded-md px-3.5 py-3",
-                message.role === "assistant" ? "border border-border bg-background text-foreground" : "bg-secondary text-secondary-foreground",
+                "assistant-bubble px-3.5 py-3",
+                message.role === "assistant" ? "assistant-bubble--assistant text-foreground" : "assistant-bubble--user",
               )}>
                 {message.role === "assistant" ? <AssistantRichText content={message.content} /> : <p className="whitespace-pre-wrap text-body">{message.content}</p>}
               </div>
@@ -295,12 +295,12 @@ export function AgentCopilot({ dataMode, pageContext, compact = false, onReviewW
       <div className="border-t border-border bg-card px-4 py-4">
         <div className={cn("mb-3 grid gap-1", !compact && "sm:grid-cols-2")}>
           {(pageContext ? assistantPagePrompts(pageContext) : defaultSuggestedPrompts).map((prompt) => (
-            <button key={prompt} type="button" onClick={() => void send(prompt)} className="border-l-2 border-border px-2 py-1 text-left text-xs text-muted-foreground hover:border-primary hover:text-foreground">
+            <button key={prompt} type="button" onClick={() => void send(prompt)} className="assistant-suggestion text-xs">
               {prompt}
             </button>
           ))}
         </div>
-        <form onSubmit={(event) => { event.preventDefault(); void send(input) }} className="flex items-end gap-2 rounded-md border border-input bg-background p-1.5 pl-3 focus-within:ring-2 focus-within:ring-ring/30">
+        <form onSubmit={(event) => { event.preventDefault(); void send(input) }} className="assistant-composer flex items-end gap-2 border border-input p-1.5 pl-3 focus-within:ring-2 focus-within:ring-ring/25">
           <textarea
             rows={1}
             value={input}

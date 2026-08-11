@@ -10,6 +10,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { cn } from "@/lib/utils"
 import { formatWorkspaceDateTime } from "@/lib/date-format"
 import { WorkspaceHeader, WorkspacePage } from "@/components/workspace-ui"
+import { IntegrationApiManager } from "@/components/integration-api-manager"
 
 function parseCsv(text: string): Array<Record<string, string>> {
   const matrix: string[][] = []
@@ -69,9 +70,10 @@ function modeLabel(mode: ImportMode): string {
   return mode === "merge" ? "Merge" : "Replace imported"
 }
 
-export function DataManager() {
+export function DataManager({ canManageApi }: { canManageApi: boolean }) {
   const searchParams = useSearchParams()
-  const view = searchParams.get("view") === "feeds" ? "feeds" : "imports"
+  const requestedView = searchParams.get("view")
+  const view = requestedView === "feeds" ? "feeds" : requestedView === "api" ? "api" : "imports"
   const fileInput = useRef<HTMLInputElement>(null)
   const [domain, setDomain] = useState<HrDomain>("employees")
   const [mode, setMode] = useState<ImportMode>("merge")
@@ -179,9 +181,10 @@ export function DataManager() {
     <nav aria-label="Data workspace" className="flex gap-5 border-b border-border">
       <a href="/imports" className={cn("border-b-2 px-1 pb-2 text-body", view === "imports" ? "border-primary font-semibold text-foreground" : "border-transparent text-muted-foreground hover:text-foreground")}>Imports</a>
       <a href="/imports?view=feeds" className={cn("border-b-2 px-1 pb-2 text-body", view === "feeds" ? "border-primary font-semibold text-foreground" : "border-transparent text-muted-foreground hover:text-foreground")}>Reporting feeds</a>
+      <a href="/imports?view=api" className={cn("border-b-2 px-1 pb-2 text-body", view === "api" ? "border-primary font-semibold text-foreground" : "border-transparent text-muted-foreground hover:text-foreground")}>Integration API</a>
     </nav>
 
-    {view === "imports" ? <>
+    {view === "api" ? <IntegrationApiManager canManage={canManageApi} /> : view === "imports" ? <>
       <section className="grid gap-3 sm:grid-cols-3" aria-label="Import summary">
         <div className="rounded-md border border-border bg-card px-4 py-3"><p className="text-meta text-muted-foreground">Records</p><p className="mt-1 text-kpi tabular-nums">{dataStatus.summary.totalRecords.toLocaleString()}</p></div>
         <div className="rounded-md border border-border bg-card px-4 py-3"><p className="text-meta text-muted-foreground">Last completed import</p><p className="mt-1 text-card-title">{dataStatus.summary.lastCompletedAt ? formatWorkspaceDateTime(dataStatus.summary.lastCompletedAt) : "None"}</p></div>

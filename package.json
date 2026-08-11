@@ -16,6 +16,7 @@
     "test:interactions": "node scripts/audit-interactions.mjs",
     "model:export": "cd backend && PYTHONPATH=. .venv/bin/python scripts/export_web_runtime.py",
     "test:live": "node --test tests/api-live.test.mjs",
+    "test:ai-redteam": "node --test tests/ai-redteam-live.test.mjs",
     "ai:sync": "node scripts/sync-ai-search.mjs"
   },
   "dependencies": {
