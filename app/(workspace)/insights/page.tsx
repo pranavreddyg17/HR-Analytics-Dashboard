@@ -6,7 +6,6 @@ import { searchParamsFromRecord } from "@/lib/navigation"
 import { filtersFromSearchParams, getWorkforceDashboardAnalytics } from "@/lib/server/hr-analytics"
 
 export const metadata: Metadata = {
-  title: "Workforce insights",
   description: "Interactive employee, hiring, attrition, leave, training, and promotion analytics.",
 }
 

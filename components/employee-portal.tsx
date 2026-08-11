@@ -245,12 +245,12 @@ export function EmployeePortal({ initialData, user }: { initialData: PortalData;
   return <div className="employee-shell min-h-screen text-foreground">
     <SessionRevalidator enabled={user.authenticated} />
     <header className="employee-shell__header">
-      <div className="employee-shell__header-inner mx-auto flex min-h-14 max-w-[1280px] items-center gap-4 px-4 sm:px-6">
+      <div className="employee-shell__header-inner mx-auto flex min-h-14 max-w-[1280px] items-center px-4 sm:px-6">
         <nav className="employee-shell__navigation" aria-label="Employee navigation">
           {portalViews.map((item) => <button key={item.value} type="button" aria-current={active === item.value ? "page" : undefined} onClick={() => selectView(item.value)} className={active === item.value ? "employee-shell__navigation-link employee-shell__navigation-link--active" : "employee-shell__navigation-link"}>{item.label}</button>)}
         </nav>
         <div className="employee-shell__account hidden text-right sm:block"><p className="text-card-title">{user.name}</p><p className="text-meta">{user.email}</p></div>
-        <div className="ml-auto flex items-center gap-3">
+        <div className="employee-shell__utilities">
           {user.workspaceAccess && <Link href="/" className="employee-shell__sign-out">HR workspace</Link>}
           <SignOutControl className="employee-shell__sign-out" />
         </div>

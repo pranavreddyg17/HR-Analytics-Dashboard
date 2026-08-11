@@ -6,7 +6,6 @@ import { requireRequestActor } from "@/lib/server/request-user"
 import { getWorkflowActorContext } from "@/lib/server/workflows"
 
 export const metadata: Metadata = {
-  title: "Leaves",
   description: "Request, review, and coordinate employee leave using workspace records.",
 }
 

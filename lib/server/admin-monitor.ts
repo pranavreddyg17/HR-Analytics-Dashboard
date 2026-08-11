@@ -1,4 +1,4 @@
-import { DefaultAzureCredential } from "@azure/identity"
+import { DefaultAzureCredential, ManagedIdentityCredential, type TokenCredential } from "@azure/identity"
 
 import { cachedAnalyticsRead } from "@/lib/server/analytics-cache"
 import { ensureHrDatabase } from "@/lib/server/hr-repository"
@@ -18,10 +18,17 @@ export type AdminMonitor = {
   }>
 }
 
-const credential = new DefaultAzureCredential()
+// Production runs on App Service with a system-assigned identity. Selecting it
+// explicitly avoids walking the developer credential chain on every monitor
+// refresh; local development keeps the standard Azure CLI-aware fallback.
+const credential: TokenCredential = runtimeEnv.IDENTITY_ENDPOINT || runtimeEnv.MSI_ENDPOINT
+  ? new ManagedIdentityCredential()
+  : new DefaultAzureCredential()
 
-function unavailable<T>(error: unknown): ProviderState<T> {
-  return { status: "unavailable", reason: error instanceof Error ? error.message.slice(0, 240) : "Provider unavailable." }
+function unavailable<T>(error: unknown, fallback: string): ProviderState<T> {
+  const message = error instanceof Error ? error.message : ""
+  const actionable = /^(Log Analytics workspace|Azure resource scope|Azure Monitor returned|Azure Cost Management returned)/.test(message)
+  return { status: "unavailable", reason: actionable ? message : fallback }
 }
 
 async function azureToken(scope: string): Promise<string> {
@@ -34,7 +41,11 @@ async function applicationMetrics(): Promise<AdminMonitor["application"]> {
   try {
     const workspaceId = runtimeEnv.AZURE_LOG_ANALYTICS_WORKSPACE_ID
     if (!workspaceId) throw new Error("Log Analytics workspace is not configured.")
-    const token = await azureToken("https://api.loganalytics.azure.com/.default")
+    // Azure Monitor's current query host uses the legacy Log Analytics OAuth
+    // audience. App Service managed identity rejects the host name as a token
+    // resource in this tenant, while api.loganalytics.io is the documented
+    // service principal for v2 client-credential tokens.
+    const token = await azureToken("https://api.loganalytics.io/.default")
     const response = await fetch(`https://api.loganalytics.azure.com/v1/workspaces/${encodeURIComponent(workspaceId)}/query`, {
       method: "POST",
       headers: { authorization: `Bearer ${token}`, "content-type": "application/json" },
@@ -48,7 +59,9 @@ async function applicationMetrics(): Promise<AdminMonitor["application"]> {
     const requests = Number(row[0] ?? 0)
     const failedRequests = Number(row[1] ?? 0)
     return { status: "ready", data: { requests, failedRequests, failureRate: requests ? failedRequests / requests : 0, averageMs: Number(row[2] ?? 0), p95Ms: Number(row[3] ?? 0) } }
-  } catch (error) { return unavailable(error) }
+  } catch (error) {
+    return unavailable(error, "Performance telemetry is temporarily unavailable. Verify the web app managed identity can read the Log Analytics workspace.")
+  }
 }
 
 async function costMetrics(): Promise<AdminMonitor["cost"]> {
@@ -88,7 +101,9 @@ async function costMetrics(): Promise<AdminMonitor["cost"]> {
       periodEnd: now.toISOString(),
       byService,
     } }
-  } catch (error) { return unavailable(error) }
+  } catch (error) {
+    return unavailable(error, "Azure cost data is temporarily unavailable. Verify the web app managed identity can read Cost Management data.")
+  }
 }
 
 async function internalUsage(): Promise<AdminMonitor["usage"]> {
@@ -113,7 +128,7 @@ async function internalUsage(): Promise<AdminMonitor["usage"]> {
       integrations: { requests24h: Number(integrations?.requests_24h ?? 0), failed24h: Number(integrations?.failed_24h ?? 0), averageMs: Number(integrations?.average_ms ?? 0), p95Ms: Number(integrations?.p95_ms ?? 0), activeClients: Number(clients?.count ?? 0) },
       imports: { completed30d: Number(imports?.completed_30d ?? 0), failed30d: Number(imports?.failed_30d ?? 0), lastCompletedAt: imports?.last_completed_at ?? null },
     } }
-  } catch (error) { return unavailable(error) }
+  } catch (error) { return unavailable(error, "Internal usage data is temporarily unavailable.") }
 }
 
 export function getAdminMonitor(): Promise<AdminMonitor> {

@@ -2,22 +2,19 @@ import type { Metadata, Viewport } from "next"
 import "./globals.css"
 
 export const metadata: Metadata = {
-  title: {
-    default: "LaidbackHR.AI — HR Operations",
-    template: "%s · LaidbackHR.AI",
-  },
+  title: "LaidBackHR.ai",
   description:
     "HR operations, workforce reporting, and governed AI tools for employee records, hiring, time off, and learning.",
-  applicationName: "LaidbackHR.AI",
-  generator: "LaidbackHR.AI",
+  applicationName: "LaidBackHR.ai",
+  generator: "LaidBackHR.ai",
   openGraph: {
-    title: "LaidbackHR.AI — HR Operations",
+    title: "LaidBackHR.ai",
     description: "HR operations, workforce reporting, and governed AI tools.",
     type: "website",
   },
   twitter: {
     card: "summary",
-    title: "LaidbackHR.AI — HR Operations",
+    title: "LaidBackHR.ai",
     description: "HR operations, workforce reporting, and governed AI tools.",
   },
 }

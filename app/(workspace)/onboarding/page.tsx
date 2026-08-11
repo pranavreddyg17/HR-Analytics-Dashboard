@@ -7,7 +7,7 @@ import { listOnboardingOperations } from "@/lib/server/onboarding"
 import { requireRequestActor } from "@/lib/server/request-user"
 
 export const dynamic = "force-dynamic"
-export const metadata: Metadata = { title: "Onboarding", description: "Manage new-joiner readiness and talent acquisition handoffs." }
+export const metadata: Metadata = { description: "Manage new-joiner readiness and talent acquisition handoffs." }
 
 export default async function OnboardingPage({ searchParams }: { searchParams: Promise<Record<string, string | string[] | undefined>> }) {
   const actor = await requireRequestActor()

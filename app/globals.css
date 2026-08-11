@@ -520,19 +520,19 @@
 }
 
 .topbar__inner {
-  display: grid;
+  display: flex;
   width: 100%;
   max-width: 1680px;
   height: 100%;
   align-items: center;
-  grid-template-columns: minmax(560px, 1fr) minmax(240px, 360px) auto;
-  gap: 12px;
+  gap: 16px;
   margin-inline: auto;
   padding-inline: 24px;
 }
 
 .topbar__navigation-area {
   display: flex;
+  flex: 1 1 auto;
   height: 100%;
   min-width: 0;
   align-items: center;
@@ -574,7 +574,9 @@
 
 .topbar-search {
   display: flex;
-  width: 100%;
+  width: min(28vw, 360px);
+  min-width: 240px;
+  flex: 0 1 360px;
   height: 38px;
   align-items: center;
   padding-inline: 12px;
@@ -613,7 +615,7 @@
   display: flex;
   align-items: center;
   gap: 14px;
-  justify-self: end;
+  flex: 0 0 auto;
 }
 
 .topbar-menu-button {
@@ -954,11 +956,17 @@ textarea:focus {
 
 @media (max-width: 1279px) {
   .topbar__inner {
-    grid-template-columns: minmax(260px, 1fr) auto;
+    gap: 12px;
   }
 
-  .enterprise-nav {
+  .topbar__navigation-area {
     display: none;
+  }
+
+  .topbar-search {
+    width: auto;
+    min-width: 0;
+    flex: 1 1 auto;
   }
 
   .topbar-menu-button {
@@ -980,7 +988,6 @@ textarea:focus {
   }
 
   .topbar__inner {
-    grid-template-columns: minmax(0, 1fr) auto;
     gap: 8px;
     padding-inline: 14px;
   }
@@ -997,9 +1004,7 @@ textarea:focus {
   }
 
   .topbar-search {
-    width: auto;
     min-width: 0;
-    margin-left: 4px;
   }
 
   .topbar-search__full {
@@ -1130,8 +1135,7 @@ textarea:focus {
 .employee-shell__navigation {
   display: flex;
   min-width: 0;
-  flex: 1;
-  align-self: stretch;
+  flex: 0 1 auto;
   align-items: stretch;
   height: 38px;
   align-self: center;
@@ -1141,6 +1145,22 @@ textarea:focus {
   border: 1px solid rgb(255 255 255 / 0.08);
   border-radius: 11px;
   background: rgb(255 255 255 / 0.045);
+}
+
+.employee-shell__header-inner {
+  gap: 18px;
+}
+
+.employee-shell__account {
+  min-width: 0;
+  margin-left: auto;
+}
+
+.employee-shell__utilities {
+  display: flex;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: 14px;
 }
 
 .employee-shell__navigation-link {
@@ -1284,8 +1304,9 @@ textarea:focus {
 @media (max-width: 700px) {
   .employee-shell__header-inner {
     flex-wrap: wrap;
-    gap: 0 12px;
+    gap: 8px 12px;
     padding-top: 8px;
+    padding-bottom: 8px;
   }
 
   .employee-shell__navigation {
@@ -1295,6 +1316,10 @@ textarea:focus {
     margin-top: 7px;
     margin-left: 0;
     overflow-x: auto;
+  }
+
+  .employee-shell__utilities {
+    margin-left: auto;
   }
 
   .employee-shell__navigation-link {
