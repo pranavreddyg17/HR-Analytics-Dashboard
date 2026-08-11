@@ -129,6 +129,7 @@ stages:
         steps:
           - script: |
               set -euo pipefail
+              consecutive_ready=0
               for attempt in $(seq 1 60); do
                 response="$(curl --silent --show-error --max-time 30 https://www.laidbackhr.cloud/api/v1/ready || true)"
                 if jq -e --arg version "$(Build.SourceVersion)" '
@@ -136,8 +137,13 @@ stages:
                   and .version == $version
                   and .database.engine == "postgresql"
                 ' <<<"$response" >/dev/null 2>&1; then
-                  echo "Production is ready at mirrored commit $(Build.SourceVersion)."
-                  exit 0
+                  consecutive_ready=$((consecutive_ready + 1))
+                  if [ "$consecutive_ready" -ge 3 ]; then
+                    echo "Production is stably ready at mirrored commit $(Build.SourceVersion)."
+                    exit 0
+                  fi
+                else
+                  consecutive_ready=0
                 fi
                 sleep 15
               done

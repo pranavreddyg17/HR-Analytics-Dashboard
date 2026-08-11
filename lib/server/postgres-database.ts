@@ -152,12 +152,12 @@ async function initialize(pool: Pool): Promise<void> {
   }
 }
 
-export async function getPostgresDatabase(): Promise<Database> {
-  if (databasePromise) return databasePromise
-  databasePromise = (async () => {
+async function connectPostgresDatabase(): Promise<Database> {
+  let pool: Pool | null = null
+  try {
     const connectionString = runtimeEnv.DATABASE_URL
     if (!connectionString) throw new Error("DATABASE_URL is required for the Azure database runtime.")
-    const pool = new Pool({
+    pool = new Pool({
       connectionString,
       max: Number(runtimeEnv.DATABASE_POOL_MAX ?? 10),
       idleTimeoutMillis: 30_000,
@@ -168,6 +168,19 @@ export async function getPostgresDatabase(): Promise<Database> {
     await pool.query("SELECT 1")
     await initialize(pool)
     return new PostgresDatabase(pool)
-  })()
+  } catch (error) {
+    await pool?.end().catch(() => undefined)
+    throw error
+  }
+}
+
+export async function getPostgresDatabase(): Promise<Database> {
+  if (databasePromise) return databasePromise
+  databasePromise = connectPostgresDatabase().catch((error) => {
+    // A short Azure PostgreSQL or Key Vault interruption must not poison the
+    // process for its entire lifetime. The next request receives a fresh pool.
+    databasePromise = null
+    throw error
+  })
   return databasePromise
 }

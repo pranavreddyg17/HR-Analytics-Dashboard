@@ -183,10 +183,14 @@ jobs:
           set -euo pipefail
           wait_for_url() {
             local url="$1"
+            local consecutive_ready=0
             for attempt in $(seq 1 30); do
               response="$(curl --fail --silent --show-error --max-time 20 "$url" || true)"
               if jq -e --arg version "$IMAGE_TAG" '.status == "ready" and .version == $version and .database.engine == "postgresql"' <<<"$response" >/dev/null; then
-                return 0
+                consecutive_ready=$((consecutive_ready + 1))
+                if [ "$consecutive_ready" -ge 3 ]; then return 0; fi
+              else
+                consecutive_ready=0
               fi
               sleep 10
             done
