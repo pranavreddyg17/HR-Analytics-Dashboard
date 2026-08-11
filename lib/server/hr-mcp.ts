@@ -317,6 +317,18 @@ export function createHrMcpServer(actor?: RequestActor): McpServer {
       workflowQueue: workflows,
       operatingSignals: analytics.operatingSignals,
       executiveObservations: analytics.executiveInsights,
+      decisionSupport: {
+        company: analytics.decisionSupport.company,
+        departments: analytics.decisionSupport.departments,
+        tenureAttrition: analytics.decisionSupport.tenureAttrition,
+        actions: analytics.decisionSupport.actions.slice(0, 12),
+        workforceImpact: {
+          assumptions: analytics.decisionSupport.workforceImpact.assumptions,
+          summary: analytics.decisionSupport.workforceImpact.summary,
+          roles: analytics.decisionSupport.workforceImpact.roles.slice(0, 12),
+          learningCases: analytics.decisionSupport.workforceImpact.learningCases,
+        },
+      },
     })
   })
 

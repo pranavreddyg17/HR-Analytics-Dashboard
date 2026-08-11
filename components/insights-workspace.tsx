@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useRef, useState } from "react"
 import Link from "next/link"
 import { useRouter, useSearchParams } from "next/navigation"
+import { Check, ChevronsUpDown, LoaderCircle, Search } from "lucide-react"
 import {
   Bar,
   BarChart,
@@ -15,12 +16,9 @@ import {
   PieChart,
   ReferenceLine,
   ResponsiveContainer,
-  Scatter,
-  ScatterChart,
   Tooltip,
   XAxis,
   YAxis,
-  ZAxis,
 } from "recharts"
 
 import { MetricStrip, WorkspaceHeader, WorkspacePage } from "@/components/workspace-ui"
@@ -28,7 +26,7 @@ import { InsightActionButton } from "@/components/insight-action-button"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
-import type { BreakdownPoint, TimePoint, WorkforceAnalytics } from "@/lib/hr-types"
+import type { BreakdownPoint, EmployeeImpactScenario, EmployeeImpactSearchResult, TimePoint, WorkforceAnalytics } from "@/lib/hr-types"
 import { cn } from "@/lib/utils"
 
 type Filters = {
@@ -102,6 +100,10 @@ function percent(value: number | null): string {
   return value === null ? "Not applicable" : `${value}%`
 }
 
+function refillBasisLabel(value: "role" | "department" | "company" | "policy"): string {
+  return value === "policy" ? "Configured fallback" : `${value[0].toUpperCase()}${value.slice(1)} hiring history`
+}
+
 function flowRows(hiring: TimePoint[], attrition: TimePoint[]): Array<{ period: string; hires: number; exits: number }> {
   const periods = [...new Set([...hiring, ...attrition].map((row) => row.period))].sort()
   const hiringMap = new Map(hiring.map((row) => [row.period, row.value]))
@@ -172,24 +174,14 @@ function ExitReasonChart({ rows }: { rows: BreakdownPoint[] }) {
   )
 }
 
-function DepartmentPressure({ data }: { data: WorkforceAnalytics }) {
-  const rows = data.decisionSupport.departments.map((row) => ({ department: row.department, attrition: row.attritionRate, vacancy: row.vacancyRate, active: row.activeEmployees, coverage: row.coverageStatus }))
-  if (!rows.length) return <div className="flex h-64 items-center justify-center text-body text-muted-foreground">No department measures in this scope.</div>
-  return <div className="h-72 w-full"><ResponsiveContainer width="100%" height="100%" minWidth={0} initialDimension={{ width: 900, height: 288 }}>
-    <ScatterChart margin={{ top: 12, right: 18, bottom: 20, left: 0 }}>
-      <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" />
-      <XAxis type="number" dataKey="attrition" name="Attrition rate" unit="%" domain={[0, "dataMax + 2"]} axisLine={false} tickLine={false} tick={{ fill: "var(--muted-foreground)", fontSize: 11 }} label={{ value: "Attrition rate", position: "insideBottom", offset: -12, fill: "var(--muted-foreground)", fontSize: 11 }} />
-      <YAxis type="number" dataKey="vacancy" name="Vacancy rate" unit="%" domain={[0, "dataMax + 2"]} axisLine={false} tickLine={false} tick={{ fill: "var(--muted-foreground)", fontSize: 11 }} label={{ value: "Vacancy rate", angle: -90, position: "insideLeft", fill: "var(--muted-foreground)", fontSize: 11 }} />
-      <ZAxis type="number" dataKey="active" range={[80, 480]} name="Active employees" />
-      <ReferenceLine x={data.attrition.rate} stroke="var(--muted-foreground)" strokeDasharray="4 4" />
-      <ReferenceLine y={data.decisionSupport.company.vacancyRate} stroke="var(--muted-foreground)" strokeDasharray="4 4" />
-      <Tooltip cursor={{ strokeDasharray: "3 3" }} content={({ active, payload }) => {
-        const row = payload?.[0]?.payload as typeof rows[number] | undefined
-        return active && row ? <div className="rounded-md border border-border bg-popover px-3 py-2 text-meta shadow-sm"><p className="font-semibold">{row.department}</p><p className="mt-1 text-muted-foreground">{row.attrition}% attrition · {row.vacancy}% vacancy</p><p className="text-muted-foreground">{row.active} active · {row.coverage} coverage</p></div> : null
-      }} />
-      <Scatter data={rows} fill="var(--chart-1)" />
-    </ScatterChart>
-  </ResponsiveContainer></div>
+function DepartmentPressure({ data, onSelect }: { data: WorkforceAnalytics; onSelect: (department: string) => void }) {
+  const statusRank = { Gap: 0, Watch: 1, Covered: 2 }
+  const rows = [...data.decisionSupport.departments].sort((left, right) => statusRank[left.coverageStatus] - statusRank[right.coverageStatus] || right.attritionRate - left.attritionRate)
+  if (!rows.length) return <div className="flex h-48 items-center justify-center text-body text-muted-foreground">No department measures in this scope.</div>
+  return <div className="overflow-x-auto"><table className="w-full min-w-[720px] text-left text-body"><thead className="bg-muted/40 text-label font-semibold text-muted-foreground"><tr><th className="px-4 py-2.5">Department</th><th className="px-4 py-2.5">Headcount</th><th className="px-4 py-2.5">Attrition</th><th className="px-4 py-2.5">Vacancy</th><th className="px-4 py-2.5">Movement</th><th className="px-4 py-2.5">Coverage</th></tr></thead><tbody>{rows.map((row) => {
+    const attritionDelta = Number((row.attritionRate - data.attrition.rate).toFixed(1))
+    return <tr key={row.department} className="border-t border-border/70 hover:bg-muted/20"><td className="px-4 py-3"><button type="button" onClick={() => onSelect(row.department)} className="font-semibold hover:text-primary hover:underline">{row.department}</button></td><td className="px-4 py-3 tabular-nums">{row.activeEmployees}</td><td className="px-4 py-3"><p className="tabular-nums">{row.attritionRate}%</p><p className="text-meta text-muted-foreground">{attritionDelta > 0 ? "+" : ""}{attritionDelta} pts vs company</p></td><td className="px-4 py-3"><p className="tabular-nums">{row.vacancyRate}%</p><p className="text-meta text-muted-foreground">{row.openRequisitions} open roles</p></td><td className="px-4 py-3"><p className="tabular-nums">{row.netMovement > 0 ? "+" : ""}{row.netMovement}</p><p className="text-meta text-muted-foreground">{row.hires} hires · {row.exits} exits</p></td><td className="px-4 py-3"><Badge variant={row.coverageStatus === "Gap" ? "destructive" : row.coverageStatus === "Watch" ? "secondary" : "outline"}>{row.coverageStatus}</Badge></td></tr>
+  })}</tbody></table></div>
 }
 
 function TenureAttrition({ data }: { data: WorkforceAnalytics }) {
@@ -276,9 +268,10 @@ function CostAssumptions({ data, onApply }: { data: WorkforceAnalytics; onApply:
   </Card>
 }
 
-function RoleExposureChart({ data }: { data: WorkforceAnalytics }) {
-  const rows = data.decisionSupport.workforceImpact.roles
-    .filter((row) => row.reviewWeightedExposure > 0)
+function ReplacementCostChart({ data }: { data: WorkforceAnalytics }) {
+  const rows = [...data.decisionSupport.workforceImpact.roles]
+    .filter((row) => row.replacementCostPerExit > 0)
+    .sort((left, right) => right.replacementCostPerExit - left.replacementCostPerExit)
     .slice(0, 8)
     .map((row) => ({ ...row, label: row.jobTitle.length > 28 ? `${row.jobTitle.slice(0, 27)}…` : row.jobTitle }))
   if (!rows.length) return <div className="flex h-64 items-center justify-center text-body text-muted-foreground">No role-level cost exposure is available in this scope.</div>
@@ -287,40 +280,110 @@ function RoleExposureChart({ data }: { data: WorkforceAnalytics }) {
       <CartesianGrid strokeDasharray="3 3" horizontal={false} stroke="var(--border)" />
       <XAxis type="number" tickFormatter={(value) => currency(Number(value))} axisLine={false} tickLine={false} tick={{ fill: "var(--muted-foreground)", fontSize: 10 }} />
       <YAxis type="category" dataKey="label" width={142} axisLine={false} tickLine={false} tick={{ fill: "var(--muted-foreground)", fontSize: 10 }} />
-      <Tooltip formatter={(value) => [currency(Number(value)), "Risk-weighted exposure"]} labelFormatter={(_, payload) => payload?.[0]?.payload ? `${payload[0].payload.jobTitle} · ${payload[0].payload.department}` : ""} />
-      <Bar dataKey="reviewWeightedExposure" fill="var(--chart-1)" radius={[0, 3, 3, 0]} />
+      <Tooltip formatter={(value) => [currency(Number(value)), "Replacement scenario"]} labelFormatter={(_, payload) => payload?.[0]?.payload ? `${payload[0].payload.jobTitle} · ${payload[0].payload.department}` : ""} />
+      <Bar dataKey="replacementCostPerExit" fill="var(--chart-1)" radius={[0, 3, 3, 0]} />
     </BarChart>
   </ResponsiveContainer></div>
 }
 
-function EmployeeImpactPanel({ data }: { data: WorkforceAnalytics }) {
+function EmployeeImpactPicker({ value, filters, onSelect }: { value: EmployeeImpactSearchResult | null; filters: Filters; onSelect: (employee: EmployeeImpactSearchResult) => void }) {
+  const [open, setOpen] = useState(false)
+  const [query, setQuery] = useState("")
+  const [results, setResults] = useState<EmployeeImpactSearchResult[]>([])
+  const [searching, setSearching] = useState(false)
+
+  useEffect(() => {
+    if (!open) return
+    const controller = new AbortController()
+    const timer = window.setTimeout(() => {
+      const params = new URLSearchParams(queryFor(filters))
+      params.set("mode", "search")
+      if (query.trim()) params.set("q", query.trim())
+      setSearching(true)
+      fetch(`/api/v1/insights/employee-impact?${params.toString()}`, { cache: "no-store", signal: controller.signal })
+        .then(async (response) => {
+          const payload = await response.json() as { results?: EmployeeImpactSearchResult[]; error?: string }
+          if (!response.ok) throw new Error(payload.error ?? "Employee search is unavailable.")
+          setResults(payload.results ?? [])
+        })
+        .catch((error: unknown) => { if ((error as { name?: string })?.name !== "AbortError") setResults([]) })
+        .finally(() => setSearching(false))
+    }, 200)
+    return () => { window.clearTimeout(timer); controller.abort() }
+  }, [filters, open, query])
+
+  return <div className="relative w-full max-w-md" onBlur={(event) => { if (!event.currentTarget.contains(event.relatedTarget as Node | null)) setOpen(false) }}>
+    <span className="mb-1 block text-label font-semibold text-muted-foreground">Employee</span>
+    <button type="button" aria-haspopup="listbox" aria-expanded={open} onClick={() => setOpen((current) => !current)} className="flex h-9 w-full items-center justify-between gap-3 rounded-md border border-border bg-background px-3 text-left text-control">
+      <span className={value ? "min-w-0 truncate" : "text-muted-foreground"}>{value ? `${value.name} · ${value.jobTitle}` : "Search active employees"}</span>
+      <ChevronsUpDown className="size-4 shrink-0 text-muted-foreground" />
+    </button>
+    {open && <div className="absolute right-0 z-30 mt-1 w-full min-w-[340px] overflow-hidden rounded-md border border-border bg-popover shadow-lg">
+      <div className="relative border-b border-border"><Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" /><input autoFocus type="search" value={query} onChange={(event) => setQuery(event.target.value)} onKeyDown={(event) => { if (event.key === "Escape") setOpen(false) }} placeholder="Search name, ID, role, department, or location" aria-label="Search active employees" className="h-10 w-full bg-transparent pl-10 pr-9 text-control outline-none" />{searching && <LoaderCircle className="absolute right-3 top-1/2 size-4 -translate-y-1/2 animate-spin text-muted-foreground" />}</div>
+      <div role="listbox" aria-label="Active employees" className="max-h-64 overflow-y-auto p-1.5">{results.length ? results.map((employee) => <button key={employee.employeeId} type="button" role="option" aria-selected={employee.employeeId === value?.employeeId} onClick={() => { onSelect(employee); setOpen(false); setQuery("") }} className="flex w-full items-center gap-3 rounded-md px-3 py-2 text-left hover:bg-muted focus-visible:bg-muted focus-visible:outline-none"><span className="min-w-0 flex-1"><span className="block truncate text-control font-semibold">{employee.name}</span><span className="block truncate text-meta text-muted-foreground">{employee.employeeId} · {employee.jobTitle} · {employee.department} · {employee.location}</span></span>{employee.employeeId === value?.employeeId && <Check className="size-4 shrink-0 text-primary" />}</button>) : <p className="px-3 py-6 text-center text-meta text-muted-foreground">{searching ? "Searching…" : "No active employees match this search."}</p>}</div>
+    </div>}
+  </div>
+}
+
+function EmployeeImpactPanel({ data, filters }: { data: WorkforceAnalytics; filters: Filters }) {
   const employees = data.decisionSupport.workforceImpact.employees
   const [employeeId, setEmployeeId] = useState(employees[0]?.employeeId ?? "")
-  const selected = employees.find((employee) => employee.employeeId === employeeId) ?? employees[0]
-  if (!selected) return <Card className="shadow-none"><CardHeader><CardTitle>Employee impact scenario</CardTitle><CardDescription>No active model-review employees match this scope.</CardDescription></CardHeader></Card>
-  const courseHref = `/courses?department=${encodeURIComponent(selected.department)}&q=${encodeURIComponent(selected.employeeId)}`
-  const hiringHref = `/onboarding?view=talent&department=${encodeURIComponent(selected.department)}&q=${encodeURIComponent(selected.jobTitle)}`
+  const [scenario, setScenario] = useState<EmployeeImpactScenario | null>(employees[0] ?? null)
+  const [pendingEmployee, setPendingEmployee] = useState<EmployeeImpactSearchResult | null>(null)
+  const [loading, setLoading] = useState(false)
+  const [error, setError] = useState("")
+  const scenarioQuery = useMemo(() => queryFor(filters), [filters])
+
+  useEffect(() => {
+    if (!employeeId) return
+    const controller = new AbortController()
+    const params = new URLSearchParams(scenarioQuery)
+    params.set("employeeId", employeeId)
+    fetch(`/api/v1/insights/employee-impact?${params.toString()}`, { cache: "no-store", signal: controller.signal })
+      .then(async (response) => {
+        const payload = await response.json() as { scenario?: EmployeeImpactScenario; error?: string }
+        if (!response.ok || !payload.scenario) throw new Error(payload.error ?? "Employee impact data is unavailable.")
+        setScenario(payload.scenario)
+        setPendingEmployee(null)
+        setError("")
+      })
+      .catch((reason: unknown) => { if ((reason as { name?: string })?.name !== "AbortError") { setScenario(null); setPendingEmployee(null); setError(reason instanceof Error ? reason.message : "Employee impact data is unavailable.") } })
+      .finally(() => setLoading(false))
+    return () => controller.abort()
+  }, [employeeId, scenarioQuery])
+
+  const selected = scenario
+  const selectedIdentity = pendingEmployee ?? selected
   return <Card className="gap-0 overflow-hidden py-0 shadow-none">
     <CardHeader className="gap-3 border-b border-border px-5 py-4 sm:flex-row sm:items-end sm:justify-between">
-      <div><CardTitle>Employee impact scenario</CardTitle><CardDescription>Continuity and replacement economics for one review profile.</CardDescription></div>
-      <label className="w-full max-w-sm text-label font-semibold text-muted-foreground">Employee<select value={selected.employeeId} onChange={(event) => setEmployeeId(event.target.value)} className="mt-1 block h-9 w-full rounded-md border border-border bg-background px-3 text-control font-normal text-foreground">{employees.map((employee) => <option key={employee.employeeId} value={employee.employeeId}>{employee.name} · {employee.jobTitle}</option>)}</select></label>
+      <div><CardTitle>Employee continuity scenario</CardTitle><CardDescription>Role coverage and replacement assumptions for any active employee.</CardDescription></div>
+      <EmployeeImpactPicker value={selectedIdentity} filters={filters} onSelect={(employee) => { setLoading(true); setPendingEmployee(employee); setEmployeeId(employee.employeeId); setError("") }} />
     </CardHeader>
     <CardContent className="space-y-4 p-5">
+      {loading && <div className="h-1 overflow-hidden rounded-full bg-muted"><div className="h-full w-2/3 animate-pulse rounded-full bg-primary" /></div>}
+      {error && <p role="alert" className="rounded-md border border-destructive/20 bg-destructive/5 px-3 py-2 text-meta text-destructive">{error}</p>}
+      {!selected && !loading && <div className="flex min-h-48 items-center justify-center rounded-md border border-dashed border-border px-6 text-center text-body text-muted-foreground">Search for an active employee to calculate a continuity scenario.</div>}
+      {selected && <>
       <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-        <div><p className="text-kpi-label text-muted-foreground">Continuity</p><p className="mt-1 text-card-title font-semibold">{selected.continuityStatus}</p><p className="text-meta text-muted-foreground">{selected.activeRolePeers} active peers · {selected.directReports} direct reports</p></div>
-        <div><p className="text-kpi-label text-muted-foreground">Refill estimate</p><p className="mt-1 text-card-title font-semibold">{selected.refillDays} days</p><p className="text-meta text-muted-foreground">Based on {selected.refillBasis} hiring history</p></div>
-        <div><p className="text-kpi-label text-muted-foreground">Replacement scenario</p><p className="mt-1 text-card-title font-semibold">{currency(selected.replacementCost)}</p><p className="text-meta text-muted-foreground">Recruiting, vacancy, and ramp cost</p></div>
-        <div><p className="text-kpi-label text-muted-foreground">Review-weighted exposure</p><p className="mt-1 text-card-title font-semibold">{currency(selected.reviewWeightedExposure)}</p><p className="text-meta text-muted-foreground">{selected.riskScore}% model review score</p></div>
+        <div><p className="text-kpi-label text-muted-foreground">Role coverage</p><p className="mt-1 text-card-title font-semibold">{selected.continuityStatus}</p><p className="text-meta text-muted-foreground">{selected.activeRolePeers} peers · {selected.directReports} direct reports</p></div>
+        <div><p className="text-kpi-label text-muted-foreground">Refill estimate</p><p className="mt-1 text-card-title font-semibold">{selected.refillDays} days</p><p className="text-meta text-muted-foreground">{refillBasisLabel(selected.refillBasis)}</p></div>
+        <div><p className="text-kpi-label text-muted-foreground">Replacement scenario</p><p className="mt-1 text-card-title font-semibold">{currency(selected.replacementCost)}</p><p className="text-meta text-muted-foreground">{selected.payDataAvailable ? "Recruiting, vacancy, and ramp cost" : "Recruiting cost only; pay data is missing"}</p></div>
+        <div><p className="text-kpi-label text-muted-foreground">Hiring coverage</p><p className="mt-1 text-card-title font-semibold">{selected.openMatchingRequisitions}</p><p className="text-meta text-muted-foreground">Open requisitions for this role</p></div>
       </div>
       <div className="grid gap-3 border-t border-border pt-4 sm:grid-cols-3">
         <div className="rounded-md border border-border p-3"><p className="text-label font-semibold">Recruiting</p><p className="mt-1 text-subsection font-semibold tabular-nums">{currency(selected.directRecruitingCost)}</p></div>
         <div className="rounded-md border border-border p-3"><p className="text-label font-semibold">Vacancy capacity</p><p className="mt-1 text-subsection font-semibold tabular-nums">{currency(selected.vacancyCost)}</p></div>
         <div className="rounded-md border border-border p-3"><p className="text-label font-semibold">Onboarding ramp</p><p className="mt-1 text-subsection font-semibold tabular-nums">{currency(selected.onboardingCost)}</p></div>
       </div>
-      <div className="grid gap-3 border-t border-border pt-4 lg:grid-cols-[1fr_auto] lg:items-center">
-        <div><p className="text-body font-semibold">Learning check</p><p className="mt-0.5 text-meta text-muted-foreground">{selected.incompleteLearningAssignments ? `${selected.incompleteLearningAssignments} incomplete assignments are already linked. A ${currency(selected.proposedLearningInvestment)} course scenario breaks even at ${selected.learningBreakEvenPercent}% of the replacement estimate.` : "No incomplete learning assignment is linked. Confirm a skill gap before treating training as an intervention."}</p></div>
-        <div className="flex flex-wrap gap-2"><Link className={actionLinkClass} href={hiringHref}>Review hiring coverage</Link><Link className={actionLinkClass} href={courseHref}>Review learning</Link></div>
+      <div className="grid gap-3 border-t border-border pt-4 lg:grid-cols-2">
+        <div><p className="text-body font-semibold">Workforce evidence</p><p className="mt-0.5 text-meta text-muted-foreground">{selected.jobTitle} · {selected.department} · {selected.location}{selected.manager ? ` · Manager: ${selected.manager}` : ""}</p></div>
+        <div><p className="text-body font-semibold">Model evidence</p><p className="mt-0.5 text-meta text-muted-foreground">{selected.riskScore === null ? "No model review record is linked to this employee." : `${selected.riskScore}% ${selected.riskLevel ?? ""} review signal${selected.topDriver ? ` · Leading contributor: ${selected.topDriver}` : ""}.`}</p></div>
       </div>
+      <div className="grid gap-3 border-t border-border pt-4 lg:grid-cols-[1fr_auto] lg:items-center">
+        <div><p className="text-body font-semibold">Learning evidence</p><p className="mt-0.5 text-meta text-muted-foreground">{selected.incompleteLearningAssignments ? `${selected.incompleteLearningAssignments} incomplete assignments are linked. Course cost scenario: ${currency(selected.proposedLearningInvestment)}.` : "No incomplete learning assignment is linked."}</p></div>
+        <div className="flex flex-wrap gap-2"><Link className={actionLinkClass} href={`/onboarding?view=talent&department=${encodeURIComponent(selected.department)}&q=${encodeURIComponent(selected.jobTitle)}`}>Review hiring coverage</Link><Link className={actionLinkClass} href={`/courses?department=${encodeURIComponent(selected.department)}&q=${encodeURIComponent(selected.employeeId)}`}>Review learning</Link></div>
+      </div>
+      </>}
     </CardContent>
   </Card>
 }
@@ -329,15 +392,15 @@ function RoleContinuityTable({ data }: { data: WorkforceAnalytics }) {
   const rows = data.decisionSupport.workforceImpact.roles.filter((row) => row.continuityStatus !== "Covered").slice(0, 12)
   return <Card className="gap-0 overflow-hidden py-0 shadow-none">
     <CardHeader className="border-b border-border px-5 py-4"><CardTitle>Role continuity</CardTitle><CardDescription>Roles where observed movement, model-review concentration, or refill time warrants coverage planning.</CardDescription></CardHeader>
-      <CardContent className="p-0"><div className="overflow-x-auto"><table className="w-full min-w-[980px] text-left text-body"><thead className="bg-muted/40 text-label font-semibold text-muted-foreground"><tr>{["Role", "Status", "Coverage", "Movement", "Refill", "Replacement scenario", "Open"].map((heading) => <th key={heading} className="px-4 py-2.5">{heading}</th>)}</tr></thead><tbody>{rows.map((row) => <tr key={`${row.department}-${row.jobTitle}`} className="border-t border-border/70"><td className="px-4 py-3"><p className="font-semibold">{row.jobTitle}</p><p className="text-meta text-muted-foreground">{row.department}</p></td><td className="px-4 py-3"><Badge variant={row.continuityStatus === "Critical" ? "destructive" : "secondary"}>{row.continuityStatus}</Badge></td><td className="px-4 py-3"><p>{row.activeEmployees} active · {row.reviewProfiles} in review</p><p className="text-meta text-muted-foreground">{row.reviewShare}% review share</p></td><td className="px-4 py-3"><p>{row.recordedExits} exits · {row.completedHires} hires</p><p className="text-meta text-muted-foreground">{row.openRequisitions} open requisitions</p></td><td className="px-4 py-3"><p>{row.refillDays} days</p><p className="text-meta text-muted-foreground">{row.refillBasis} history</p></td><td className="px-4 py-3"><p className="font-semibold tabular-nums">{currency(row.replacementCostPerExit)}</p><p className="text-meta text-muted-foreground">{currency(row.reviewWeightedExposure)} weighted exposure</p></td><td className="px-4 py-3"><Link className={actionLinkClass} href={`/onboarding?view=talent&department=${encodeURIComponent(row.department)}&q=${encodeURIComponent(row.jobTitle)}`}>Talent</Link></td></tr>)}</tbody></table></div>{!rows.length && <p className="p-8 text-center text-body text-muted-foreground">No roles require a continuity review in this scope.</p>}</CardContent>
+      <CardContent className="p-0"><div className="overflow-x-auto"><table className="w-full min-w-[980px] text-left text-body"><thead className="bg-muted/40 text-label font-semibold text-muted-foreground"><tr>{["Role", "Status", "Coverage", "Movement", "Refill", "Replacement scenario", "Open"].map((heading) => <th key={heading} className="px-4 py-2.5">{heading}</th>)}</tr></thead><tbody>{rows.map((row) => <tr key={`${row.department}-${row.jobTitle}`} className="border-t border-border/70"><td className="px-4 py-3"><p className="font-semibold">{row.jobTitle}</p><p className="text-meta text-muted-foreground">{row.department}</p></td><td className="px-4 py-3"><Badge variant={row.continuityStatus === "Critical" ? "destructive" : "secondary"}>{row.continuityStatus}</Badge></td><td className="px-4 py-3"><p>{row.activeEmployees} active · {row.reviewProfiles} in review</p><p className="text-meta text-muted-foreground">{row.reviewShare}% review share</p></td><td className="px-4 py-3"><p>{row.recordedExits} exits · {row.completedHires} hires</p><p className="text-meta text-muted-foreground">{row.openRequisitions} open requisitions</p></td><td className="px-4 py-3"><p>{row.refillDays} days</p><p className="text-meta text-muted-foreground">{refillBasisLabel(row.refillBasis)}</p></td><td className="px-4 py-3"><p className="font-semibold tabular-nums">{currency(row.replacementCostPerExit)}</p><p className="text-meta text-muted-foreground">Role-average cost scenario</p></td><td className="px-4 py-3"><Link className={actionLinkClass} href={`/onboarding?view=talent&department=${encodeURIComponent(row.department)}&q=${encodeURIComponent(row.jobTitle)}`}>Talent</Link></td></tr>)}</tbody></table></div>{!rows.length && <p className="p-8 text-center text-body text-muted-foreground">No roles require a continuity review in this scope.</p>}</CardContent>
   </Card>
 }
 
 function LearningEconomics({ data }: { data: WorkforceAnalytics }) {
   const rows = data.decisionSupport.workforceImpact.learningCases
   return <Card className="gap-0 overflow-hidden py-0 shadow-none">
-    <CardHeader className="border-b border-border px-5 py-4"><CardTitle>Learning investment screen</CardTitle><CardDescription>Tests the cost of a course against replacement exposure only where an incomplete assignment already exists.</CardDescription></CardHeader>
-    <CardContent className="p-0"><div className="overflow-x-auto"><table className="w-full min-w-[880px] text-left text-body"><thead className="bg-muted/40 text-label font-semibold text-muted-foreground"><tr>{["Department", "Linked evidence", "Course scenario", "Break-even", "Decision", "Open"].map((heading) => <th key={heading} className="px-4 py-2.5">{heading}</th>)}</tr></thead><tbody>{rows.map((row) => <tr key={row.department} className="border-t border-border/70"><td className="px-4 py-3 font-semibold">{row.department}</td><td className="px-4 py-3"><p>{row.employeesWithLearningGap} of {row.employeesInReview} employees</p><p className="text-meta text-muted-foreground">{row.incompleteAssignments} assignments · {row.assignedHours} hours{row.leadingProgram ? ` · ${row.leadingProgram}` : ""}</p></td><td className="px-4 py-3"><p className="font-semibold tabular-nums">{currency(row.proposedLearningInvestment)}</p><p className="text-meta text-muted-foreground">{currency(row.reviewWeightedExposure)} linked exposure</p></td><td className="px-4 py-3 tabular-nums">{row.breakEvenPercent === null ? "Not available" : `${row.breakEvenPercent}%`}</td><td className="px-4 py-3"><Badge variant={row.decision === "Assess skill fit" ? "secondary" : "outline"}>{row.decision}</Badge></td><td className="px-4 py-3"><Link className={actionLinkClass} href={`/courses?department=${encodeURIComponent(row.department)}`}>Assignments</Link></td></tr>)}</tbody></table></div></CardContent>
+    <CardHeader className="border-b border-border px-5 py-4"><CardTitle>Learning investment screen</CardTitle><CardDescription>Course cost for employees with an existing incomplete assignment.</CardDescription></CardHeader>
+    <CardContent className="p-0"><div className="overflow-x-auto"><table className="w-full min-w-[880px] text-left text-body"><thead className="bg-muted/40 text-label font-semibold text-muted-foreground"><tr>{["Department", "Linked evidence", "Course scenario", "Cost comparison", "Decision", "Open"].map((heading) => <th key={heading} className="px-4 py-2.5">{heading}</th>)}</tr></thead><tbody>{rows.map((row) => <tr key={row.department} className="border-t border-border/70"><td className="px-4 py-3 font-semibold">{row.department}</td><td className="px-4 py-3"><p>{row.employeesWithLearningGap} of {row.employeesInReview} employees</p><p className="text-meta text-muted-foreground">{row.incompleteAssignments} assignments · {row.assignedHours} hours{row.leadingProgram ? ` · ${row.leadingProgram}` : ""}</p></td><td className="px-4 py-3"><p className="font-semibold tabular-nums">{currency(row.proposedLearningInvestment)}</p><p className="text-meta text-muted-foreground">{currency(row.replacementScenario)} replacement scenario</p></td><td className="px-4 py-3 tabular-nums">{row.breakEvenPercent === null ? "Not available" : `${row.breakEvenPercent}% of replacement scenario`}</td><td className="px-4 py-3"><Badge variant={row.decision === "Assess skill fit" ? "secondary" : "outline"}>{row.decision}</Badge></td><td className="px-4 py-3"><Link className={actionLinkClass} href={`/courses?department=${encodeURIComponent(row.department)}`}>Assignments</Link></td></tr>)}</tbody></table></div></CardContent>
   </Card>
 }
 
@@ -470,7 +533,7 @@ export function InsightsWorkspace({ initialData }: { initialData: WorkforceAnaly
           { label: "Open roles", value: compact(data.hiring.activeRequisitions), detail: `${company.vacancyRate}% vacancy rate` },
           { label: "Continuity reviews", value: impact.summary.rolesNeedingContinuityReview, detail: "Roles marked critical or watch" },
         ]} />
-        <div className="grid gap-4 xl:grid-cols-[minmax(0,1.2fr)_minmax(360px,0.8fr)]"><Card className="shadow-none"><CardHeader><CardTitle>Department pressure</CardTitle><CardDescription>Attrition and vacancy pressure, sized by active headcount.</CardDescription></CardHeader><CardContent><DepartmentPressure data={data} /></CardContent></Card><Card className="shadow-none"><CardHeader><CardTitle>Exit reasons</CardTitle><CardDescription>Recorded reasons for exits in this scope.</CardDescription></CardHeader><CardContent><ExitReasonChart rows={exitReasons} /></CardContent></Card></div>
+        <div className="grid gap-4 xl:grid-cols-[minmax(0,1.35fr)_minmax(320px,0.65fr)]"><Card className="gap-0 overflow-hidden py-0 shadow-none"><CardHeader className="border-b border-border px-5 py-4"><CardTitle>Department operating view</CardTitle><CardDescription>Movement, vacancy, and attrition compared on a common basis.</CardDescription></CardHeader><CardContent className="p-0"><DepartmentPressure data={data} onSelect={(department) => setFilters({ ...filters, department })} /></CardContent></Card><Card className="shadow-none"><CardHeader><CardTitle>Exit reasons</CardTitle><CardDescription>Recorded reasons for exits in this scope.</CardDescription></CardHeader><CardContent><ExitReasonChart rows={exitReasons} /></CardContent></Card></div>
         <Card className="gap-0 overflow-hidden py-0 shadow-none"><CardHeader className="border-b border-border px-5 py-4"><CardTitle>Action queue</CardTitle><CardDescription>Calculated exceptions with a durable owner and completion record.</CardDescription></CardHeader><CardContent className="divide-y divide-border p-0">{actions.map((action) => <div id={`insight-${action.id}`} key={action.id} className={cn("grid scroll-mt-24 gap-3 px-5 py-3 lg:grid-cols-[minmax(150px,0.7fr)_minmax(240px,1fr)_minmax(280px,1.35fr)_auto] lg:items-center", action.workItem?.id === selectedWorkItemId && "bg-accent/45 ring-1 ring-inset ring-primary/30")}><div><p className="text-card-title font-semibold">{action.department}</p><Badge className="mt-1" variant={action.severity === "high" ? "destructive" : "secondary"}>{action.severity === "high" ? "High" : "Review"}</Badge></div><div><p className="text-body font-semibold">{action.title}</p><p className="mt-0.5 text-meta text-muted-foreground">{action.evidence}</p></div><p className="text-body text-muted-foreground">{action.recommendedAction}</p><InsightActionButton action={action} filters={filters} onUpdated={() => setRefreshVersion((current) => current + 1)} /></div>)}{!actions.length && <p className="px-5 py-8 text-center text-body text-muted-foreground">No calculated exceptions in this reporting scope.</p>}</CardContent></Card>
         <Card className="gap-0 overflow-hidden py-0 shadow-none"><CardHeader className="border-b border-border px-5 py-4"><CardTitle>Department scorecard</CardTitle><CardDescription>Normalized movement, coverage, learning, mobility, and leave measures.</CardDescription></CardHeader><CardContent className="p-0"><div className="overflow-x-auto"><table className="w-full min-w-[1040px] text-left text-body"><thead className="bg-muted/40 text-label font-semibold text-muted-foreground"><tr>{["Department", "Active", "Movement", "Replacement coverage", "Learning", "Mobility review", "Leave planning"].map((heading) => <th key={heading} className="px-4 py-2.5">{heading}</th>)}</tr></thead><tbody>{departments.map((row) => <tr key={row.department} className="border-t border-border/70 hover:bg-muted/20"><td className="px-4 py-3"><button type="button" onClick={() => setFilters({ ...filters, department: row.department })} className="font-semibold hover:text-primary hover:underline">{row.department}</button></td><td className="px-4 py-3 tabular-nums">{row.activeEmployees}</td><td className="px-4 py-3"><p className="font-semibold tabular-nums">{row.netMovement > 0 ? "+" : ""}{row.netMovement}</p><p className="text-meta text-muted-foreground">{row.hires} hires · {row.exits} exits</p></td><td className="px-4 py-3"><div className="flex items-center gap-2"><Badge variant={row.coverageStatus === "Gap" ? "destructive" : row.coverageStatus === "Watch" ? "secondary" : "outline"}>{row.coverageStatus}</Badge><span className="tabular-nums">{percent(row.replacementRate)}</span></div><p className="mt-1 text-meta text-muted-foreground">{row.openRequisitions} open · {row.vacancyRate}% vacancy</p></td><td className="px-4 py-3"><p className="tabular-nums">{row.trainingCompletionRate}% complete</p><p className="text-meta text-muted-foreground">{row.mandatoryTrainingGaps} mandatory gaps</p></td><td className="px-4 py-3"><p className="tabular-nums">{row.mobilityReviewCount} employees</p><p className="text-meta text-muted-foreground">{row.mobilityReviewShare}% of active</p></td><td className="px-4 py-3"><p className="tabular-nums">{row.leaveDaysPerActiveEmployee} days / active</p><p className="text-meta text-muted-foreground">{row.pendingLeaveRequests} pending</p></td></tr>)}</tbody></table></div>{!departments.length && <p className="p-10 text-center text-body text-muted-foreground">No departments match the selected reporting scope.</p>}</CardContent></Card>
       </>}
@@ -479,12 +542,12 @@ export function InsightsWorkspace({ initialData }: { initialData: WorkforceAnaly
         <MetricStrip metrics={[
           { label: "Recorded exit cost", value: currency(impact.summary.estimatedCostOfRecordedExits), detail: "Scenario estimate for exits in scope" },
           { label: "Average replacement", value: currency(impact.summary.averageReplacementCost), detail: "Per costed exit" },
-          { label: "Review-weighted exposure", value: currency(impact.summary.reviewWeightedExposure), detail: "Active model-review cohort" },
+          { label: "Replacement coverage", value: percent(company.replacementRate), detail: "Completed hires per 100 exits" },
           { label: "Continuity reviews", value: impact.summary.rolesNeedingContinuityReview, detail: "Critical or watch roles" },
           { label: "Pay data coverage", value: `${impact.summary.payDataCoverage}%`, detail: "Active employee profiles" },
         ]} />
         <CostAssumptions key={Object.values(impact.assumptions).join("-")} data={data} onApply={(values) => setFilters((current) => ({ ...current, ...values }))} />
-        <div className="grid gap-4 xl:grid-cols-[minmax(0,0.8fr)_minmax(0,1.2fr)]"><Card className="shadow-none"><CardHeader><CardTitle>Role exposure</CardTitle><CardDescription>Replacement scenario weighted by model-review probability.</CardDescription></CardHeader><CardContent><RoleExposureChart data={data} /></CardContent></Card><EmployeeImpactPanel data={data} /></div>
+        <div className="grid gap-4 xl:grid-cols-[minmax(0,0.75fr)_minmax(0,1.25fr)]"><Card className="shadow-none"><CardHeader><CardTitle>Replacement cost by role</CardTitle><CardDescription>Average pay, refill time, and the current cost assumptions.</CardDescription></CardHeader><CardContent><ReplacementCostChart data={data} /></CardContent></Card><EmployeeImpactPanel data={data} filters={filters} /></div>
         <RoleContinuityTable data={data} />
       </>}
 

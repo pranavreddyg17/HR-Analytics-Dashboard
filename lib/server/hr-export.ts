@@ -127,7 +127,7 @@ function summarySheet(analytics: WorkforceAnalytics): Sheet<Buffer> {
     ["Learning completion", `${company.trainingCompletionRate}%`, `${company.mandatoryTrainingGaps} mandatory gaps`],
     ["Mobility review", analytics.promotions.withoutPromotionOver36Months, `${analytics.promotions.total} recorded promotions`],
     ["Recorded exit cost", `$${impact.summary.estimatedCostOfRecordedExits.toLocaleString("en-US")}`, "Scenario estimate using the stated cost assumptions"],
-    ["Review-weighted exposure", `$${impact.summary.reviewWeightedExposure.toLocaleString("en-US")}`, `${impact.summary.rolesNeedingContinuityReview} roles require continuity review`],
+    ["Replacement coverage", company.replacementRate === null ? "Not applicable" : `${company.replacementRate}%`, `${impact.summary.rolesNeedingContinuityReview} roles require continuity review`],
   ]
   const rows: SheetData = [
     titleRow("LaidbackHR.AI workforce decision report", 8),
@@ -164,18 +164,18 @@ function workforceImpactSheet(analytics: WorkforceAnalytics): Sheet<Buffer> {
     [textCell(impact.assumptions.currency), numberCell(impact.assumptions.recruitingCostPerHire, "$#,##0"), percentCell(impact.assumptions.vacancyProductivityPercent), numberCell(impact.assumptions.onboardingDays, "#,##0"), percentCell(impact.assumptions.onboardingProductivityPercent), numberCell(impact.assumptions.courseFeePerLearner, "$#,##0"), numberCell(impact.assumptions.courseHoursPerLearner, "0.0"), percentCell(impact.summary.payDataCoverage), ...Array(9).fill(null)],
     Array(17).fill(null),
     sectionRow("Role continuity", 17),
-    headerRow(["Department", "Role", "Status", "Active", "Exits", "Hires", "Open roles", "Review profiles", "Review share", "Mean model risk", "Refill days", "Refill basis", "Recruiting", "Vacancy", "Ramp", "Replacement / exit", "Review-weighted exposure"]),
+    headerRow(["Department", "Role", "Status", "Active", "Exits", "Hires", "Open roles", "Review profiles", "Review share", "Mean model risk", "Refill days", "Refill basis", "Recruiting", "Vacancy", "Ramp", "Replacement / exit", "Pay coverage"]),
   ]
   impact.roles.forEach((row) => data.push([
-    textCell(row.department), textCell(row.jobTitle, { fontWeight: "bold" }), textCell(row.continuityStatus, { fontWeight: "bold", textColor: row.continuityStatus === "Critical" ? ALERT : INK }), numberCell(row.activeEmployees, "#,##0"), numberCell(row.recordedExits, "#,##0"), numberCell(row.completedHires, "#,##0"), numberCell(row.openRequisitions, "#,##0"), numberCell(row.reviewProfiles, "#,##0"), percentCell(row.reviewShare), percentCell(row.meanModelRisk), numberCell(row.refillDays, "#,##0"), textCell(row.refillBasis), numberCell(row.directRecruitingCost, "$#,##0"), numberCell(row.vacancyCost, "$#,##0"), numberCell(row.onboardingCost, "$#,##0"), numberCell(row.replacementCostPerExit, "$#,##0"), numberCell(row.reviewWeightedExposure, "$#,##0"),
+    textCell(row.department), textCell(row.jobTitle, { fontWeight: "bold" }), textCell(row.continuityStatus, { fontWeight: "bold", textColor: row.continuityStatus === "Critical" ? ALERT : INK }), numberCell(row.activeEmployees, "#,##0"), numberCell(row.recordedExits, "#,##0"), numberCell(row.completedHires, "#,##0"), numberCell(row.openRequisitions, "#,##0"), numberCell(row.reviewProfiles, "#,##0"), percentCell(row.reviewShare), percentCell(row.meanModelRisk), numberCell(row.refillDays, "#,##0"), textCell(row.refillBasis), numberCell(row.directRecruitingCost, "$#,##0"), numberCell(row.vacancyCost, "$#,##0"), numberCell(row.onboardingCost, "$#,##0"), numberCell(row.replacementCostPerExit, "$#,##0"), percentCell(row.payDataCoverage),
   ]))
   return { data, sheet: "Workforce impact", columns: [{ width: 28 }, { width: 34 }, { width: 14 }, ...Array(8).fill({ width: 15 }), { width: 18 }, ...Array(5).fill({ width: 20 })], stickyRowsCount: 7, stickyColumnsCount: 2, showGridLines: false, zoomScale: 0.75, orientation: "landscape" }
 }
 
 function learningEconomicsSheet(analytics: WorkforceAnalytics): Sheet<Buffer> {
   const rows = analytics.decisionSupport.workforceImpact.learningCases
-  const data: SheetData = [headerRow(["Department", "Employees in review", "Employees with linked gap", "Incomplete assignments", "Assigned hours", "Proposed learning investment", "Linked review-weighted exposure", "Break-even", "Leading programme", "Decision"])]
-  rows.forEach((row) => data.push([textCell(row.department, { fontWeight: "bold" }), numberCell(row.employeesInReview, "#,##0"), numberCell(row.employeesWithLearningGap, "#,##0"), numberCell(row.incompleteAssignments, "#,##0"), numberCell(row.assignedHours, "0.0"), numberCell(row.proposedLearningInvestment, "$#,##0"), numberCell(row.reviewWeightedExposure, "$#,##0"), row.breakEvenPercent === null ? null : percentCell(row.breakEvenPercent), textCell(row.leadingProgram), textCell(row.decision)]))
+  const data: SheetData = [headerRow(["Department", "Employees in review", "Employees with linked gap", "Incomplete assignments", "Assigned hours", "Proposed learning investment", "Replacement scenario", "Cost comparison", "Leading programme", "Decision"])]
+  rows.forEach((row) => data.push([textCell(row.department, { fontWeight: "bold" }), numberCell(row.employeesInReview, "#,##0"), numberCell(row.employeesWithLearningGap, "#,##0"), numberCell(row.incompleteAssignments, "#,##0"), numberCell(row.assignedHours, "0.0"), numberCell(row.proposedLearningInvestment, "$#,##0"), numberCell(row.replacementScenario, "$#,##0"), row.breakEvenPercent === null ? null : percentCell(row.breakEvenPercent), textCell(row.leadingProgram), textCell(row.decision)]))
   return { data, sheet: "Learning economics", columns: [{ width: 30 }, { width: 20 }, { width: 25 }, { width: 22 }, { width: 18 }, { width: 28 }, { width: 32 }, { width: 16 }, { width: 34 }, { width: 22 }], stickyRowsCount: 1, showGridLines: false, zoomScale: 0.85, orientation: "landscape" }
 }
 
@@ -393,7 +393,7 @@ export async function createExecutivePdf(analytics: WorkforceAnalytics): Promise
     ["Learning", `${pdfPercent(company.trainingCompletionRate)} complete`, `${company.mandatoryTrainingGaps} mandatory gaps`],
     ["Mobility", `${analytics.promotions.withoutPromotionOver36Months} reviews`, `${analytics.promotions.total} recorded promotions`],
     ["Recorded exit cost", pdfMoney(impact.summary.estimatedCostOfRecordedExits), "Scenario estimate for exits in scope"],
-    ["Review-weighted exposure", pdfMoney(impact.summary.reviewWeightedExposure), `${impact.summary.rolesNeedingContinuityReview} roles require continuity review`],
+    ["Replacement coverage", pdfPercent(company.replacementRate), `${impact.summary.rolesNeedingContinuityReview} roles require continuity review`],
   ], [128, 104, 308], 8)
 
   heading("Priority decisions")
@@ -425,10 +425,10 @@ export async function createExecutivePdf(analytics: WorkforceAnalytics): Promise
 
   addPage("landscape")
   heading("Workforce impact and replacement cost")
-  table(["Role", "Department", "Status", "Active", "Exits", "Hires", "Open", "Refill", "Cost / exit", "Weighted exposure"], impact.roles.slice(0, 12).map((row) => [row.jobTitle, row.department, row.continuityStatus, String(row.activeEmployees), String(row.recordedExits), String(row.completedHires), String(row.openRequisitions), `${row.refillDays} days`, pdfMoney(row.replacementCostPerExit), pdfMoney(row.reviewWeightedExposure)]), [115, 112, 48, 38, 36, 36, 36, 55, 72, 78], 6.6)
+  table(["Role", "Department", "Status", "Active", "Exits", "Hires", "Open", "Refill", "Cost / exit", "Pay coverage"], impact.roles.slice(0, 12).map((row) => [row.jobTitle, row.department, row.continuityStatus, String(row.activeEmployees), String(row.recordedExits), String(row.completedHires), String(row.openRequisitions), `${row.refillDays} days`, pdfMoney(row.replacementCostPerExit), pdfPercent(row.payDataCoverage)]), [115, 112, 48, 38, 36, 36, 36, 55, 72, 78], 6.6)
 
   heading("Learning investment screen")
-  table(["Department", "Linked employees", "Assignments", "Course scenario", "Linked exposure", "Break-even", "Decision"], impact.learningCases.map((row) => [row.department, `${row.employeesWithLearningGap} of ${row.employeesInReview}`, String(row.incompleteAssignments), pdfMoney(row.proposedLearningInvestment), pdfMoney(row.reviewWeightedExposure), row.breakEvenPercent === null ? "N/A" : pdfPercent(row.breakEvenPercent), row.decision]), [125, 90, 70, 100, 100, 75, 105], 7)
+  table(["Department", "Linked employees", "Assignments", "Course scenario", "Replacement scenario", "Cost comparison", "Decision"], impact.learningCases.map((row) => [row.department, `${row.employeesWithLearningGap} of ${row.employeesInReview}`, String(row.incompleteAssignments), pdfMoney(row.proposedLearningInvestment), pdfMoney(row.replacementScenario), row.breakEvenPercent === null ? "N/A" : pdfPercent(row.breakEvenPercent), row.decision]), [125, 90, 70, 100, 100, 75, 105], 7)
   paragraph(`Scenario assumptions: ${pdfMoney(impact.assumptions.recruitingCostPerHire)} direct recruiting cost; ${pdfPercent(impact.assumptions.vacancyProductivityPercent)} vacancy impact; ${impact.assumptions.onboardingDays} ramp days at ${pdfPercent(impact.assumptions.onboardingProductivityPercent)} impact; ${pdfMoney(impact.assumptions.courseFeePerLearner)} course fee plus ${impact.assumptions.courseHoursPerLearner} employee hours. Pay coverage: ${pdfPercent(impact.summary.payDataCoverage)}.`, 7.2)
 
   const pages = document.getPages()

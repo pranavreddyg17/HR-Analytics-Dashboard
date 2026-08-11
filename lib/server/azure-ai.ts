@@ -2,6 +2,11 @@ import { runtimeEnv } from "@/lib/server/runtime-env"
 
 type SearchDocument = { source?: string; section?: string; content?: string; "@search.score"?: number }
 type KnowledgeResult = Array<{ source: string; section: string; content: string }>
+type AzureResponseInput = {
+  system: string
+  user: string
+  maxOutputTokens?: number
+}
 
 const KNOWLEDGE_CACHE_TTL_MS = 5 * 60 * 1000
 const KNOWLEDGE_CACHE_LIMIT = 100
@@ -85,7 +90,7 @@ export async function searchAzureKnowledge(query: string, limit = 4): Promise<Kn
   return matches
 }
 
-export async function synthesizeWithAzureResponses(input: { system: string; user: string }): Promise<string | null> {
+async function requestAzureResponse(input: AzureResponseInput, text?: Record<string, unknown>): Promise<string | null> {
   const endpoint = configured("AZURE_OPENAI_ENDPOINT")
   const apiKey = configured("AZURE_OPENAI_API_KEY")
   const model = configured("AZURE_OPENAI_MODEL")
@@ -96,16 +101,47 @@ export async function synthesizeWithAzureResponses(input: { system: string; user
     body: JSON.stringify({
       model,
       temperature: 0,
+      max_output_tokens: input.maxOutputTokens ?? 2_400,
       input: [
         { role: "system", content: [{ type: "input_text", text: input.system }] },
         { role: "user", content: [{ type: "input_text", text: input.user }] },
       ],
+      ...(text ? { text } : {}),
     }),
-    signal: AbortSignal.timeout(15_000),
+    signal: AbortSignal.timeout(25_000),
   })
   if (!response.ok) return null
   const body = await response.json() as { output_text?: string; output?: Array<{ content?: Array<{ type?: string; text?: string }> }> }
   return (body.output_text ?? body.output?.flatMap((item) => item.content ?? []).find((item) => item.type === "output_text")?.text ?? "").trim() || null
+}
+
+export async function synthesizeWithAzureResponses(input: AzureResponseInput): Promise<string | null> {
+  return requestAzureResponse(input)
+}
+
+/**
+ * Request a schema-constrained planning response from the approved Azure
+ * Foundry deployment. Callers still validate the parsed value before it can
+ * influence a database or MCP operation.
+ */
+export async function generateAzureJson<T>(input: AzureResponseInput & {
+  schemaName: string
+  schema: Record<string, unknown>
+}): Promise<T | null> {
+  const output = await requestAzureResponse(input, {
+    format: {
+      type: "json_schema",
+      name: input.schemaName,
+      strict: true,
+      schema: input.schema,
+    },
+  })
+  if (!output) return null
+  try {
+    return JSON.parse(output) as T
+  } catch {
+    return null
+  }
 }
 
 export function azureAiConfiguration() {

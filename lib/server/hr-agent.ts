@@ -4,12 +4,14 @@ import { InMemoryTransport } from "@modelcontextprotocol/sdk/inMemory.js"
 
 import { buildHrSystemPrompt, type KnowledgeMatch } from "@/lib/server/hr-knowledge"
 import { resolveHrIntent, type AgentHistoryMessage, type ToolPlan } from "@/lib/server/hr-agent-intent"
+import { planHrAgentWithAzure, shouldUseAzurePlanner } from "@/lib/server/hr-agent-planner"
 import { renderHrEvidence } from "@/lib/server/hr-agent-response"
 import { getWorkforceDimensions } from "@/lib/server/hr-analytics"
 import { createHrMcpServer } from "@/lib/server/hr-mcp"
 import { ensureHrDatabase } from "@/lib/server/hr-repository"
 import { runtimeEnv } from "@/lib/server/runtime-env"
 import { synthesizeWithAzureResponses } from "@/lib/server/azure-ai"
+import { planAiWorkflow } from "@/lib/server/ai-workflows"
 import type { AssistantPageContext } from "@/lib/assistant-page-context"
 import type { RequestActor } from "@/lib/server/request-user"
 
@@ -32,6 +34,13 @@ type AgentAnswer = {
   context: Array<Pick<KnowledgeMatch, "source" | "section">>
   dataMode?: string
   groundedAt: string
+  workflow?: {
+    prompt: string
+    type: "calendar_invite" | "learning_assignment" | "hiring_requisition" | "retention_review"
+    title: string
+    evidence: string
+    requiresConfirmation: true
+  }
 }
 
 type AgentProgress =
@@ -119,9 +128,24 @@ function followUpEvidencePlans(evidence: EvidenceResult[], iteration: number): T
   ]
 }
 
-function needsGenerativeSynthesis(query: string, evidence: EvidenceResult[]): boolean {
-  if (evidence.length > 1) return true
-  return /\bwhy\b|\bexplain\b|\brecommend|\bplan\b|\bprevent|\bretain|\bintervention|\bstrategy|\bdraft\b/i.test(query)
+function isWorkflowCommand(query: string): boolean {
+  return /\b(?:schedule|set up|invite)\b.{0,60}\b(?:meeting|calendar|one[- ]to[- ]one|1:1)\b/i.test(query)
+    || /\b(?:assign|enrol|enroll)\b.{0,60}\b(?:course|training|learning|certification)\b/i.test(query)
+    || /\b(?:request|open|create|submit|hire)\b.{0,120}\b(?:position|role|requisition|headcount|because|business need)\b/i.test(query)
+    || /\b(?:create|start|open)\b.{0,60}\bretention review\b/i.test(query)
+}
+
+function compactEvidence(value: unknown, depth = 0): unknown {
+  if (depth > 5) return "[nested evidence omitted]"
+  if (Array.isArray(value)) return value.slice(0, 20).map((item) => compactEvidence(item, depth + 1))
+  if (value && typeof value === "object") {
+    return Object.fromEntries(Object.entries(value as Record<string, unknown>)
+      .filter(([key]) => !["directoryEmployees", "rows"].includes(key))
+      .slice(0, 80)
+      .map(([key, item]) => [key, compactEvidence(item, depth + 1)]))
+  }
+  if (typeof value === "string") return value.slice(0, 1_500)
+  return value
 }
 
 async function loadInProcessMcpTools(actor?: RequestActor) {
@@ -143,20 +167,26 @@ async function loadInProcessMcpTools(actor?: RequestActor) {
 async function synthesizeWithModel({
   query,
   draft,
+  evidence,
   systemPrompt,
 }: {
   query: string
   draft: string
+  evidence: EvidenceResult[]
   systemPrompt: string
 }): Promise<string | null> {
-  const synthesisInstruction = `${systemPrompt}\n\nYou are synthesizing a completed, deterministic tool result. Use only the supplied draft. Preserve every number and data-source qualification. Do not add facts, repeat sections, or mention tools. Return a concise answer beginning with the same Current source line.`
-  const userContent = `Question:\n${query}\n\nGrounded draft:\n${draft}`
-  const azureAnswer = await synthesizeWithAzureResponses({ system: synthesisInstruction, user: userContent }).catch(() => null)
+  const evidenceJson = JSON.stringify(evidence.map(({ plan, data }) => ({
+    tool: plan.name,
+    purpose: plan.purpose,
+    evidence: compactEvidence(data),
+  })))
+  const synthesisInstruction = `${systemPrompt}\n\nYou are composing the final answer from completed read-only evidence. Answer the user's exact question and respect the current page scope. Lead with the decision-useful conclusion. Use concise bullets or a compact table when useful. Use only facts in the supplied evidence; do not invent a number, name, status, date, relationship, or cause. Do not say “Current source”, describe tool mechanics, append a generic disclaimer, or repeat the question. State a limitation only when it changes the decision. Observed outcomes, model signals, and planning scenarios must remain distinct.`
+  const userContent = `Question:\n${query}\n\nStructured evidence:\n${evidenceJson}\n\nDeterministic reference draft:\n${draft}`
+  const azureAnswer = await synthesizeWithAzureResponses({ system: synthesisInstruction, user: userContent, maxOutputTokens: 2_800 }).catch(() => null)
   if (azureAnswer) {
-    const draftSource = draft.split("\n", 1)[0]
-    const allowedNumbers = numericTokens(draft)
+    const allowedNumbers = numericTokens(`${query}\n${draft}\n${evidenceJson}`)
     const introducedNumber = [...numericTokens(azureAnswer)].some((token) => !allowedNumbers.has(token))
-    if (azureAnswer.length <= 6_000 && azureAnswer.split("\n", 1)[0] === draftSource && !introducedNumber) return azureAnswer
+    if (azureAnswer.length <= 8_000 && !introducedNumber) return azureAnswer
   }
   return null
 }
@@ -209,13 +239,44 @@ export async function runHrAgent({ message, history = [], actor, conversationId,
   const safeHistory = history
     .filter((item): item is AgentHistoryMessage => Boolean(item) && (item.role === "user" || item.role === "assistant") && typeof item.content === "string")
     .slice(-12)
+  if (actor && actor.role !== "employee" && isWorkflowCommand(query)) {
+    try {
+      await onProgress?.({ phase: "planning", message: "Preparing a governed workflow" })
+      const workflow = await planAiWorkflow({ prompt: query }, actor)
+      const answer = `${workflow.title}\n\n${workflow.evidence}\n\nReview the affected records and confirm before anything is written or sent.`
+      await finishRun(runId, "completed", "azure-foundry-workflow-planner")
+      return {
+        answer,
+        provider: "azure-foundry-workflow-planner",
+        tools: [],
+        context: [],
+        groundedAt: new Date().toISOString(),
+        workflow: {
+          prompt: query,
+          type: workflow.type,
+          title: workflow.title,
+          evidence: workflow.evidence,
+          requiresConfirmation: true,
+        },
+      }
+    } catch (error) {
+      const answer = error instanceof Error ? error.message : "The workflow needs more information before it can be prepared."
+      await finishRun(runId, "completed", "workflow-clarification")
+      return { answer, provider: "workflow-clarification", tools: [], context: [], groundedAt: new Date().toISOString() }
+    }
+  }
+
   const dimensions = await getWorkforceDimensions()
   await onProgress?.({ phase: "planning", message: "Selecting workspace evidence" })
   const focus = agentId ? agentFocus[agentId] : undefined
   // Intent routing must reflect the user's objective, not the agent's role
   // description. Mixing the two can select an unrelated MCP schema (for
   // example, a generic workforce objective being treated as a comparison).
-  const intent = resolveHrIntent(query, safeHistory, dimensions, pageContext)
+  const fallbackIntent = resolveHrIntent(query, safeHistory, dimensions, pageContext)
+  const modelIntent = shouldUseAzurePlanner(query, fallbackIntent, pageContext)
+    ? await planHrAgentWithAzure({ query, history: safeHistory, pageContext, dimensions })
+    : null
+  const intent = modelIntent?.inScope && modelIntent.plans.length ? modelIntent : fallbackIntent
   const pageScope = pageContext ? `${pageContext.label}${Object.keys(pageContext.filters).length ? ` (${Object.entries(pageContext.filters).map(([key, value]) => `${key}: ${value}`).join(", ")})` : ""}` : ""
 
   if (!intent.inScope || !intent.plans.length) {
@@ -265,9 +326,7 @@ export async function runHrAgent({ message, history = [], actor, conversationId,
     const prompt = promptParts.join("\n\n")
     const citedContext = context.map(({ source, section }) => ({ source, section }))
     await onProgress?.({ phase: "synthesis", message: "Preparing grounded response" })
-    const synthesized = needsGenerativeSynthesis(query, evidence)
-      ? await synthesizeWithModel({ query, draft, systemPrompt: prompt })
-      : null
+    const synthesized = await synthesizeWithModel({ query, draft, evidence, systemPrompt: prompt })
     const answer = synthesized ?? draft
     const dataMode = evidence.map((item) => item.data.dataMode).find((value): value is string => typeof value === "string")
     const provider = synthesized ? "azure-openai-langchain-mcp" : "langchain-mcp-deterministic-orchestrator"

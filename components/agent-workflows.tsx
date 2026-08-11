@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useState } from "react"
+import { useEffect, useRef, useState } from "react"
 import { signIn } from "next-auth/react"
 
 import { Button } from "@/components/ui/button"
@@ -81,7 +81,7 @@ function dateTimeLabel(value: string): string {
   return Number.isFinite(parsed.getTime()) ? new Intl.DateTimeFormat("en", { dateStyle: "medium", timeStyle: "short" }).format(parsed) : value.replace("T", " ")
 }
 
-export function AgentWorkflows({ canPrepare }: { canPrepare: boolean }) {
+export function AgentWorkflows({ canPrepare, initialPrompt = "" }: { canPrepare: boolean; initialPrompt?: string }) {
   const [calendarConnection, setCalendarConnection] = useState<"loading" | "connected" | "disconnected">("loading")
   const [prompt, setPrompt] = useState("")
   const [plan, setPlan] = useState<WorkflowPlan | null>(null)
@@ -92,6 +92,7 @@ export function AgentWorkflows({ canPrepare }: { canPrepare: boolean }) {
   const [errorCode, setErrorCode] = useState("")
   const [notice, setNotice] = useState("")
   const [eventUrl, setEventUrl] = useState("")
+  const initialPromptHandled = useRef(false)
 
   useEffect(() => {
     let active = true
@@ -104,6 +105,14 @@ export function AgentWorkflows({ canPrepare }: { canPrepare: boolean }) {
       .catch(() => { if (active) setCalendarConnection("disconnected") })
     return () => { active = false }
   }, [])
+
+  useEffect(() => {
+    if (!initialPrompt || initialPromptHandled.current || !canPrepare) return
+    initialPromptHandled.current = true
+    void createPlan(initialPrompt)
+    // The handoff prompt is immutable for this mounted workflow workspace.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [initialPrompt, canPrepare])
 
   function connectGoogleCalendar() {
     void signIn("google", { callbackUrl: "/assistant" }, {

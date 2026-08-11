@@ -7,6 +7,7 @@ import correlatedEmployeeExperienceMigration from "@/db/postgres/0004_correlated
 import operatingModelMigration from "@/db/postgres/0005_operating_model.sql?raw"
 import onboardingAndCapabilityMigration from "@/db/postgres/0006_onboarding_and_capability.sql?raw"
 import employeeServiceOutcomesMigration from "@/db/postgres/0007_employee_service_outcomes.sql?raw"
+import aiWorkflowHandoffsMigration from "@/db/postgres/0008_ai_workflow_handoffs.sql?raw"
 import type { Database, Statement } from "@/lib/server/hr-repository"
 import { invalidateAnalyticsReads, sqlAffectsAnalytics } from "@/lib/server/analytics-cache"
 import { runtimeEnv } from "@/lib/server/runtime-env"
@@ -128,6 +129,7 @@ async function initialize(pool: Pool): Promise<void> {
       { id: "0005_operating_model", sql: operatingModelMigration },
       { id: "0006_onboarding_and_capability", sql: onboardingAndCapabilityMigration },
       { id: "0007_employee_service_outcomes", sql: employeeServiceOutcomesMigration },
+      { id: "0008_ai_workflow_handoffs", sql: aiWorkflowHandoffsMigration },
     ]
     for (const migration of migrations) {
       const applied = await client.query<QueryResultRow>("SELECT id FROM schema_migrations WHERE id=$1", [migration.id])

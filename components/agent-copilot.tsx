@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from "react"
 import { ArrowUp, LoaderCircle } from "lucide-react"
+import Link from "next/link"
 
 import { Button } from "@/components/ui/button"
 import { assistantPagePrompts, type AssistantPageContext } from "@/lib/assistant-page-context"
@@ -14,6 +15,13 @@ type ChatMessage = {
   tools?: Array<{ tool: string; status: string }>
   context?: Array<{ source: string; section: string }>
   dataMode?: string
+  workflow?: {
+    prompt: string
+    type: "calendar_invite" | "learning_assignment" | "hiring_requisition" | "retention_review"
+    title: string
+    evidence: string
+    requiresConfirmation: true
+  }
 }
 
 type ConversationSummary = {
@@ -30,6 +38,8 @@ const toolLabels: Record<string, string> = {
   review_people_operations: "People operations",
   find_employee_records: "Employee directory",
   review_work_queue: "Current work queue",
+  review_onboarding_readiness: "Onboarding readiness",
+  review_capability_plan: "Capability plan",
 }
 
 const defaultSuggestedPrompts = [
@@ -180,6 +190,7 @@ export function AgentCopilot({ dataMode, pageContext, compact = false }: { dataM
             tools?: ChatMessage["tools"]
             context?: ChatMessage["context"]
             dataMode?: string
+            workflow?: ChatMessage["workflow"]
           }
           if (eventName === "conversation" && payload.conversationId) {
             nextConversationId = payload.conversationId
@@ -194,7 +205,7 @@ export function AgentCopilot({ dataMode, pageContext, compact = false }: { dataM
           }
           if (eventName === "metadata") {
             setMessages((current) => current.map((message) => message.id === streamMessageId
-              ? { ...message, tools: payload.tools, context: payload.context, dataMode: payload.dataMode }
+              ? { ...message, tools: payload.tools, context: payload.context, dataMode: payload.dataMode, workflow: payload.workflow }
               : message))
           }
           if (eventName === "error") streamError = payload.detail ?? "The assistant is unavailable."
@@ -255,6 +266,19 @@ export function AgentCopilot({ dataMode, pageContext, compact = false }: { dataM
                   <span>Sources:</span>
                   {message.tools?.map((trace) => <span key={trace.tool}>{toolLabels[trace.tool] ?? trace.tool}</span>)}
                   {message.context?.map((item) => <span key={`${item.source}-${item.section}`}>{item.source.startsWith("Azure AI Search") ? `Azure AI Search · ${item.section}` : item.section}</span>)}
+                </div>
+              )}
+              {message.role === "assistant" && message.workflow && (
+                <div className="mt-3 rounded-md border border-border bg-card p-3">
+                  <p className="text-label font-semibold">Prepared workflow</p>
+                  <p className="mt-1 text-body font-semibold">{message.workflow.title}</p>
+                  <p className="mt-1 text-meta text-muted-foreground">{message.workflow.evidence}</p>
+                  <Link
+                    href={`/assistant?view=workflows&prompt=${encodeURIComponent(message.workflow.prompt)}`}
+                    className="mt-3 inline-flex h-8 items-center rounded-md bg-primary px-3 text-control font-semibold text-primary-foreground hover:bg-primary/90"
+                  >
+                    Review and confirm
+                  </Link>
                 </div>
               )}
             </div>

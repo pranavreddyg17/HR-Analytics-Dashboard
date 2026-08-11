@@ -30,6 +30,37 @@ export type WorkforceCostAssumptions = {
   courseHoursPerLearner: number
 }
 
+export type EmployeeImpactSearchResult = {
+  employeeId: string
+  name: string
+  department: string
+  jobTitle: string
+  location: string
+}
+
+export type EmployeeImpactScenario = EmployeeImpactSearchResult & {
+  manager: string
+  employmentStatus: string
+  riskScore: number | null
+  riskLevel: string | null
+  topDriver: string | null
+  activeRolePeers: number
+  directReports: number
+  openMatchingRequisitions: number
+  refillDays: number
+  refillBasis: "role" | "department" | "company" | "policy"
+  payDataAvailable: boolean
+  annualPay: number
+  directRecruitingCost: number
+  vacancyCost: number
+  onboardingCost: number
+  replacementCost: number
+  incompleteLearningAssignments: number
+  proposedLearningInvestment: number
+  learningBreakEvenPercent: number
+  continuityStatus: "Critical" | "Watch" | "Covered"
+}
+
 export type BreakdownPoint = { label: string; value: number; secondary?: number }
 export type TimePoint = { period: string; value: number; secondary?: number }
 
@@ -374,7 +405,7 @@ export type WorkforceAnalytics = {
         averageAnnualPay: number
         payDataCoverage: number
         refillDays: number
-        refillBasis: "role" | "department" | "company"
+        refillBasis: "role" | "department" | "company" | "policy"
         directRecruitingCost: number
         vacancyCost: number
         onboardingCost: number
@@ -382,30 +413,7 @@ export type WorkforceAnalytics = {
         reviewWeightedExposure: number
         continuityStatus: "Critical" | "Watch" | "Covered"
       }>
-      employees: Array<{
-        employeeId: string
-        name: string
-        department: string
-        jobTitle: string
-        manager: string
-        riskScore: number
-        topDriver: string
-        activeRolePeers: number
-        directReports: number
-        openMatchingRequisitions: number
-        refillDays: number
-        refillBasis: "role" | "department" | "company"
-        annualPay: number
-        directRecruitingCost: number
-        vacancyCost: number
-        onboardingCost: number
-        replacementCost: number
-        reviewWeightedExposure: number
-        incompleteLearningAssignments: number
-        proposedLearningInvestment: number
-        learningBreakEvenPercent: number
-        continuityStatus: "Critical" | "Watch" | "Covered"
-      }>
+      employees: Array<EmployeeImpactScenario & { reviewWeightedExposure: number }>
       learningCases: Array<{
         department: string
         employeesInReview: number
@@ -413,6 +421,7 @@ export type WorkforceAnalytics = {
         incompleteAssignments: number
         assignedHours: number
         proposedLearningInvestment: number
+        replacementScenario: number
         reviewWeightedExposure: number
         breakEvenPercent: number | null
         leadingProgram: string | null

@@ -58,6 +58,15 @@ const allowedFilterKeys = new Set([
   "request",
   "assignment",
   "section",
+  "q",
+  "jobTitle",
+  "from",
+  "to",
+  "period",
+  "leaveType",
+  "candidateRecord",
+  "candidateQ",
+  "status",
 ])
 
 function safeFilters(value: unknown): Record<string, string> {

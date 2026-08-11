@@ -1,15 +1,9 @@
-import { readFile } from "node:fs/promises"
+import { readFile, readdir } from "node:fs/promises"
 import { join } from "node:path"
 
-const files = [
-  "hr-workspace-context.md",
-  "workspace-operations.md",
-  "analytics-metric-contracts.md",
-  "lifecycle-operating-playbooks.md",
-  "capability-and-learning.md",
-  "assistant-retrieval-guide.md",
-  "data-governance-and-quality.md",
-]
+const files = (await readdir(join(process.cwd(), "knowledge")))
+  .filter((file) => file.endsWith(".md") && file !== "laidbackhr-system-prompt.md")
+  .sort()
 const stopWords = new Set(["a", "an", "and", "are", "as", "at", "be", "by", "for", "from", "how", "in", "is", "it", "of", "on", "or", "that", "the", "this", "to", "what", "when", "where", "which", "who", "with"])
 const terms = (value) => new Set(value.toLowerCase().replace(/[^a-z0-9\s-]/g, " ").split(/\s+/).filter((term) => term.length > 2 && !stopWords.has(term)))
 
@@ -37,6 +31,9 @@ const probes = [
   { query: "new joiner verification readiness", expected: "lifecycle-operating-playbooks.md" },
   { query: "employee data privacy access", expected: "data-governance-and-quality.md" },
   { query: "which tool should answer a current page queue", expected: "assistant-retrieval-guide.md" },
+  { query: "reimbursement employee service resolution", expected: "employee-services-and-portal.md" },
+  { query: "replacement scenario workforce impact", expected: "insights-decision-support.md" },
+  { query: "workflow confirmation copilot planner", expected: "ai-copilot-operating-model.md" },
 ]
 const failures = []
 for (const probe of probes) {

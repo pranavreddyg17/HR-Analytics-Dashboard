@@ -1,6 +1,7 @@
 "use client"
 
 import { useState } from "react"
+import { useSearchParams } from "next/navigation"
 
 import { AgentCopilot } from "@/components/agent-copilot"
 import { AgentWorkflows } from "@/components/agent-workflows"
@@ -9,7 +10,9 @@ import { cn } from "@/lib/utils"
 type View = "chat" | "workflows"
 
 export function AiAssistantWorkspace({ dataMode, canPrepare }: { dataMode: string; canPrepare: boolean }) {
-  const [view, setView] = useState<View>("chat")
+  const searchParams = useSearchParams()
+  const initialPrompt = searchParams.get("prompt")?.slice(0, 1_200) ?? ""
+  const [view, setView] = useState<View>(() => searchParams.get("view") === "workflows" || initialPrompt ? "workflows" : "chat")
 
   return (
     <section className="overflow-hidden rounded-lg border border-border bg-card">
@@ -23,7 +26,7 @@ export function AiAssistantWorkspace({ dataMode, canPrepare }: { dataMode: strin
       {view === "chat" ? (
         <div className="flex h-[680px] min-h-0 flex-col bg-muted/15"><AgentCopilot dataMode={dataMode} /></div>
       ) : (
-        <div className="p-4 sm:p-5"><AgentWorkflows canPrepare={canPrepare} /></div>
+        <div className="p-4 sm:p-5"><AgentWorkflows canPrepare={canPrepare} initialPrompt={initialPrompt} /></div>
       )}
     </section>
   )

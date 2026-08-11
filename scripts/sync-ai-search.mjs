@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto"
-import { readFile } from "node:fs/promises"
+import { readFile, readdir } from "node:fs/promises"
 import { basename, join } from "node:path"
 
 const required = (name) => {
@@ -58,15 +58,9 @@ async function request(url, options) {
 
 // The index contains stable domain and operating guidance only. The private
 // system prompt remains in the application and is never copied into retrieval.
-const files = [
-  "hr-workspace-context.md",
-  "workspace-operations.md",
-  "analytics-metric-contracts.md",
-  "lifecycle-operating-playbooks.md",
-  "capability-and-learning.md",
-  "assistant-retrieval-guide.md",
-  "data-governance-and-quality.md",
-]
+const files = (await readdir(join(process.cwd(), "knowledge")))
+  .filter((file) => file.endsWith(".md") && file !== "laidbackhr-system-prompt.md")
+  .sort()
 const documents = (await Promise.all(files.map(async (file) => chunks(await readFile(join(process.cwd(), "knowledge", file), "utf8"), basename(file))))).flat()
 const embeddingResponse = await request(embeddingUrl(), {
   method: "POST",
@@ -132,6 +126,9 @@ const qualityProbes = [
   { query: "new joiner verification readiness", expected: "lifecycle-operating-playbooks.md" },
   { query: "employee data privacy access", expected: "data-governance-and-quality.md" },
   { query: "which tool should answer a current page queue", expected: "assistant-retrieval-guide.md" },
+  { query: "how should HR triage reimbursement and employee service cases", expected: "employee-services-and-portal.md" },
+  { query: "how should workforce impact and replacement scenarios be interpreted", expected: "insights-decision-support.md" },
+  { query: "what can the workflow agent prepare and what requires confirmation", expected: "ai-copilot-operating-model.md" },
 ]
 
 async function runQualityProbes() {

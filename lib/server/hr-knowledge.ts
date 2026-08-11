@@ -6,6 +6,10 @@ import dataGovernanceMarkdown from "@/knowledge/data-governance-and-quality.md?r
 import workspaceContextMarkdown from "@/knowledge/hr-workspace-context.md?raw"
 import lifecyclePlaybooksMarkdown from "@/knowledge/lifecycle-operating-playbooks.md?raw"
 import workspaceOperationsMarkdown from "@/knowledge/workspace-operations.md?raw"
+import employeeServicesMarkdown from "@/knowledge/employee-services-and-portal.md?raw"
+import insightsDecisionSupportMarkdown from "@/knowledge/insights-decision-support.md?raw"
+import aiCopilotOperatingModelMarkdown from "@/knowledge/ai-copilot-operating-model.md?raw"
+import actorApprovalModelMarkdown from "@/knowledge/actor-and-approval-model.md?raw"
 import { searchAzureKnowledge } from "@/lib/server/azure-ai"
 
 export type KnowledgeMatch = {
@@ -66,6 +70,10 @@ const knowledgeChunks = [
   ...chunksFromMarkdown("Capability and learning guide", capabilityLearningMarkdown),
   ...chunksFromMarkdown("Assistant retrieval guide", assistantRetrievalGuideMarkdown),
   ...chunksFromMarkdown("Data governance and quality guide", dataGovernanceMarkdown),
+  ...chunksFromMarkdown("Employee services and portal guide", employeeServicesMarkdown),
+  ...chunksFromMarkdown("Insights decision-support guide", insightsDecisionSupportMarkdown),
+  ...chunksFromMarkdown("AI copilot operating model", aiCopilotOperatingModelMarkdown),
+  ...chunksFromMarkdown("Actor and approval model", actorApprovalModelMarkdown),
 ]
 
 function retrieveHrContext(query: string, limit = 3): KnowledgeMatch[] {

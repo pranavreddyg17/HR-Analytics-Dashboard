@@ -52,6 +52,7 @@ export async function POST(request: Request) {
                 context: answer.context,
                 dataMode: answer.dataMode,
                 provider: answer.provider,
+                workflow: answer.workflow,
               })
               controller.enqueue(event("metadata", {
                 tools: answer.tools,
@@ -59,6 +60,7 @@ export async function POST(request: Request) {
                 dataMode: answer.dataMode,
                 provider: answer.provider,
                 groundedAt: answer.groundedAt,
+                workflow: answer.workflow,
               }))
               controller.enqueue(event("done", { conversationId: conversation.id }))
             } catch (error) {
@@ -87,6 +89,7 @@ export async function POST(request: Request) {
       context: answer.context,
       dataMode: answer.dataMode,
       provider: answer.provider,
+      workflow: answer.workflow,
     })
     return Response.json({ ...answer, conversationId: conversation.id })
   } catch (error) {

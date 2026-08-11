@@ -1,7 +1,7 @@
 import type { HrFilters } from "@/lib/hr-types"
 import type { AssistantPageContext } from "@/lib/assistant-page-context"
 
-type HrToolName = "workforce_overview" | "compare_departments" | "analyze_attrition_signals" | "review_people_operations" | "find_employee_records" | "review_work_queue" | "review_onboarding_readiness" | "review_capability_plan"
+export type HrToolName = "workforce_overview" | "compare_departments" | "analyze_attrition_signals" | "review_people_operations" | "find_employee_records" | "review_work_queue" | "review_onboarding_readiness" | "review_capability_plan"
 
 type StoredToolContext = {
   tool: string
@@ -19,7 +19,7 @@ export type AgentHistoryMessage = {
   tools?: StoredToolContext[]
 }
 
-type PlanPurpose =
+export type PlanPurpose =
   | "workforce_summary"
   | "manager_concentration"
   | "replacement_coverage"

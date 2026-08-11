@@ -4,6 +4,7 @@ import { createAiWorkflowDraft, executeAiWorkflow, planAiWorkflow } from "@/lib/
 import { downloadEmployeeDocument, uploadEmployeeDocument } from "@/lib/server/employee-documents"
 import { manageEmployee } from "@/lib/server/employee-management"
 import { createEmployeeCase, createExpenseClaim, getEmployeePortal, submitSelfReview } from "@/lib/server/employee-portal"
+import { getEmployeeImpactScenario, searchEmployeeImpactPeople } from "@/lib/server/employee-impact"
 import { getEmployeeOnboardingState, submitEmployeeOnboarding } from "@/lib/server/employee-onboarding"
 import { createHiringCandidate, updateHiringCandidate } from "@/lib/server/hiring"
 import { runHrAgent } from "@/lib/server/hr-agent"
@@ -79,7 +80,18 @@ await db.batch([
   db.prepare("UPDATE app_users SET employee_id=?, onboarding_status='complete' WHERE email=?").bind(adminRecord.employee_id, admin.email),
   db.prepare("UPDATE app_users SET employee_id=?, onboarding_status='complete' WHERE email=?").bind(managerRecord.employee_id, manager.email),
   db.prepare("UPDATE app_users SET employee_id=?, onboarding_status='complete' WHERE email=?").bind(employeeRecord.employee_id, employee.email),
+  db.prepare("INSERT INTO employee_compensation(id, employee_id, annual_salary, currency, pay_frequency, effective_from, created_by_email) VALUES ('INT-COMP-EMPLOYEE', ?, 120000, 'USD', 'annual', '2026-01-01', ?) ON CONFLICT(id) DO UPDATE SET annual_salary=excluded.annual_salary").bind(employeeRecord.employee_id, hr.email),
 ])
+
+const impactSearch = await searchEmployeeImpactPeople("Elliot", { department: "Engineering" })
+assert.ok(impactSearch.some((row) => row.employeeId === employeeRecord.employee_id))
+const employeeImpact = await getEmployeeImpactScenario(employeeRecord.employee_id, { department: "Engineering", recruitingCostPerHire: 8000 })
+assert.ok(employeeImpact)
+assert.equal(employeeImpact.employeeId, employeeRecord.employee_id)
+assert.equal(employeeImpact.payDataAvailable, true)
+assert.equal(employeeImpact.directRecruitingCost, 8000)
+assert.ok(employeeImpact.replacementCost > employeeImpact.directRecruitingCost)
+assert.equal(await getEmployeeImpactScenario(employeeRecord.employee_id, { department: "Sales" }), null)
 
 const leave = await createWorkflow({ type: "leave", leaveType: "Annual", startDate: "2027-02-08", endDate: "2027-02-09", note: "Integration coverage handoff is documented." }, employee)
 let managerInbox = await getInboxOperations(manager)
@@ -209,6 +221,12 @@ assert.equal(hired?.employment_status, "Preboarding")
 const aiHiringPlan = await planAiWorkflow({ prompt: "Request a full-time Release Engineer in Engineering, Remote, because the release programme needs dedicated production coordination." }, manager)
 assert.equal(aiHiringPlan.type, "hiring_requisition")
 if (aiHiringPlan.type !== "hiring_requisition") throw new Error("Expected a hiring requisition plan.")
+const aiWorkflowHandoff = await runHrAgent({
+  message: "Request a full-time Release Engineer in Engineering, Remote, because the release programme needs dedicated production coordination.",
+  actor: manager,
+})
+assert.equal(aiWorkflowHandoff.workflow?.type, "hiring_requisition")
+assert.equal(aiWorkflowHandoff.workflow?.requiresConfirmation, true)
 const aiHiringDraft = await createAiWorkflowDraft({ type: aiHiringPlan.type, position: aiHiringPlan.position, department: aiHiringPlan.department, location: aiHiringPlan.location, employmentType: aiHiringPlan.employmentType, justification: aiHiringPlan.justification }, manager)
 const aiHiringResult = await executeAiWorkflow(aiHiringDraft.draft.id, manager, new Request("http://localhost/api/v1/ai/workflows/execute"))
 assert.equal(aiHiringResult.status, "completed")

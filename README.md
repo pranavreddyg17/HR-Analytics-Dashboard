@@ -62,7 +62,7 @@ The agent catalog is available from `GET /api/v1/agents`. Each agent is invoked 
 
 Every invocation is authenticated, role-scoped, grounded through HR tools and the current workspace, and stored in `agent_runs` with ordered tool steps. The orchestrator can perform a bounded multi-step loop—for example, connecting attrition evidence to mobility and relevant learning records—without allowing autonomous employment decisions.
 
-The MCP server exposes eight read-only evidence tools for actor-scoped work queues, workforce summaries, department comparisons, attrition signals, people operations, employee lookup, onboarding readiness, and capability planning. Azure AI Search indexes seven stable Markdown guides. Live employee facts remain in PostgreSQL and are never copied into the vector index.
+The MCP server exposes eight read-only evidence tools for actor-scoped work queues, workforce summaries, department comparisons, attrition signals, people operations, employee lookup, onboarding readiness, and capability planning. Azure AI Search indexes eleven focused operating guides. Live employee facts remain in PostgreSQL and are never copied into the vector index.
 
 The employee assistant and future integrations should use these APIs instead of duplicating agent logic.
 
@@ -71,7 +71,7 @@ The employee assistant and future integrations should use these APIs instead of 
 | Method | Endpoint | Purpose |
 |---|---|---|
 | GET | `/api/v1/health` | Model and dataset health |
-| GET | `/api/v1/ready` | Web, PostgreSQL, model service, and AI configuration readiness |
+| GET | `/api/v1/ready` | Web, PostgreSQL, embedded model, and AI configuration readiness |
 | GET/POST | `/api/v1/hr/people` | Search or create employee profiles |
 | GET/PATCH | `/api/v1/hr/people/{id}` | Read or update an employee profile |
 | POST | `/api/v1/hr/people/{id}/management` | Compensation, project, review, and one-to-one operations |

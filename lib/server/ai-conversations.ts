@@ -9,6 +9,13 @@ type ConversationMessage = {
   context?: Array<{ source: string; section: string }>
   dataMode?: string
   provider?: string
+  workflow?: {
+    prompt: string
+    type: "calendar_invite" | "learning_assignment" | "hiring_requisition" | "retention_review"
+    title: string
+    evidence: string
+    requiresConfirmation: true
+  }
   createdAt: string
 }
 
@@ -34,6 +41,7 @@ type MessageRow = {
   context_json: string | null
   data_mode: string | null
   provider: string | null
+  workflow_json: string | null
   created_at: string
 }
 
@@ -98,7 +106,7 @@ export async function getConversation(actor: RequestActor, conversationId: strin
   const database = await ensureHrDatabase()
   if (!database) throw new Error("Conversation storage is unavailable.")
   const result = await database.prepare(`
-    SELECT id, role, content, tools_json, context_json, data_mode, provider, created_at
+    SELECT id, role, content, tools_json, context_json, data_mode, provider, workflow_json, created_at
     FROM ai_conversation_messages
     WHERE conversation_id = ?
     ORDER BY position ASC
@@ -113,6 +121,7 @@ export async function getConversation(actor: RequestActor, conversationId: strin
       context: parseArray<{ source: string; section: string }>(row.context_json),
       dataMode: row.data_mode ?? undefined,
       provider: row.provider ?? undefined,
+      workflow: row.workflow_json ? parseWorkflow(row.workflow_json) : undefined,
       createdAt: row.created_at,
     }]
   })
@@ -145,6 +154,15 @@ export async function getConversationContext(actor: RequestActor, conversationId
   return selected
 }
 
+function parseWorkflow(value: string): ConversationMessage["workflow"] | undefined {
+  try {
+    const parsed = JSON.parse(value) as ConversationMessage["workflow"]
+    return parsed && typeof parsed.prompt === "string" && typeof parsed.title === "string" ? parsed : undefined
+  } catch {
+    return undefined
+  }
+}
+
 export async function appendConversationMessage(
   actor: RequestActor,
   conversationId: string,
@@ -157,7 +175,7 @@ export async function appendConversationMessage(
     .bind(conversationId)
     .first<{ position: number }>()
   await database.batch([
-    database.prepare("INSERT INTO ai_conversation_messages(id, conversation_id, position, role, content, tools_json, context_json, data_mode, provider, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)")
+    database.prepare("INSERT INTO ai_conversation_messages(id, conversation_id, position, role, content, tools_json, context_json, data_mode, provider, workflow_json, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)")
       .bind(
         `MSG-${crypto.randomUUID()}`,
         conversationId,
@@ -168,6 +186,7 @@ export async function appendConversationMessage(
         message.context ? JSON.stringify(message.context) : null,
         message.dataMode ?? null,
         message.provider ?? null,
+        message.workflow ? JSON.stringify(message.workflow) : null,
       ),
     database.prepare("UPDATE ai_conversations SET updated_at = CURRENT_TIMESTAMP WHERE id = ? AND user_email = ?")
       .bind(conversationId, actor.email),
