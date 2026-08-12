@@ -223,9 +223,51 @@ function SourceEfficiency({ data }: { data: WorkforceAnalytics }) {
 }
 
 function ManagerConcentration({ data }: { data: WorkforceAnalytics }) {
-  const rows = data.operatingSignals.managerExitConcentration.slice(0, 8)
+  const rows = data.operatingSignals.managerExitConcentration.slice(0, 8).map((row) => ({
+    ...row,
+    cohortPopulation: row.activeTeamSize + row.exits,
+    observedExitRate: row.activeTeamSize + row.exits > 0
+      ? Number((row.exits / (row.activeTeamSize + row.exits) * 100).toFixed(1))
+      : 0,
+    voluntaryShare: row.exits > 0 ? Number((row.voluntaryExits / row.exits * 100).toFixed(1)) : 0,
+  }))
+  const [selectedKey, setSelectedKey] = useState(() => rows[0] ? `${rows[0].managerId ?? rows[0].manager}-${rows[0].department}` : "")
   if (!rows.length) return <div className="flex h-64 items-center justify-center text-body text-muted-foreground">No manager cohorts with recorded exits in this scope.</div>
-  return <div className="overflow-x-auto"><table className="w-full min-w-[720px] text-left text-body"><thead className="bg-muted/40 text-label font-semibold text-muted-foreground"><tr><th className="px-4 py-2.5">Manager</th><th className="px-4 py-2.5">Department</th><th className="px-4 py-2.5">Active team</th><th className="px-4 py-2.5">Exits</th><th className="px-4 py-2.5">Voluntary</th><th className="px-4 py-2.5">Share of department exits</th></tr></thead><tbody>{rows.map((row) => <tr key={`${row.managerId ?? row.manager}-${row.department}`} className="border-t border-border/70"><td className="px-4 py-3 font-semibold">{row.manager}</td><td className="px-4 py-3">{row.department}</td><td className="px-4 py-3 tabular-nums">{row.activeTeamSize}</td><td className="px-4 py-3 tabular-nums">{row.exits}</td><td className="px-4 py-3 tabular-nums">{row.voluntaryExits}</td><td className="px-4 py-3 tabular-nums">{row.shareOfDepartmentExits}%</td></tr>)}</tbody></table><p className="border-t border-border bg-muted/20 px-4 py-2.5 text-meta text-muted-foreground">Use this as a cohort review signal for workload and team conditions, not as a manager rating.</p></div>
+  const selected = rows.find((row) => `${row.managerId ?? row.manager}-${row.department}` === selectedKey) ?? rows[0]
+  return <div className="grid gap-5 lg:grid-cols-[minmax(0,1.55fr)_minmax(250px,0.75fr)]">
+    <div>
+      <div className="h-80 w-full">
+        <ResponsiveContainer width="100%" height="100%" minWidth={0} initialDimension={{ width: 760, height: 320 }}>
+          <BarChart data={rows} layout="vertical" margin={{ top: 4, right: 24, bottom: 4, left: 36 }}>
+            <CartesianGrid strokeDasharray="3 3" horizontal={false} stroke="var(--border)" />
+            <XAxis type="number" domain={[0, 100]} unit="%" axisLine={false} tickLine={false} tick={{ fill: "var(--muted-foreground)", fontSize: 11 }} />
+            <YAxis type="category" dataKey="manager" width={150} axisLine={false} tickLine={false} tick={{ fill: "var(--muted-foreground)", fontSize: 11 }} />
+            <Tooltip
+              formatter={(value) => [`${value}%`, "Observed team exits"]}
+              labelFormatter={(_, payload) => payload?.[0]?.payload ? `${payload[0].payload.manager} · ${payload[0].payload.department}` : ""}
+            />
+            <Bar dataKey="observedExitRate" name="Observed team exits" fill={chartSeries.negative} radius={[0, 3, 3, 0]} />
+          </BarChart>
+        </ResponsiveContainer>
+      </div>
+      <p className="mt-2 text-meta text-muted-foreground">Rate = recorded exits divided by current active team plus recorded exits in this reporting window. It is a workload-review signal, not a manager score.</p>
+    </div>
+    <div className="rounded-lg border border-border bg-muted/15 p-4">
+      <label className="text-label font-semibold text-muted-foreground">Review cohort
+        <select value={`${selected.managerId ?? selected.manager}-${selected.department}`} onChange={(event) => setSelectedKey(event.target.value)} className="mt-1.5 h-9 w-full rounded-md border border-border bg-background px-3 text-control font-normal">
+          {rows.map((row) => <option key={`${row.managerId ?? row.manager}-${row.department}`} value={`${row.managerId ?? row.manager}-${row.department}`}>{row.manager} · {row.department}</option>)}
+        </select>
+      </label>
+      <div className="mt-4 space-y-3">
+        <div><p className="text-label font-semibold text-muted-foreground">Current team</p><p className="mt-0.5 text-section font-semibold tabular-nums">{selected.activeTeamSize}</p><p className="text-meta text-muted-foreground">active employees</p></div>
+        <div className="grid grid-cols-2 gap-3 border-y border-border py-3">
+          <div><p className="text-label font-semibold text-muted-foreground">Recorded exits</p><p className="mt-0.5 font-semibold tabular-nums">{selected.exits}</p><p className="text-meta text-muted-foreground">{selected.observedExitRate}% of cohort</p></div>
+          <div><p className="text-label font-semibold text-muted-foreground">Voluntary</p><p className="mt-0.5 font-semibold tabular-nums">{selected.voluntaryExits}</p><p className="text-meta text-muted-foreground">{selected.voluntaryShare}% of exits</p></div>
+        </div>
+        <div><p className="text-label font-semibold text-muted-foreground">Department context</p><p className="mt-0.5 font-semibold tabular-nums">{selected.shareOfDepartmentExits}%</p><p className="text-meta text-muted-foreground">of {selected.department} exits were recorded in this cohort</p></div>
+      </div>
+    </div>
+  </div>
 }
 
 function CostAssumptions({ data, onApply }: { data: WorkforceAnalytics; onApply: (values: CostInputs) => void }) {
@@ -428,11 +470,52 @@ function RoleContinuityTable({ data }: { data: WorkforceAnalytics }) {
   </Card>
 }
 
-function LearningEconomics({ data }: { data: WorkforceAnalytics }) {
+function CapabilityAnalysis({ data, onFilterDepartment }: { data: WorkforceAnalytics; onFilterDepartment: (department: string) => void }) {
   const rows = data.decisionSupport.workforceImpact.capabilityPlans
+  const [selectedDepartment, setSelectedDepartment] = useState(rows[0]?.department ?? "")
+  if (!rows.length) return <Card className="shadow-none"><CardContent className="p-8 text-center text-body text-muted-foreground">No learning assignments match this reporting scope.</CardContent></Card>
+  const selected = rows.find((row) => row.department === selectedDepartment) ?? rows[0]
+  const chartRows = rows.map((row) => ({ ...row, openRate: Number((100 - row.completionRate).toFixed(1)) }))
+  const assignmentHref = `/courses?department=${encodeURIComponent(selected.department)}&status=${selected.overdueMandatoryGaps ? "overdue" : "incomplete"}`
+  const assignedCoverage = selected.activeEmployees > 0 ? Number((selected.assignedEmployees / selected.activeEmployees * 100).toFixed(1)) : 0
   return <Card className="gap-0 overflow-hidden py-0 shadow-none">
-    <CardHeader className="border-b border-border px-5 py-4"><CardTitle>Learning follow-up</CardTitle><CardDescription>Completion, required work, remaining effort, and cost calculated from current assignments.</CardDescription></CardHeader>
-    <CardContent className="p-0"><div className="overflow-x-auto"><table className="w-full min-w-[920px] text-left text-body"><thead className="bg-muted/40 text-label font-semibold text-muted-foreground"><tr>{["Department", "Completion", "Open assignments", "Required work", "Remaining effort", "Status", "Open"].map((heading) => <th key={heading} className="px-4 py-2.5">{heading}</th>)}</tr></thead><tbody>{rows.map((row) => <tr key={row.department} className="border-t border-border/70"><td className="px-4 py-3"><p className="font-semibold">{row.department}</p><p className="text-meta text-muted-foreground">{row.assignedEmployees} of {row.activeEmployees} active employees assigned</p></td><td className="px-4 py-3"><p className="font-semibold tabular-nums">{row.completionRate}%</p><div className="mt-1 h-1.5 w-24 overflow-hidden rounded-full bg-muted"><div className="h-full rounded-full bg-primary" style={{ width: `${Math.min(100, row.completionRate)}%` }} /></div><p className="mt-1 text-meta text-muted-foreground">{row.completedAssignments} of {row.totalAssignments}</p></td><td className="px-4 py-3"><p>{row.incompleteAssignments} assignment{row.incompleteAssignments === 1 ? "" : "s"}</p><p className="text-meta text-muted-foreground">{row.incompleteEmployees} employee{row.incompleteEmployees === 1 ? "" : "s"}{row.leadingProgram ? ` · ${row.leadingProgram}` : ""}</p></td><td className="px-4 py-3"><p>{row.mandatoryGaps} required</p><p className={cn("text-meta", row.overdueMandatoryGaps ? "font-semibold text-destructive" : "text-muted-foreground")}>{row.overdueMandatoryGaps} overdue</p></td><td className="px-4 py-3"><p>{row.remainingHours} hours</p><p className="text-meta text-muted-foreground">{currency(row.estimatedRemainingCost)} estimated cost</p></td><td className="px-4 py-3"><Badge variant={row.status === "Overdue required" ? "destructive" : row.status === "Required work open" ? "secondary" : "outline"}>{row.status}</Badge></td><td className="px-4 py-3"><Link className={actionLinkClass} href={`/courses?department=${encodeURIComponent(row.department)}${row.overdueMandatoryGaps ? "&status=overdue" : ""}`}>Review assignments</Link></td></tr>)}</tbody></table></div>{!rows.length && <p className="p-8 text-center text-body text-muted-foreground">No learning assignments match this reporting scope.</p>}</CardContent>
+    <CardHeader className="border-b border-border px-5 py-4"><CardTitle>Capability coverage</CardTitle><CardDescription>Completion and remaining work calculated from the current assignment register.</CardDescription></CardHeader>
+    <CardContent className="grid gap-5 p-5 xl:grid-cols-[minmax(0,1.4fr)_minmax(300px,0.75fr)]">
+      <div>
+        <div className="mb-3 flex items-center gap-4 text-meta text-muted-foreground"><span className="inline-flex items-center gap-1.5"><span className="size-2.5 rounded-sm bg-[var(--chart-3)]" />Completed</span><span className="inline-flex items-center gap-1.5"><span className="size-2.5 rounded-sm bg-[var(--chart-4)]" />Open</span></div>
+        <div className="h-64 w-full">
+          <ResponsiveContainer width="100%" height="100%" minWidth={0} initialDimension={{ width: 760, height: 256 }}>
+            <BarChart data={chartRows} layout="vertical" margin={{ top: 4, right: 24, bottom: 4, left: 48 }}>
+              <CartesianGrid strokeDasharray="3 3" horizontal={false} stroke="var(--border)" />
+              <XAxis type="number" domain={[0, 100]} unit="%" axisLine={false} tickLine={false} tick={{ fill: "var(--muted-foreground)", fontSize: 11 }} />
+              <YAxis type="category" dataKey="department" width={160} axisLine={false} tickLine={false} tick={{ fill: "var(--muted-foreground)", fontSize: 11 }} />
+              <Tooltip formatter={(value, name) => [`${value}%`, name]} />
+              <Bar dataKey="completionRate" stackId="completion" name="Completed" fill={chartSeries.positive} radius={[3, 0, 0, 3]} />
+              <Bar dataKey="openRate" stackId="completion" name="Open" fill={chartSeries.caution} radius={[0, 3, 3, 0]} />
+            </BarChart>
+          </ResponsiveContainer>
+        </div>
+        <p className="mt-2 text-meta text-muted-foreground">Percentages use completed assignments divided by all assignments in the selected reporting scope.</p>
+      </div>
+      <div className="rounded-lg border border-border bg-muted/15 p-4">
+        <label className="text-label font-semibold text-muted-foreground">Department
+          <select value={selected.department} onChange={(event) => setSelectedDepartment(event.target.value)} className="mt-1.5 h-9 w-full rounded-md border border-border bg-background px-3 text-control font-normal">
+            {rows.map((row) => <option key={row.department} value={row.department}>{row.department}</option>)}
+          </select>
+        </label>
+        <div className="mt-4 grid grid-cols-2 gap-x-4 gap-y-3">
+          <div><p className="text-label font-semibold text-muted-foreground">Completion</p><p className="mt-0.5 text-section font-semibold tabular-nums">{selected.completionRate}%</p><p className="text-meta text-muted-foreground">{selected.completedAssignments} of {selected.totalAssignments}</p></div>
+          <div><p className="text-label font-semibold text-muted-foreground">Employee coverage</p><p className="mt-0.5 text-section font-semibold tabular-nums">{assignedCoverage}%</p><p className="text-meta text-muted-foreground">{selected.assignedEmployees} of {selected.activeEmployees}</p></div>
+          <div className="border-t border-border pt-3"><p className="text-label font-semibold text-muted-foreground">Open work</p><p className="mt-0.5 font-semibold tabular-nums">{selected.incompleteAssignments} assignments</p><p className="text-meta text-muted-foreground">{selected.incompleteEmployees} employees</p></div>
+          <div className="border-t border-border pt-3"><p className="text-label font-semibold text-muted-foreground">Required</p><p className="mt-0.5 font-semibold tabular-nums">{selected.mandatoryGaps}</p><p className={cn("text-meta", selected.overdueMandatoryGaps ? "font-semibold text-destructive" : "text-muted-foreground")}>{selected.overdueMandatoryGaps} overdue</p></div>
+          <div className="col-span-2 border-t border-border pt-3"><p className="text-label font-semibold text-muted-foreground">Remaining delivery</p><p className="mt-0.5 font-semibold">{selected.remainingHours} hours · {currency(selected.estimatedRemainingCost)}</p><p className="text-meta text-muted-foreground">{selected.leadingProgram ? `Largest open programme: ${selected.leadingProgram}` : "No open programme concentration"}</p></div>
+        </div>
+        <div className="mt-4 flex flex-wrap gap-2 border-t border-border pt-4">
+          <Button size="sm" variant="outline" onClick={() => onFilterDepartment(selected.department)}>Filter insights</Button>
+          <Link className={actionLinkClass} href={assignmentHref}>Open {selected.overdueMandatoryGaps ? "overdue" : "incomplete"} assignments</Link>
+        </div>
+      </div>
+    </CardContent>
   </Card>
 }
 
@@ -603,7 +686,8 @@ export function InsightsWorkspace({ initialData }: { initialData: WorkforceAnaly
           { label: "Replacement rate", value: percent(company.replacementRate), detail: "Completed hires per 100 exits" },
         ]} />
         <div className="grid gap-4 xl:grid-cols-2"><Card className="shadow-none"><CardHeader><CardTitle>Workforce flow</CardTitle><CardDescription>Completed hires and recorded exits by {data.filters.period}.</CardDescription></CardHeader><CardContent><FlowChart rows={flow} /></CardContent></Card><Card className="shadow-none"><CardHeader><CardTitle>Hiring source performance</CardTitle><CardDescription>Completed hire volume compared with time to hire.</CardDescription></CardHeader><CardContent><SourceEfficiency data={data} /></CardContent></Card></div>
-        <div className="grid gap-4 xl:grid-cols-2"><Card className="shadow-none"><CardHeader><CardTitle>Tenure attrition</CardTitle><CardDescription>Observed exits normalized by tenure-cohort population.</CardDescription></CardHeader><CardContent><TenureAttrition data={data} /></CardContent></Card><Card className="shadow-none"><CardHeader><CardTitle>Manager cohorts</CardTitle><CardDescription>Teams with concentrated recorded exits for workload review.</CardDescription></CardHeader><CardContent className="p-0"><ManagerConcentration data={data} /></CardContent></Card></div>
+        <Card className="shadow-none"><CardHeader><CardTitle>Tenure attrition</CardTitle><CardDescription>Observed exits normalized by tenure-cohort population.</CardDescription></CardHeader><CardContent><TenureAttrition data={data} /></CardContent></Card>
+        <Card className="shadow-none"><CardHeader><CardTitle>Manager cohorts</CardTitle><CardDescription>Recorded team exits normalized to the current cohort, with department context.</CardDescription></CardHeader><CardContent><ManagerConcentration data={data} /></CardContent></Card>
       </>}
 
       {analysisView === "capability" && <>
@@ -614,8 +698,8 @@ export function InsightsWorkspace({ initialData }: { initialData: WorkforceAnaly
           { label: "Required learning", value: company.mandatoryTrainingGaps, detail: `${company.overdueMandatoryTrainingGaps} overdue` },
           { label: "Remaining effort", value: `${company.incompleteTrainingHours}h`, detail: "Recorded assignment hours" },
         ]} />
+        <CapabilityAnalysis data={data} onFilterDepartment={(department) => setFilters((current) => ({ ...current, department }))} />
         <CapabilityAssumptions key={`capability-${impact.assumptions.courseFeePerLearner}-${impact.assumptions.courseHoursPerLearner}`} data={data} onApply={(values) => setFilters((current) => ({ ...current, ...values }))} />
-        <LearningEconomics data={data} />
       </>}
     </WorkspacePage>
   )

@@ -33,13 +33,13 @@ Production runs at [www.laidbackhr.cloud](https://www.laidbackhr.cloud). The emp
 | Route | Capability | Persisted result |
 |---|---|---|
 | `/` | Priority work and upcoming workforce events | Reads the actor-scoped workflow queue and operational records |
-| `/people` | Employee search, profiles, organization, manager, job, compensation, project, review, and one-to-one administration | Employee and related lifecycle tables |
+| `/people` | Current/former employee search, profiles, organization, manager, job, compensation, project, review, and one-to-one administration | Employee and related lifecycle tables; admin-only permanent deletion is restricted to former employees |
 | `/inbox` | Decisions and assigned work across onboarding, recruiting, leave, learning, reimbursement, employee cases, and insight actions | Workflow status, owner, due date, resolution, and action history |
 | `/onboarding` | Requisition-to-employee handoff and new-joiner verification | Requisitions, candidates, onboarding submissions, employees, and workflow records |
 | `/leaves` | Leave register, approval decisions, absence schedule, and coverage | Leave and workflow records |
 | `/courses` | Course catalog, capability mappings, cohort assignment, due dates, completion, and compliance | Courses, campaigns, assignments, and workflow records |
 | `/exits` | Scheduled exits, accountable offboarding checklists, asset recovery, access removal, and completion | Employee exits, offboarding tasks, asset assignments, workflow records, and recorded exit outcomes |
-| `/insights` | Workforce movement, continuity, talent supply, capability, cost, and action queues | Calculated read models plus durable insight work items |
+| `/insights` | Workforce movement, continuity, talent supply, manager-cohort movement, capability completion, remaining effort, cost scenarios, and action queues | Calculated read models plus durable insight work items |
 | `/attrition` | Historical model validation, cohort evidence, and explainable scenario testing | Model metadata, historical profiles, and retention reviews |
 | `/risk-review` | Employee-linked review worklist with governed follow-up | Retention reviews and review status |
 | `/assistant` | Context-aware workforce chat and workflow preparation | Conversations, messages, agent runs, tool steps, and approved workflow drafts |
@@ -63,8 +63,10 @@ The employee portal is not a separate database or duplicated frontend. The signe
 - View and complete assigned learning.
 - Participate in performance reviews and one-to-one follow-up.
 - Review assigned equipment and a confirmed offboarding schedule when applicable.
+- Receive an explicit employment-ended state after termination or resignation instead of entering employee self-service.
 
 Employee submissions create the operational record and its corresponding work item in one transaction. HR decisions update that same record, so both portals display the same state.
+Terminating an employee immediately removes workspace and self-service access while preserving the profile under **People → Former**. An administrator may permanently delete a former profile and its dependent HR records; the application identity is reset to controlled onboarding so the same verified email can join again.
 
 ## Architecture
 
@@ -75,7 +77,7 @@ flowchart LR
     Integrator["Customer integration"]
     DNS["laidbackhr.cloud domains"]
     Web["Azure App Service\nNext.js 16 / React 19"]
-    Auth["Auth.js + Google OAuth"]
+    Auth["Auth.js + Google / Microsoft Entra"]
     API["Route handlers and domain services"]
     PG["Azure Database for PostgreSQL\nSystem of record"]
     Blob["Azure Blob Storage\nPrivate employee documents"]
@@ -112,7 +114,7 @@ flowchart LR
 
 ### Request flow
 
-1. Auth.js verifies the Google identity and loads the application role from PostgreSQL.
+1. Auth.js verifies the Google or Microsoft Entra identity and loads the current application role from PostgreSQL.
 2. A route handler resolves the actor and enforces role or ownership boundaries.
 3. A domain service validates the request, writes normalized records, and creates or advances a workflow where required.
 4. Read models calculate metrics from current database facts. Analytics results are cached briefly in production but never stored as a second source of truth.
@@ -137,7 +139,7 @@ All application-owned runtime resources are provisioned in the existing `Laidbac
 | App Service Plan | Cost-controlled Linux compute; `always_on`, HTTP/2, and a pooled PostgreSQL client support concurrent use |
 | Azure Database for PostgreSQL Flexible Server | Normalized operational records, workflow state, conversation memory, agent audit, and integration audit |
 | Blob Storage | Private employee documents and reimbursement receipts; public access and account-key use are disabled |
-| Key Vault | Database URL, Auth.js secret, Google OAuth, Azure AI Search, Azure OpenAI, and embedding credentials |
+| Key Vault | Database URL, Auth.js secret, Google OAuth, Microsoft Entra, Azure AI Search, Azure OpenAI, and embedding credentials |
 | Azure AI Search (shared) | Hybrid keyword/vector index for curated HR operating guidance; it does not contain live employee rows |
 | Azure OpenAI (shared) | Schema-constrained planning, grounded response synthesis, and query/document embeddings |
 | Container Registry | Immutable `laidbackhr-web:<git-sha>` production images and rollback history |
@@ -193,6 +195,12 @@ The import service supports `employees`, `hiring`, `attrition`, `leave`, `traini
 2. `apply` merges or replaces imported-domain rows and records the import result.
 
 Power BI feeds and PDF/XLSX exports call the same analytics service as the UI. They do not maintain a separate reporting database, so filters and metric definitions remain consistent across the page, download, and API.
+
+### Insights calculation contracts
+
+- **Talent supply:** completed hires and exits use event dates in the reporting window; open requisitions and current team size are current snapshots. Manager-cohort exit rate is recorded exits divided by current active team plus those recorded exits. Voluntary share and share of department exits are shown as supporting context, never as a manager performance score.
+- **Capability:** assignment completion is completed assignments divided by all assignments in scope. Employee coverage is unique assigned employees divided by active employees. Open and required work, overdue status, remaining recorded hours, and estimated delivery cost all come from current assignment, due-date, compensation, and scenario records.
+- **Operational handoff:** filtering a cohort recalculates the shared analytics read model. Opening assignments passes the selected department and status into the Learning register, where authorized users can record completion or create governed cohort assignments.
 
 ## AI, RAG, agents, and MCP
 
@@ -277,7 +285,7 @@ All nine tools are read-only, idempotent, closed-world operations. Tool output i
 
 The assistant can prepare four governed workflows:
 
-- a Google Calendar event for selected operational employees;
+- a Microsoft Teams meeting or Google Calendar event for selected operational employees;
 - a learning assignment for a department, job title, job level, manager team, or job profile;
 - a hiring requisition with business justification; or
 - a retention review for a department evidence cohort.
@@ -333,8 +341,9 @@ The route files under `app/api` are the implementation source of truth. The cust
 | GET/POST | `/api/v1/hr/people` | HR | Search or create employee profiles |
 | GET/PATCH | `/api/v1/hr/people/{employee_id}` | HR | Read or update a profile |
 | POST | `/api/v1/hr/people/{employee_id}/management` | HR/manager | Compensation, project, review, and one-to-one operations |
-| POST | `/api/v1/hr/people/{employee_id}/archive` | HR | Archive an employee record without deleting history |
+| POST | `/api/v1/hr/people/{employee_id}/archive` | HR | End employment, revoke portal access, and retain the employee under the former population |
 | POST | `/api/v1/hr/people/{employee_id}/restore` | HR | Restore an archived employee record |
+| DELETE | `/api/v1/hr/people/{employee_id}` | Admin | Permanently delete a former employee and dependent records, release the identity for onboarding, and retain an audit event |
 | GET | `/api/v1/hr/onboarding` | HR | Onboarding readiness and handoff queue |
 | GET | `/api/v1/hr/hiring` | HR/manager | Requisition and candidate operations |
 | PATCH | `/api/v1/hr/hiring/requisitions/{requisition_id}` | Authorized owner | Approve, decline, open, close, or update a requisition |
@@ -385,6 +394,7 @@ The route files under `app/api` are the implementation source of truth. The cust
 | POST | `/api/v1/ai/workflows/{workflow_id}` | Mark and audit the creator's external handoff |
 | POST | `/api/v1/ai/workflows/{workflow_id}/execute` | Execute a confirmed internal or Calendar workflow |
 | GET | `/api/v1/ai/integrations/google-calendar` | Report Calendar grant readiness |
+| GET | `/api/v1/ai/integrations/microsoft-teams` | Report delegated Microsoft Teams calendar readiness |
 | GET/POST/DELETE | `/api/mcp` | Authenticated Streamable HTTP MCP transport |
 
 ### Imports, reports, and feeds
@@ -435,9 +445,10 @@ The integration surface intentionally excludes direct approval and employee-stat
 
 ## Authentication and authorization
 
-- Google OAuth and Google Identity ID-token sign-in are implemented with Auth.js.
+- Google OAuth, Google Identity ID-token sign-in, and Microsoft Entra sign-in are implemented with Auth.js.
 - The canonical OAuth origin is `https://www.laidbackhr.cloud`; a shared secure cookie supports the employee subdomain.
-- A verified Google identity must map to an active `app_users` row. A first-time employee can enter the controlled employee onboarding path; HR and administrator roles are never self-granted.
+- A verified Google or Microsoft identity must map to an active `app_users` row. A first-time employee can enter the controlled employee onboarding path; HR and administrator roles are never self-granted.
+- Terminated and resigned employees remain linked to their identity so the employee portal can show the correct access-ended state. Permanent admin deletion clears that employee link and returns the identity to onboarding-required status.
 - Supported application roles are administrator, HR, manager, viewer, and employee.
 - Route handlers enforce role, record ownership, manager hierarchy, and assigned approver rules server-side.
 - Private document operations use the application managed identity and authorization metadata; blob URLs are not public.
