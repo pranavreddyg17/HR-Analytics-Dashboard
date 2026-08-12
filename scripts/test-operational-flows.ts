@@ -1,5 +1,6 @@
 import assert from "node:assert/strict"
 
+import { listAccessUsers, recordLogin } from "@/lib/server/access"
 import { createAiWorkflowDraft, executeAiWorkflow, planAiWorkflow } from "@/lib/server/ai-workflows"
 import { downloadEmployeeDocument, uploadEmployeeDocument } from "@/lib/server/employee-documents"
 import { manageEmployee } from "@/lib/server/employee-management"
@@ -39,6 +40,9 @@ await db.batch([
   db.prepare("INSERT INTO app_users(email, display_name, role, status, invited_by, onboarding_status) VALUES (?, ?, 'employee', 'active', 'integration-test', 'not_required') ON CONFLICT(email) DO NOTHING").bind(employee.email, employee.displayName),
   db.prepare("INSERT INTO app_users(email, display_name, role, status, invited_by, onboarding_status) VALUES (?, ?, 'employee', 'active', 'employee-self-service', 'required') ON CONFLICT(email) DO NOTHING").bind(newHire.email, newHire.displayName),
 ])
+await recordLogin(hr.email, hr.displayName, { provider: "microsoft", subject: "integration-microsoft-subject", tenantId: "integration-tenant" })
+await recordLogin(hr.email, hr.displayName, { provider: "google", subject: "integration-google-subject" })
+assert.deepEqual((await listAccessUsers()).find((user) => user.email === hr.email)?.identity_providers, ["google", "microsoft"])
 
 const managerRecord = await createPerson({
   employee_id: "INT-MANAGER",
@@ -83,6 +87,24 @@ await db.batch([
   db.prepare("UPDATE app_users SET employee_id=?, onboarding_status='complete' WHERE email=?").bind(employeeRecord.employee_id, employee.email),
   db.prepare("INSERT INTO employee_compensation(id, employee_id, annual_salary, currency, pay_frequency, effective_from, created_by_email) VALUES ('INT-COMP-EMPLOYEE', ?, 120000, 'USD', 'annual', '2026-01-01', ?) ON CONFLICT(id) DO UPDATE SET annual_salary=excluded.annual_salary").bind(employeeRecord.employee_id, hr.email),
 ])
+const teamsMeetingPlan = await planAiWorkflow({ prompt: "Schedule a Microsoft Teams career progression review with Elliot Employee next Friday at 10am Pacific time." }, manager)
+assert.equal(teamsMeetingPlan.type, "calendar_invite")
+if (teamsMeetingPlan.type !== "calendar_invite") throw new Error("Expected a calendar invitation plan.")
+assert.equal(teamsMeetingPlan.calendarProvider, "microsoft_teams")
+assert.deepEqual(teamsMeetingPlan.employeeIds, [employeeRecord.employee_id])
+const teamsMeetingDraft = await createAiWorkflowDraft({
+  type: teamsMeetingPlan.type,
+  calendarProvider: teamsMeetingPlan.calendarProvider,
+  employeeIds: teamsMeetingPlan.employeeIds,
+  title: teamsMeetingPlan.title,
+  start: teamsMeetingPlan.start,
+  end: teamsMeetingPlan.end,
+  timezone: teamsMeetingPlan.timezone,
+  location: teamsMeetingPlan.location,
+  agenda: teamsMeetingPlan.agenda,
+}, manager)
+const persistedTeamsDraft = await db.prepare("SELECT details_json FROM ai_workflow_drafts WHERE id=?").bind(teamsMeetingDraft.draft.id).first<{ details_json: string }>()
+assert.equal(JSON.parse(persistedTeamsDraft?.details_json ?? "{}").calendarProvider, "microsoft_teams")
 
 const impactSearch = await searchEmployeeImpactPeople("Elliot", { department: "Engineering" })
 assert.ok(impactSearch.some((row) => row.employeeId === employeeRecord.employee_id))

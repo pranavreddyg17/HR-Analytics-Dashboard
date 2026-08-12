@@ -58,6 +58,16 @@ The next GitHub Actions deployment will create the App Service hostname binding 
 
 Production uses the verified `gpt-5.2` deployment exposed by the approved shared Foundry endpoint. `azure_openai_model` is the deployment name, not a guessed base-model alias. Search and embeddings remain independently available; if generation is unavailable, the application falls back to its evidence-only deterministic response path.
 
+## Microsoft sign-in and Teams meetings
+
+Microsoft Entra app registrations belong to the tenant rather than an Azure resource group. The application secrets and runtime settings remain in the existing `Laidback.ai` Key Vault and App Service. Register one confidential web application in the tenant and add this production Web redirect URI:
+
+```text
+https://www.laidbackhr.cloud/api/auth/callback/microsoft-entra-id
+```
+
+Grant delegated Microsoft Graph permissions `User.Read` and `Calendars.ReadWrite`. The workflow requests `offline_access` only when a user explicitly connects Teams. Add protected GitHub production-environment secrets named `MICROSOFT_ENTRA_CLIENT_ID`, `MICROSOFT_ENTRA_CLIENT_SECRET`, and `MICROSOFT_ENTRA_TENANT_ID`. The deployment copies them into `laidbackhr-f61hno-kv`, enables Microsoft auth only when all three values exist, and keeps the callback on the canonical HR domain so the shared secure session also works on `employee.laidbackhr.cloud`.
+
 ## Database
 
 The web app reads `DATABASE_URL` from the application Key Vault and requires TLS. Migrations are append-only and run at startup. Demo reconciliation is disabled in production with `SEED_DEMO_DATA=false`.

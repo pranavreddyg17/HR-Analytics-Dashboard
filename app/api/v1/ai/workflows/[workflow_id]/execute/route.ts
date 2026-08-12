@@ -2,6 +2,7 @@ import { NextResponse } from "next/server"
 
 import { executeAiWorkflow } from "@/lib/server/ai-workflows"
 import { GoogleCalendarError } from "@/lib/server/google-calendar"
+import { MicrosoftTeamsError } from "@/lib/server/microsoft-teams"
 import { PeopleError } from "@/lib/server/people"
 import { requireRequestActor } from "@/lib/server/request-user"
 
@@ -14,6 +15,7 @@ export async function POST(request: Request, context: { params: Promise<{ workfl
     return NextResponse.json(await executeAiWorkflow(workflowId, actor, request))
   } catch (error) {
     if (error instanceof GoogleCalendarError) return NextResponse.json({ error: error.message, code: error.code }, { status: error.status })
+    if (error instanceof MicrosoftTeamsError) return NextResponse.json({ error: error.message, code: error.code }, { status: error.status })
     if (error instanceof PeopleError) return NextResponse.json({ error: error.message }, { status: error.status })
     if (error instanceof Error && error.message === "AUTH_REQUIRED") return NextResponse.json({ error: "Sign in is required." }, { status: 401 })
     return NextResponse.json({ error: error instanceof Error ? error.message : "The workflow could not be completed." }, { status: 500 })

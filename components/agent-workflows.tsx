@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button"
 
 type CalendarPlan = {
   type: "calendar_invite"
+  calendarProvider: "google" | "microsoft_teams"
   title: string
   start: string
   end: string
@@ -73,8 +74,10 @@ const examples = [
   "Upskill Research Analysts based on current capability gaps.",
   "Request a full-time Platform Engineer in Research & Development, Remote, because the reliability programme needs additional delivery capacity.",
   "Create a retention review for the highest-priority department.",
-  "Schedule a career progression review with Pranav G next Friday at 10am Pacific time.",
+  "Schedule a Teams career progression review with Pranav G next Friday at 10am Pacific time.",
 ]
+
+type ConnectionState = "loading" | "connected" | "disconnected" | "unavailable"
 
 function dateTimeLabel(value: string): string {
   const parsed = new Date(`${value}:00`)
@@ -82,7 +85,7 @@ function dateTimeLabel(value: string): string {
 }
 
 export function AgentWorkflows({ canPrepare, initialPrompt = "" }: { canPrepare: boolean; initialPrompt?: string }) {
-  const [calendarConnection, setCalendarConnection] = useState<"loading" | "connected" | "disconnected">("loading")
+  const [calendarConnections, setCalendarConnections] = useState<Record<CalendarPlan["calendarProvider"], ConnectionState>>({ google: "loading", microsoft_teams: "loading" })
   const [prompt, setPrompt] = useState("")
   const [plan, setPlan] = useState<WorkflowPlan | null>(null)
   const [draftId, setDraftId] = useState("")
@@ -96,13 +99,19 @@ export function AgentWorkflows({ canPrepare, initialPrompt = "" }: { canPrepare:
 
   useEffect(() => {
     let active = true
-    fetch("/api/v1/ai/integrations/google-calendar")
-      .then(async (response) => {
-        const body = await response.json() as { connected?: boolean }
-        if (!response.ok) throw new Error("Connection status unavailable")
-        if (active) setCalendarConnection(body.connected ? "connected" : "disconnected")
+    Promise.all([
+      fetch("/api/v1/ai/integrations/google-calendar").then(async (response) => ({ provider: "google" as const, response, body: await response.json() as { connected?: boolean; configured?: boolean } })),
+      fetch("/api/v1/ai/integrations/microsoft-teams").then(async (response) => ({ provider: "microsoft_teams" as const, response, body: await response.json() as { connected?: boolean; configured?: boolean } })),
+    ]).then((results) => {
+      if (!active) return
+      setCalendarConnections((current) => {
+        const next = { ...current }
+        for (const result of results) {
+          next[result.provider] = !result.response.ok || result.body.configured === false ? "unavailable" : result.body.connected ? "connected" : "disconnected"
+        }
+        return next
       })
-      .catch(() => { if (active) setCalendarConnection("disconnected") })
+    }).catch(() => { if (active) setCalendarConnections({ google: "disconnected", microsoft_teams: "unavailable" }) })
     return () => { active = false }
   }, [])
 
@@ -115,12 +124,24 @@ export function AgentWorkflows({ canPrepare, initialPrompt = "" }: { canPrepare:
   }, [initialPrompt, canPrepare])
 
   function connectGoogleCalendar() {
-    void signIn("google", { callbackUrl: "/assistant" }, {
+    void signIn("google", { redirectTo: `${window.location.origin}/assistant` }, {
       scope: "openid email profile https://www.googleapis.com/auth/calendar.events.owned",
       access_type: "offline",
       prompt: "consent",
       include_granted_scopes: "true",
     })
+  }
+
+  function connectMicrosoftTeams() {
+    void signIn("microsoft-entra-id", { redirectTo: `${window.location.origin}/assistant` }, {
+      scope: "openid profile email offline_access User.Read Calendars.ReadWrite",
+      prompt: "consent",
+    })
+  }
+
+  function connectCalendar(provider: CalendarPlan["calendarProvider"]) {
+    if (provider === "microsoft_teams") connectMicrosoftTeams()
+    else connectGoogleCalendar()
   }
 
   async function createPlan(text = prompt) {
@@ -143,7 +164,7 @@ export function AgentWorkflows({ canPrepare, initialPrompt = "" }: { canPrepare:
       let workflowId = draftId
       if (!workflowId) {
         const payload = plan.type === "calendar_invite"
-          ? { type: plan.type, employeeIds: plan.employeeIds, title: plan.title, start: plan.start, end: plan.end, timezone: plan.timezone, location: plan.location, agenda: plan.agenda }
+          ? { type: plan.type, calendarProvider: plan.calendarProvider, employeeIds: plan.employeeIds, title: plan.title, start: plan.start, end: plan.end, timezone: plan.timezone, location: plan.location, agenda: plan.agenda }
           : plan.type === "learning_assignment"
             ? { type: plan.type, targetType: plan.targetType, targetValue: plan.targetValue, courseId: plan.courseId, dueDate: plan.dueDate, hours: plan.hours, note: plan.note, recommendationId: plan.recommendationId }
             : plan.type === "hiring_requisition"
@@ -159,7 +180,8 @@ export function AgentWorkflows({ canPrepare, initialPrompt = "" }: { canPrepare:
       const body = await response.json() as { message?: string; eventUrl?: string | null; error?: string; code?: string }
       if (!response.ok) {
         setErrorCode(body.code ?? "")
-        if (body.code === "GOOGLE_CALENDAR_CONNECT_REQUIRED") setCalendarConnection("disconnected")
+        if (body.code === "GOOGLE_CALENDAR_CONNECT_REQUIRED") setCalendarConnections((current) => ({ ...current, google: "disconnected" }))
+        if (body.code === "MICROSOFT_TEAMS_CONNECT_REQUIRED") setCalendarConnections((current) => ({ ...current, microsoft_teams: "disconnected" }))
         throw new Error(body.error ?? "The workflow could not be completed.")
       }
       setNotice(body.message ?? "Workflow completed.")
@@ -168,7 +190,8 @@ export function AgentWorkflows({ canPrepare, initialPrompt = "" }: { canPrepare:
     finally { setExecuting(false) }
   }
 
-  const calendarNeedsConnection = plan?.type === "calendar_invite" && calendarConnection !== "connected"
+  const selectedCalendarConnection = plan?.type === "calendar_invite" ? calendarConnections[plan.calendarProvider] : "connected"
+  const calendarNeedsConnection = plan?.type === "calendar_invite" && selectedCalendarConnection !== "connected"
 
   return <section className="grid gap-0 lg:grid-cols-[minmax(0,0.85fr)_minmax(0,1.15fr)]">
     <div className="border-b border-border p-5 lg:border-b-0 lg:border-r">
@@ -193,11 +216,11 @@ export function AgentWorkflows({ canPrepare, initialPrompt = "" }: { canPrepare:
             : plan.type === "hiring_requisition" ? <div className="grid gap-4 py-5 sm:grid-cols-2"><div className="rounded-md border border-border p-3"><p className="text-label font-semibold">Position</p><p className="mt-1 font-semibold">{plan.position}</p><p className="text-meta text-muted-foreground">{plan.department} · {plan.location}</p></div><div className="rounded-md border border-border p-3"><p className="text-label font-semibold">Business justification</p><p className="mt-1 text-body text-muted-foreground">{plan.justification}</p></div></div>
               : <div className="grid gap-4 py-5 sm:grid-cols-3"><div className="rounded-md border border-border p-3"><p className="text-label font-semibold">Population</p><p className="mt-1 font-semibold tabular-nums">{plan.population}</p></div><div className="rounded-md border border-border p-3"><p className="text-label font-semibold">Recorded attrition</p><p className="mt-1 font-semibold tabular-nums">{plan.recordedAttritionRate}%</p></div><div className="rounded-md border border-border p-3"><p className="text-label font-semibold">Leading exit reason</p><p className="mt-1 font-semibold">{plan.leadingExitReason}</p></div></div>}
         <div className="rounded-md bg-muted/45 p-3"><p className="text-label font-semibold">Evidence</p><p className="mt-1 text-meta text-muted-foreground">{plan.evidence}</p></div>
-        {plan.type === "calendar_invite" && <div className="mt-4 flex items-center justify-between rounded-md border border-border px-3 py-2"><div><p className="font-semibold">Google Calendar</p><p className="text-meta text-muted-foreground">{calendarConnection === "loading" ? "Checking connection" : calendarConnection === "connected" ? "Connected" : "Connection required"}</p></div>{calendarConnection === "disconnected" && <Button size="sm" variant="outline" onClick={connectGoogleCalendar}>Connect</Button>}</div>}
+        {plan.type === "calendar_invite" && <div className="mt-4 rounded-md border border-border p-3"><div className="flex flex-wrap items-center justify-between gap-3"><div><p className="text-label font-semibold">Meeting service</p><p className="text-meta text-muted-foreground">Choose where the confirmed invitation will be created.</p></div><div className="flex rounded-md border border-border p-0.5"><button type="button" onClick={() => { setPlan({ ...plan, calendarProvider: "microsoft_teams" }); setDraftId("") }} className={`rounded px-3 py-1.5 text-meta font-semibold ${plan.calendarProvider === "microsoft_teams" ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:bg-muted"}`}>Microsoft Teams</button><button type="button" onClick={() => { setPlan({ ...plan, calendarProvider: "google" }); setDraftId("") }} className={`rounded px-3 py-1.5 text-meta font-semibold ${plan.calendarProvider === "google" ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:bg-muted"}`}>Google Calendar</button></div></div><div className="mt-3 flex items-center justify-between border-t border-border pt-3"><div><p className="font-semibold">{plan.calendarProvider === "microsoft_teams" ? "Microsoft Teams" : "Google Calendar"}</p><p className="text-meta text-muted-foreground">{selectedCalendarConnection === "loading" ? "Checking connection" : selectedCalendarConnection === "connected" ? "Connected" : selectedCalendarConnection === "unavailable" ? "Not configured" : "Connection required"}</p></div>{selectedCalendarConnection === "disconnected" && <Button size="sm" variant="outline" onClick={() => connectCalendar(plan.calendarProvider)}>Connect</Button>}</div></div>}
         {error && <p role="alert" className="mt-4 rounded-md border border-destructive/20 bg-destructive/5 px-3 py-2 text-meta text-destructive">{error}</p>}
         {errorCode === "GOOGLE_CALENDAR_API_DISABLED" && <a className="mt-2 inline-flex text-body font-semibold text-primary hover:underline" href="https://console.cloud.google.com/apis/library/calendar-json.googleapis.com" target="_blank" rel="noreferrer">Open Google Calendar API settings</a>}
         {notice && <p className="mt-4 rounded-md border border-emerald-200 bg-emerald-50 px-3 py-2 text-meta text-emerald-900">{notice}</p>}
-        <div className="mt-5 flex flex-wrap items-center justify-between gap-3 border-t border-border pt-4"><p className="max-w-md text-meta text-muted-foreground">Nothing is written until you confirm. Execution uses the same audited domain service as the workspace UI.</p><div className="flex gap-2">{eventUrl && <Button nativeButton={false} variant="outline" render={<a href={eventUrl} target="_blank" rel="noreferrer" />}>Open event</Button>}{!notice && (calendarNeedsConnection ? <Button onClick={connectGoogleCalendar}>Connect Calendar</Button> : <Button onClick={() => void executePlan()} disabled={executing}>{executing ? "Executing" : plan.type === "calendar_invite" ? "Create event and send" : plan.type === "learning_assignment" ? "Create assignments" : plan.type === "hiring_requisition" ? "Submit requisition" : "Create retention review"}</Button>)}</div></div>
+        <div className="mt-5 flex flex-wrap items-center justify-between gap-3 border-t border-border pt-4"><p className="max-w-md text-meta text-muted-foreground">Nothing is written until you confirm. Execution uses the same audited domain service as the workspace UI.</p><div className="flex gap-2">{eventUrl && <Button nativeButton={false} variant="outline" render={<a href={eventUrl} target="_blank" rel="noreferrer" />}>Open {plan.type === "calendar_invite" && plan.calendarProvider === "microsoft_teams" ? "meeting" : "event"}</Button>}{!notice && (calendarNeedsConnection ? <Button onClick={() => plan.type === "calendar_invite" && connectCalendar(plan.calendarProvider)} disabled={selectedCalendarConnection === "loading" || selectedCalendarConnection === "unavailable"}>{selectedCalendarConnection === "unavailable" ? "Service unavailable" : `Connect ${plan.type === "calendar_invite" && plan.calendarProvider === "microsoft_teams" ? "Teams" : "Calendar"}`}</Button> : <Button onClick={() => void executePlan()} disabled={executing}>{executing ? "Executing" : plan.type === "calendar_invite" ? plan.calendarProvider === "microsoft_teams" ? "Create Teams meeting" : "Create event and send" : plan.type === "learning_assignment" ? "Create assignments" : plan.type === "hiring_requisition" ? "Submit requisition" : "Create retention review"}</Button>)}</div></div>
       </div>}
     </div>
   </section>

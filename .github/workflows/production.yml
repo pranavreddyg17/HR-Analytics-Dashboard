@@ -129,7 +129,7 @@ jobs:
           client-id: ${{ secrets.AZURE_CLIENT_ID }}
           tenant-id: ${{ secrets.AZURE_TENANT_ID }}
           subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
-      - name: Copy Azure AI configuration to the application vault
+      - name: Copy runtime integration configuration to the application vault
         env:
           AI_SEARCH_KEY: ${{ secrets.AI_SEARCH_KEY }}
           AI_SEARCH_ENDPOINT: ${{ secrets.AI_SEARCH_ENDPOINT }}
@@ -137,6 +137,9 @@ jobs:
           AZURE_OPENAI_ENDPOINT: ${{ secrets.AZURE_OPENAI_ENDPOINT }}
           AZURE_EMBEDDING_KEY: ${{ secrets.AZURE_EMBEDDING_KEY }}
           AZURE_EMBEDDING_ENDPOINT: ${{ secrets.AZURE_EMBEDDING_ENDPOINT }}
+          MICROSOFT_ENTRA_CLIENT_ID: ${{ secrets.MICROSOFT_ENTRA_CLIENT_ID }}
+          MICROSOFT_ENTRA_CLIENT_SECRET: ${{ secrets.MICROSOFT_ENTRA_CLIENT_SECRET }}
+          MICROSOFT_ENTRA_TENANT_ID: ${{ secrets.MICROSOFT_ENTRA_TENANT_ID }}
         run: |
           set -euo pipefail
           az keyvault secret set --vault-name "$APP_KEY_VAULT" --name azure-ai-search-key --value "$AI_SEARCH_KEY" --output none
@@ -145,6 +148,14 @@ jobs:
           az keyvault secret set --vault-name "$APP_KEY_VAULT" --name azure-openai-endpoint --value "$AZURE_OPENAI_ENDPOINT" --output none
           az keyvault secret set --vault-name "$APP_KEY_VAULT" --name azure-openai-embedding-key --value "$AZURE_EMBEDDING_KEY" --output none
           az keyvault secret set --vault-name "$APP_KEY_VAULT" --name azure-openai-embedding-endpoint --value "$AZURE_EMBEDDING_ENDPOINT" --output none
+          if [ -n "$MICROSOFT_ENTRA_CLIENT_ID" ] && [ -n "$MICROSOFT_ENTRA_CLIENT_SECRET" ] && [ -n "$MICROSOFT_ENTRA_TENANT_ID" ]; then
+            az keyvault secret set --vault-name "$APP_KEY_VAULT" --name microsoft-entra-client-id --value "$MICROSOFT_ENTRA_CLIENT_ID" --output none
+            az keyvault secret set --vault-name "$APP_KEY_VAULT" --name microsoft-entra-client-secret --value "$MICROSOFT_ENTRA_CLIENT_SECRET" --output none
+            az keyvault secret set --vault-name "$APP_KEY_VAULT" --name microsoft-entra-tenant-id --value "$MICROSOFT_ENTRA_TENANT_ID" --output none
+            echo "MICROSOFT_ENTRA_ENABLED=true" >> "$GITHUB_ENV"
+          else
+            echo "MICROSOFT_ENTRA_ENABLED=false" >> "$GITHUB_ENV"
+          fi
       - name: Sign in to Azure Container Registry
         run: az acr login --name "$ACR_NAME"
       - uses: docker/setup-buildx-action@v3
@@ -168,7 +179,7 @@ jobs:
           export ARM_TENANT_ID="${{ secrets.AZURE_TENANT_ID }}"
           export ARM_SUBSCRIPTION_ID="${{ secrets.AZURE_SUBSCRIPTION_ID }}"
           terraform -chdir=infra init -reconfigure -backend-config=environments/production/backend.hcl
-          terraform -chdir=infra plan -var-file=environments/production/production.tfvars -var="image_tag=$IMAGE_TAG" -out=production.tfplan
+          terraform -chdir=infra plan -var-file=environments/production/production.tfvars -var="image_tag=$IMAGE_TAG" -var="enable_microsoft_entra_auth=$MICROSOFT_ENTRA_ENABLED" -out=production.tfplan
           terraform -chdir=infra apply -auto-approve production.tfplan
       - name: Synchronize grounded HR knowledge
         run: |

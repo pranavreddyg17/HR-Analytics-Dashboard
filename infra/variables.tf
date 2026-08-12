@@ -98,6 +98,12 @@ variable "enable_employee_custom_domain" {
   default     = false
 }
 
+variable "enable_microsoft_entra_auth" {
+  description = "Enable Microsoft Entra sign-in and delegated Teams calendar workflows after the application registration secrets are present in Key Vault."
+  type        = bool
+  default     = false
+}
+
 variable "azure_ai_search_index" {
   description = "Azure AI Search index used by grounded HR retrieval."
   type        = string

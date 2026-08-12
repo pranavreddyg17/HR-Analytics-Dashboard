@@ -16,5 +16,10 @@ declare module "next-auth/jwt" {
     googleCalendarRefreshToken?: string
     googleCalendarAccessTokenExpiresAt?: number
     googleCalendarScope?: string
+    microsoftTeamsAccessToken?: string
+    microsoftTeamsRefreshToken?: string
+    microsoftTeamsAccessTokenExpiresAt?: number
+    microsoftTeamsScope?: string
+    microsoftTenantId?: string
   }
 }

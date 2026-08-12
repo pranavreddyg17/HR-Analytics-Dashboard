@@ -5,6 +5,7 @@ import { synthesizeWithAzureResponses } from "@/lib/server/azure-ai"
 import { createGoogleCalendarEvent } from "@/lib/server/google-calendar"
 import { assignLearningCourse, listLearningOperations } from "@/lib/server/learning"
 import { PeopleError } from "@/lib/server/people"
+import { createMicrosoftTeamsMeeting } from "@/lib/server/microsoft-teams"
 import type { RequestActor } from "@/lib/server/request-user"
 import { createRetentionReview, getRetentionIntelligence } from "@/lib/server/retention-intelligence"
 import { createWorkflow } from "@/lib/server/workflows"
@@ -13,10 +14,12 @@ const employeeIds = z.array(z.string().trim().min(1).max(60)).min(1).max(20)
 const localDateTime = z.string().regex(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$/)
 const calendarAgentPrompt = z.object({ prompt: z.string().trim().min(10).max(1200) })
 const learningTargetType = z.enum(["department", "job_title", "job_level", "manager_team", "job_profile"])
+const calendarProvider = z.enum(["google", "microsoft_teams"])
 
 const draftSchema = z.discriminatedUnion("type", [
   z.object({
     type: z.literal("calendar_invite"),
+    calendarProvider: calendarProvider.optional().default("google"),
     employeeIds,
     title: z.string().trim().min(3).max(160),
     start: localDateTime,
@@ -258,12 +261,14 @@ async function planAiCalendarWorkflow(value: unknown, actor: RequestActor) {
   const end = addMinutes(start, parseDuration(prompt))
   const mobilityReview = /promot|mobility|career progression|career review/i.test(prompt)
   const title = mobilityReview ? "Career progression review" : department ? `${department} employee review` : "Employee review meeting"
+  const selectedCalendarProvider = /\bgoogle(?:\s+calendar)?\b/i.test(prompt) ? "google" as const : "microsoft_teams" as const
   const agenda = mobilityReview
     ? "Review current role scope, career interests, internal mobility options, development support, and agreed follow-up actions. Confirm promotion history and employee preference before making decisions."
     : "Review current priorities, support needed, development opportunities, and agreed follow-up actions."
 
   return {
     type: "calendar_invite" as const,
+    calendarProvider: selectedCalendarProvider,
     prompt,
     title,
     start,
@@ -517,12 +522,12 @@ export async function createAiWorkflowDraft(value: unknown, actor: RequestActor)
     : null
   if (input.type === "learning_assignment" && !course) throw new PeopleError("The selected course is no longer active.", 409)
   const title = input.type === "calendar_invite" ? input.title : input.type === "employee_email" ? input.subject : input.type === "learning_assignment" ? `Assign ${course?.title}` : input.type === "hiring_requisition" ? `Request ${input.position}` : `${input.department} retention review`
-  const launchUrl = input.type === "calendar_invite" ? calendarUrl(input, employees) : input.type === "employee_email" ? emailUrl(input, employees) : null
+  const launchUrl = input.type === "calendar_invite" && input.calendarProvider === "google" ? calendarUrl(input, employees) : input.type === "employee_email" ? emailUrl(input, employees) : null
   const summary = input.type === "calendar_invite"
     ? `${input.start.replace("T", " ")} · ${input.timezone}`
     : input.type === "employee_email" ? `${employees.length} employee${employees.length === 1 ? "" : "s"}` : input.type === "learning_assignment" ? `${input.targetType.replaceAll("_", " ")} · due ${input.dueDate}` : input.type === "hiring_requisition" ? `${input.department} · ${input.location}` : input.department
   const details = input.type === "calendar_invite"
-    ? { start: input.start, end: input.end, timezone: input.timezone, location: input.location, agenda: input.agenda, summary }
+    ? { calendarProvider: input.calendarProvider, start: input.start, end: input.end, timezone: input.timezone, location: input.location, agenda: input.agenda, summary }
     : input.type === "employee_email" ? { subject: input.subject, message: input.message, summary }
       : input.type === "learning_assignment" ? { targetType: input.targetType, targetValue: input.targetValue, courseId: input.courseId, dueDate: input.dueDate, hours: input.hours ?? course?.default_duration_hours, note: input.note, recommendationId: input.recommendationId, summary }
         : input.type === "hiring_requisition" ? { position: input.position, department: input.department, location: input.location, employmentType: input.employmentType, justification: input.justification, summary }
@@ -545,7 +550,9 @@ export async function createAiWorkflowDraft(value: unknown, actor: RequestActor)
     },
     launchUrl,
     confirmation: input.type === "calendar_invite"
-      ? "Review the event in Google Calendar, then save it to send invitations."
+      ? input.calendarProvider === "microsoft_teams"
+        ? "Confirm to create the Teams meeting and send calendar invitations."
+        : "Confirm to create the Google Calendar event and send invitations."
       : input.type === "employee_email" ? "Review the message in Gmail, then send it when ready." : input.type === "learning_assignment" ? "Review the capability, cohort, course, and due date before creating assignments." : input.type === "hiring_requisition" ? "Review the role, location, employment type, and business justification before submitting the requisition." : "Review the department evidence before creating a governed retention work item.",
   }
 }
@@ -614,6 +621,7 @@ export async function executeAiWorkflow(id: string, actor: RequestActor, request
     if (row.type !== "calendar_invite") throw new PeopleError("This workflow cannot be executed automatically.", 422)
     const input = draftSchema.parse({
       type: "calendar_invite",
+      calendarProvider: details.calendarProvider ?? "google",
       employeeIds: parseJson<string[]>(row.employee_ids_json, []),
       title: row.title,
       start: details.start,
@@ -624,7 +632,7 @@ export async function executeAiWorkflow(id: string, actor: RequestActor, request
     })
     if (input.type !== "calendar_invite") throw new PeopleError("Invalid calendar workflow.", 422)
     const employees = await eligibleEmployees(db, actor, input.employeeIds)
-    const event = await createGoogleCalendarEvent(request, {
+    const eventInput = {
       title: input.title,
       start: input.start,
       end: input.end,
@@ -632,15 +640,18 @@ export async function executeAiWorkflow(id: string, actor: RequestActor, request
       location: input.location,
       agenda: input.agenda,
       attendees: employees.map((employee) => ({ email: employee.work_email, name: employee.display_name })),
-    })
+    }
+    const event = input.calendarProvider === "microsoft_teams"
+      ? await createMicrosoftTeamsMeeting(request, { ...eventInput, workflowId: id })
+      : await createGoogleCalendarEvent(request, eventInput)
     await db.prepare("UPDATE ai_workflow_drafts SET status='sent', opened_at=CURRENT_TIMESTAMP, details_json=?, updated_at=CURRENT_TIMESTAMP WHERE id=?")
-      .bind(JSON.stringify({ ...details, eventId: event.eventId, eventUrl: event.eventUrl }), id)
+      .bind(JSON.stringify({ ...details, calendarProvider: input.calendarProvider, eventId: event.eventId, eventUrl: event.eventUrl, joinUrl: "joinUrl" in event ? event.joinUrl : null }), id)
       .run()
     return {
       id,
       status: "sent",
       eventUrl: event.eventUrl,
-      message: `Calendar event created and ${employees.length} invitation${employees.length === 1 ? "" : "s"} sent.`,
+      message: `${input.calendarProvider === "microsoft_teams" ? "Teams meeting" : "Google Calendar event"} created and ${employees.length} invitation${employees.length === 1 ? "" : "s"} sent.`,
     }
   } catch (error) {
     await db.prepare("UPDATE ai_workflow_drafts SET status='ready', updated_at=CURRENT_TIMESTAMP WHERE id=? AND status='executing'").bind(id).run().catch(() => undefined)

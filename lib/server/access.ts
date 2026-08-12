@@ -3,7 +3,8 @@ import { runtimeEnv } from "@/lib/server/runtime-env"
 
 const roles = ["admin", "hr", "manager", "viewer", "employee"] as const
 export type AppRole = (typeof roles)[number]
-type AccessUser = { email: string; display_name: string; role: AppRole; status: "active" | "disabled"; created_at: string; updated_at: string; last_login_at: string | null }
+type AccessUser = { email: string; display_name: string; role: AppRole; status: "active" | "disabled"; created_at: string; updated_at: string; last_login_at: string | null; identity_providers?: Array<"google" | "microsoft"> }
+type LoginIdentity = { provider: "google" | "microsoft"; subject: string; tenantId?: string | null }
 const ownerEmail = runtimeEnv.BOOTSTRAP_ADMIN_EMAIL?.trim().toLowerCase() ?? ""
 
 function normalizedEmail(value: string) { return value.trim().toLowerCase() }
@@ -24,12 +25,25 @@ export async function findAccessUser(email: string): Promise<AccessUser | null> 
     .bind(normalizedEmail(email)).first<AccessUser>())
 }
 
-export async function recordLogin(email: string, displayName: string) {
-  await accessTable((db) => db.prepare("UPDATE app_users SET display_name = CASE WHEN ? = '' THEN display_name ELSE ? END, employee_id = COALESCE(employee_id, (SELECT employee_id FROM employees WHERE LOWER(work_email)=LOWER(?) AND archived_at IS NULL LIMIT 1)), onboarding_status = CASE WHEN onboarding_status='submitted' THEN 'submitted' WHEN COALESCE(employee_id, (SELECT employee_id FROM employees WHERE LOWER(work_email)=LOWER(?) AND archived_at IS NULL LIMIT 1)) IS NULL THEN onboarding_status ELSE 'complete' END, last_login_at = CURRENT_TIMESTAMP, updated_at = CURRENT_TIMESTAMP WHERE email = ?")
-    .bind(displayName, displayName, normalizedEmail(email), normalizedEmail(email), normalizedEmail(email)).run())
+export async function recordLogin(email: string, displayName: string, identity?: LoginIdentity) {
+  const normalized = normalizedEmail(email)
+  const db = await database()
+  const statements = [db.prepare("UPDATE app_users SET display_name = CASE WHEN ? = '' THEN display_name ELSE ? END, employee_id = COALESCE(employee_id, (SELECT employee_id FROM employees WHERE LOWER(work_email)=LOWER(?) AND archived_at IS NULL LIMIT 1)), onboarding_status = CASE WHEN onboarding_status='submitted' THEN 'submitted' WHEN COALESCE(employee_id, (SELECT employee_id FROM employees WHERE LOWER(work_email)=LOWER(?) AND archived_at IS NULL LIMIT 1)) IS NULL THEN onboarding_status ELSE 'complete' END, last_login_at = CURRENT_TIMESTAMP, updated_at = CURRENT_TIMESTAMP WHERE email = ?")
+    .bind(displayName, displayName, normalized, normalized, normalized)]
+  if (identity?.subject) {
+    statements.push(db.prepare(`
+      INSERT INTO user_auth_identities(id, user_email, provider, provider_subject, tenant_id)
+      VALUES (?, ?, ?, ?, ?)
+      ON CONFLICT(user_email, provider) DO UPDATE SET
+        provider_subject=EXCLUDED.provider_subject,
+        tenant_id=EXCLUDED.tenant_id,
+        last_login_at=CURRENT_TIMESTAMP
+    `).bind(`AUTH-${crypto.randomUUID().toUpperCase()}`, normalized, identity.provider, identity.subject, identity.tenantId ?? null))
+  }
+  await db.batch(statements)
 }
 
-/** Provision a verified Google identity for employee self-service without granting HR access. */
+/** Provision a verified federated identity for employee self-service without granting HR access. */
 export async function ensureEmployeeAccessUser(emailValue: string, displayName: string): Promise<AccessUser> {
   const email = normalizedEmail(emailValue)
   if (!/^\S+@\S+\.\S+$/.test(email)) throw new Error("INVALID_EMAIL")
@@ -50,8 +64,16 @@ export async function ensureEmployeeAccessUser(emailValue: string, displayName: 
 
 export async function listAccessUsers(): Promise<AccessUser[]> {
   const db = await database()
-  const result = await db.prepare("SELECT email, display_name, role, status, created_at, updated_at, last_login_at FROM app_users ORDER BY CASE role WHEN 'admin' THEN 0 WHEN 'hr' THEN 1 WHEN 'manager' THEN 2 WHEN 'viewer' THEN 3 ELSE 4 END, email").all<AccessUser>()
-  return result.results ?? []
+  const result = await db.prepare(`
+    SELECT u.email, u.display_name, u.role, u.status, u.created_at, u.updated_at, u.last_login_at,
+      COALESCE((SELECT json_agg(i.provider ORDER BY i.provider)::text FROM user_auth_identities i WHERE i.user_email=u.email), '[]') AS identity_providers_json
+    FROM app_users u
+    ORDER BY CASE u.role WHEN 'admin' THEN 0 WHEN 'hr' THEN 1 WHEN 'manager' THEN 2 WHEN 'viewer' THEN 3 ELSE 4 END, u.email
+  `).all<AccessUser & { identity_providers_json: string }>()
+  return (result.results ?? []).map(({ identity_providers_json, ...user }) => ({
+    ...user,
+    identity_providers: JSON.parse(identity_providers_json) as Array<"google" | "microsoft">,
+  }))
 }
 
 export async function addAccessUser(input: { email: string; displayName?: string; role: string }, actor: string) {

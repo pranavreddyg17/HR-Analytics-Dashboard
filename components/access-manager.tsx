@@ -6,7 +6,7 @@ import { Loader2 } from "lucide-react"
 import { formatWorkspaceDateTime } from "@/lib/date-format"
 import { WorkspaceHeader, WorkspacePage } from "@/components/workspace-ui"
 
-type User = { email: string; display_name: string; role: string; status: string; created_at: string; last_login_at: string | null }
+type User = { email: string; display_name: string; role: string; status: string; created_at: string; last_login_at: string | null; identity_providers?: Array<"google" | "microsoft"> }
 type Audit = { id: string; actor_email: string; action: string; target_email: string; created_at: string }
 
 export function AccessManager({ ownerEmail }: { ownerEmail: string }) {
@@ -43,7 +43,7 @@ export function AccessManager({ ownerEmail }: { ownerEmail: string }) {
       const response = await fetch("/api/v1/access/users", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ email, role }) })
       const body = await response.json() as { error?: string }
       if (!response.ok) throw new Error(body.error ?? "Could not add email")
-      setEmail(""); setMessage("Access granted. They can now sign in with Google."); await load()
+      setEmail(""); setMessage("Access granted. They can now sign in with Google or Microsoft."); await load()
     } catch (error) { setMessage(error instanceof Error ? error.message : "Could not add email") } finally { setSaving(false) }
   }
   async function update(user: User, changes: { role?: string; status?: string }) {
@@ -69,7 +69,7 @@ export function AccessManager({ ownerEmail }: { ownerEmail: string }) {
       <section className="surface-card">
         <div className="border-b border-border px-5 py-4">
           <h2 className="text-sm font-semibold">Add account</h2>
-          <p className="mt-1 text-xs text-muted-foreground">Grant access to an approved Google account.</p>
+          <p className="mt-1 text-xs text-muted-foreground">Grant access by verified Google or Microsoft email address.</p>
         </div>
         <form onSubmit={invite} className="grid gap-3 p-4 sm:grid-cols-[minmax(0,1fr)_160px_auto] sm:items-end">
           <label className="text-xs font-semibold text-foreground">
@@ -97,7 +97,7 @@ export function AccessManager({ ownerEmail }: { ownerEmail: string }) {
       <section className="surface-card">
         <div className="border-b border-border px-5 py-4">
           <h2 className="text-sm font-semibold">Accounts</h2>
-          <p className="mt-1 text-xs text-muted-foreground">{users.length} approved Google {users.length === 1 ? "account" : "accounts"}</p>
+          <p className="mt-1 text-xs text-muted-foreground">{users.length} approved {users.length === 1 ? "account" : "accounts"}</p>
         </div>
         {loading ? (
           <div className="flex h-40 items-center justify-center"><Loader2 className="size-5 animate-spin text-muted-foreground" /></div>
@@ -110,7 +110,9 @@ export function AccessManager({ ownerEmail }: { ownerEmail: string }) {
                     {user.display_name || user.email.split("@")[0]}
                     {user.email === ownerEmail && <span className="ml-2 text-meta font-semibold text-muted-foreground">Current user</span>}
                   </p>
-                  <p className="truncate text-xs text-muted-foreground">{user.email} · {user.last_login_at ? `Last sign-in ${new Date(user.last_login_at).toLocaleDateString()}` : "No sign-in recorded"}</p>
+                  <p className="truncate text-xs text-muted-foreground">
+                    {user.email} · {user.identity_providers?.length ? user.identity_providers.map((provider) => provider === "microsoft" ? "Microsoft" : "Google").join(" + ") : "No linked sign-in"} · {user.last_login_at ? `Last sign-in ${new Date(user.last_login_at).toLocaleDateString()}` : "No sign-in recorded"}
+                  </p>
                 </div>
                 <select aria-label={`Role for ${user.email}`} value={user.role} disabled={user.email === ownerEmail} onChange={(event) => update(user, { role: event.target.value })} className="h-9 rounded-md border border-border bg-background px-2 text-sm disabled:opacity-60">
                   <option value="admin">Admin</option>

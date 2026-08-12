@@ -226,17 +226,20 @@ resource "azurerm_key_vault_secret" "auth_secret" {
 }
 
 locals {
-  web_name                          = "laidbackhr-${random_string.suffix.result}-web"
-  key_vault_database_reference      = "@Microsoft.KeyVault(SecretUri=${azurerm_key_vault_secret.database_url.versionless_id})"
-  key_vault_auth_reference          = "@Microsoft.KeyVault(SecretUri=${azurerm_key_vault_secret.auth_secret.versionless_id})"
-  key_vault_google_id_reference     = "@Microsoft.KeyVault(VaultName=${azurerm_key_vault.app.name};SecretName=google-client-id)"
-  key_vault_google_secret_reference = "@Microsoft.KeyVault(VaultName=${azurerm_key_vault.app.name};SecretName=google-client-secret)"
-  ai_search_endpoint_reference      = "@Microsoft.KeyVault(VaultName=${azurerm_key_vault.app.name};SecretName=azure-ai-search-endpoint)"
-  ai_search_key_reference           = "@Microsoft.KeyVault(VaultName=${azurerm_key_vault.app.name};SecretName=azure-ai-search-key)"
-  azure_openai_endpoint_reference   = "@Microsoft.KeyVault(VaultName=${azurerm_key_vault.app.name};SecretName=azure-openai-endpoint)"
-  azure_openai_key_reference        = "@Microsoft.KeyVault(VaultName=${azurerm_key_vault.app.name};SecretName=azure-openai-key)"
-  embedding_endpoint_reference      = "@Microsoft.KeyVault(VaultName=${azurerm_key_vault.app.name};SecretName=azure-openai-embedding-endpoint)"
-  embedding_key_reference           = "@Microsoft.KeyVault(VaultName=${azurerm_key_vault.app.name};SecretName=azure-openai-embedding-key)"
+  web_name                             = "laidbackhr-${random_string.suffix.result}-web"
+  key_vault_database_reference         = "@Microsoft.KeyVault(SecretUri=${azurerm_key_vault_secret.database_url.versionless_id})"
+  key_vault_auth_reference             = "@Microsoft.KeyVault(SecretUri=${azurerm_key_vault_secret.auth_secret.versionless_id})"
+  key_vault_google_id_reference        = "@Microsoft.KeyVault(VaultName=${azurerm_key_vault.app.name};SecretName=google-client-id)"
+  key_vault_google_secret_reference    = "@Microsoft.KeyVault(VaultName=${azurerm_key_vault.app.name};SecretName=google-client-secret)"
+  key_vault_microsoft_id_reference     = "@Microsoft.KeyVault(VaultName=${azurerm_key_vault.app.name};SecretName=microsoft-entra-client-id)"
+  key_vault_microsoft_secret_reference = "@Microsoft.KeyVault(VaultName=${azurerm_key_vault.app.name};SecretName=microsoft-entra-client-secret)"
+  key_vault_microsoft_tenant_reference = "@Microsoft.KeyVault(VaultName=${azurerm_key_vault.app.name};SecretName=microsoft-entra-tenant-id)"
+  ai_search_endpoint_reference         = "@Microsoft.KeyVault(VaultName=${azurerm_key_vault.app.name};SecretName=azure-ai-search-endpoint)"
+  ai_search_key_reference              = "@Microsoft.KeyVault(VaultName=${azurerm_key_vault.app.name};SecretName=azure-ai-search-key)"
+  azure_openai_endpoint_reference      = "@Microsoft.KeyVault(VaultName=${azurerm_key_vault.app.name};SecretName=azure-openai-endpoint)"
+  azure_openai_key_reference           = "@Microsoft.KeyVault(VaultName=${azurerm_key_vault.app.name};SecretName=azure-openai-key)"
+  embedding_endpoint_reference         = "@Microsoft.KeyVault(VaultName=${azurerm_key_vault.app.name};SecretName=azure-openai-embedding-endpoint)"
+  embedding_key_reference              = "@Microsoft.KeyVault(VaultName=${azurerm_key_vault.app.name};SecretName=azure-openai-embedding-key)"
 }
 
 # The prediction runtime moved into the web application. Forget the former
@@ -307,10 +310,16 @@ resource "azurerm_linux_web_app" "web" {
     AUTH_SECRET                                = local.key_vault_auth_reference
     GOOGLE_CLIENT_ID                           = local.key_vault_google_id_reference
     GOOGLE_CLIENT_SECRET                       = local.key_vault_google_secret_reference
+    MICROSOFT_ENTRA_ENABLED                    = tostring(var.enable_microsoft_entra_auth)
+    MICROSOFT_ENTRA_CLIENT_ID                  = local.key_vault_microsoft_id_reference
+    MICROSOFT_ENTRA_CLIENT_SECRET              = local.key_vault_microsoft_secret_reference
+    MICROSOFT_ENTRA_TENANT_ID                  = local.key_vault_microsoft_tenant_reference
     AUTH_URL                                   = var.application_base_url
     AUTH_TRUST_HOST                            = "true"
     NEXTAUTH_URL                               = var.application_base_url
     AUTH_COOKIE_DOMAIN                         = ".laidbackhr.cloud"
+    AUTH_ALLOWED_ORIGINS                       = "${var.application_base_url},${var.employee_portal_url}"
+    EMPLOYEE_PORTAL_URL                        = var.employee_portal_url
     BOOTSTRAP_ADMIN_EMAIL                      = var.bootstrap_admin_email
     BOOTSTRAP_ADMIN_NAME                       = var.bootstrap_admin_name
     DATABASE_POOL_MAX                          = "10"
