@@ -61,7 +61,17 @@ async function identity(db: Database, actor: RequestActor): Promise<EmployeeIden
     ORDER BY CASE WHEN e.employee_id=u.employee_id THEN 0 ELSE 1 END
     LIMIT 1
   `).bind(actor.email, actor.email).first<EmployeeIdentity>()
-  if (!employee) throw new PeopleError("Your account is not linked to an employee profile. Ask HR to set your work email on the employee record.", 409)
+  if (!employee) {
+    const ended = await db.prepare(`
+      SELECT e.employment_status
+      FROM employees e LEFT JOIN app_users u ON u.employee_id=e.employee_id
+      WHERE (LOWER(e.work_email)=LOWER(?) OR LOWER(u.email)=LOWER(?))
+        AND (e.archived_at IS NOT NULL OR LOWER(e.employment_status) IN ('terminated','resigned'))
+      LIMIT 1
+    `).bind(actor.email, actor.email).first<{ employment_status: string }>()
+    if (ended) throw new PeopleError(`Employee services are unavailable because your employment record is ${ended.employment_status}.`, 403)
+    throw new PeopleError("Your account is not linked to an employee profile. Ask HR to set your work email on the employee record.", 409)
+  }
   return employee
 }
 

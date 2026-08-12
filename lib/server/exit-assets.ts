@@ -479,13 +479,14 @@ export async function completeEmployeeExit(exitId: string, actualExitDate: strin
   if (exit.status === "Cancelled") throw new ExitAssetError("A cancelled exit cannot be completed.", 409)
   if (exit.tasks.some((task) => task.status !== "Completed")) throw new ExitAssetError("Complete every offboarding task before closing the exit.", 409)
   if (exit.assets.some((asset) => asset.currentAssignment)) throw new ExitAssetError("Return every assigned asset before closing the exit.", 409)
-  const employee = await db.prepare("SELECT department, tenure_years FROM employee_directory_view WHERE employee_id=?").bind(exit.employeeId).first<{ department: string; tenure_years: number }>()
+  const employee = await db.prepare("SELECT department, tenure_years, work_email FROM employee_directory_view WHERE employee_id=?").bind(exit.employeeId).first<{ department: string; tenure_years: number; work_email: string | null }>()
   if (!employee) throw new ExitAssetError("Employee record is unavailable.", 409)
   const finalStatus = exit.exitType === "Resignation" ? "Resigned" : "Terminated"
   const attritionId = `ATTR-${exit.id}`
   await db.batch([
     db.prepare("UPDATE employee_exits SET status='Completed', actual_exit_date=?, updated_at=CURRENT_TIMESTAMP WHERE id=?").bind(actualExitDate, exitId),
     db.prepare("UPDATE employees SET employment_status=?, archived_at=COALESCE(archived_at, CURRENT_TIMESTAMP::text), version=version+1, updated_at=CURRENT_TIMESTAMP WHERE employee_id=?").bind(finalStatus, exit.employeeId),
+    db.prepare("UPDATE app_users SET role='employee', onboarding_status='complete', updated_at=CURRENT_TIMESTAMP WHERE employee_id=? OR LOWER(email)=LOWER(?)").bind(exit.employeeId, employee.work_email ?? ""),
     db.prepare(`INSERT INTO attrition_events(id, employee_id, exit_date, exit_reason, exit_type, department, tenure_years, data_source)
       VALUES (?, ?, ?, ?, ?, ?, ?, 'workflow') ON CONFLICT(id) DO UPDATE SET exit_date=EXCLUDED.exit_date, exit_reason=EXCLUDED.exit_reason, exit_type=EXCLUDED.exit_type, department=EXCLUDED.department, tenure_years=EXCLUDED.tenure_years`)
       .bind(attritionId, exit.employeeId, actualExitDate, exit.exitType, exit.exitType === "Resignation" ? "Voluntary" : "Involuntary", employee.department, Number(employee.tenure_years ?? 0)),

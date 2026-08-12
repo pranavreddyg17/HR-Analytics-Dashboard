@@ -37,6 +37,7 @@ export type EmployeeProfileResponse = {
     canManageEmployment: boolean
     canManageMeetings: boolean
     canManageReviews: boolean
+    canDeleteEmployee: boolean
   }
   employee: ManagedEmployee
   manager: ManagedEmployee | null

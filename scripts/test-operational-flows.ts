@@ -12,7 +12,7 @@ import { runHrAgent } from "@/lib/server/hr-agent"
 import { ensureHrDatabase } from "@/lib/server/hr-repository"
 import { getInboxOperations } from "@/lib/server/inbox"
 import { assignLearningCourse, completeLearningAssignment, createLearningCourse, listLearningOperations } from "@/lib/server/learning"
-import { createPerson, getPerson } from "@/lib/server/people"
+import { createPerson, deletePersonPermanently, getPerson, listPeople, setPersonArchived } from "@/lib/server/people"
 import type { RequestActor } from "@/lib/server/request-user"
 import { actOnWorkflow, createWorkflow } from "@/lib/server/workflows"
 import { assignAsset, cancelEmployeeExit, completeEmployeeExit, createAsset, createEmployeeExit, getAsset, listAssets, listEmployeeExits, updateOffboardingTask } from "@/lib/server/exit-assets"
@@ -345,7 +345,37 @@ await cancelEmployeeExit(cancelledExit.id, hr)
 assert.equal((await getPerson(retained.employee_id, hr)).employee.employment_status, "On Bench")
 assert.ok((await listEmployeeExits({ search: retained.employee_id })).items.some((row) => row.status === "Cancelled"))
 
-console.log("Operational integration passed: employee services, actor-scoped queues, reviews, one-on-ones, AI workflows, learning, hiring, onboarding, document visibility, assets, and offboarding.")
+const lifecycleActor: RequestActor = { email: "former.integration@example.com", displayName: "Finley Former", role: "employee" }
+await db.prepare("INSERT INTO app_users(email, display_name, role, status, invited_by, onboarding_status) VALUES (?, ?, 'employee', 'active', 'integration-test', 'required') ON CONFLICT(email) DO UPDATE SET status='active', role='employee'")
+  .bind(lifecycleActor.email, lifecycleActor.displayName).run()
+const lifecycleEmployee = await createPerson({
+  employee_id: "INT-FORMER",
+  first_name: "Finley",
+  last_name: "Former",
+  work_email: lifecycleActor.email,
+  department: "Engineering",
+  job_title: "Software Engineer I",
+  location: "Remote",
+  manager_id: managerRecord.employee_id,
+  hire_date: "2025-02-03",
+  employment_type: "Full-time",
+  employment_status: "Active",
+}, hr)
+await db.prepare("UPDATE app_users SET employee_id=?, onboarding_status='complete' WHERE email=?").bind(lifecycleEmployee.employee_id, lifecycleActor.email).run()
+await setPersonArchived(lifecycleEmployee.employee_id, true, hr)
+assert.equal((await getEmployeeOnboardingState(lifecycleActor)).status, "employment_ended")
+assert.equal((await listPeople({ search: lifecycleActor.email, population: "current" })).total, 0)
+assert.equal((await listPeople({ search: lifecycleActor.email, population: "former" })).items[0]?.employment_status, "Terminated")
+await assert.rejects(() => deletePersonPermanently(lifecycleEmployee.employee_id, hr), /Only an administrator/i)
+await deletePersonPermanently(lifecycleEmployee.employee_id, admin)
+assert.equal(await db.prepare("SELECT employee_id FROM employees WHERE employee_id=?").bind(lifecycleEmployee.employee_id).first(), null)
+const resetAccess = await db.prepare("SELECT employee_id, role, status, onboarding_status FROM app_users WHERE email=?")
+  .bind(lifecycleActor.email).first<{ employee_id: string | null; role: string; status: string; onboarding_status: string }>()
+assert.deepEqual(resetAccess, { employee_id: null, role: "employee", status: "active", onboarding_status: "required" })
+assert.equal((await getEmployeeOnboardingState(lifecycleActor)).status, "required")
+assert.equal((await db.prepare("SELECT action FROM access_audit WHERE action='employee_record_deleted' AND target_email=?").bind(lifecycleActor.email).first<{ action: string }>())?.action, "employee_record_deleted")
+
+console.log("Operational integration passed: employee services, lifecycle access, permanent deletion, actor-scoped queues, reviews, one-on-ones, AI workflows, learning, hiring, onboarding, document visibility, assets, and offboarding.")
 }
 
 void main().catch((error) => {

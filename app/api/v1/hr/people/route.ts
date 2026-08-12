@@ -25,6 +25,7 @@ export async function GET(request: NextRequest) {
       status: params.get("status") ?? "",
       employmentType: params.get("employmentType") ?? "",
       tenure: params.get("tenure") ?? "",
+      population: (["current", "former", "all"].includes(params.get("population") ?? "") ? params.get("population") : "current") as "current" | "former" | "all",
       includeArchived: params.get("includeArchived") === "true",
       limit: Number(params.get("limit") ?? 100),
       offset: Number(params.get("offset") ?? 0),

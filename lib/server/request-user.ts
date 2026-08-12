@@ -1,6 +1,6 @@
 import { auth } from "@/auth"
 import { headers } from "next/headers"
-import type { AppRole } from "@/lib/server/access"
+import { findAccessUser, type AppRole } from "@/lib/server/access"
 import { runtimeEnv } from "@/lib/server/runtime-env"
 
 export type RequestActor = {
@@ -40,8 +40,10 @@ async function getLocalPreviewActor(request?: Request): Promise<RequestActor | n
 export async function getRequestActor(request?: Request): Promise<RequestActor | null> {
   const session = await auth()
   const email = session?.user?.email?.toLowerCase()
-  const role = session?.user?.role as AppRole | undefined
-  if (email && role) return { email, displayName: session?.user?.name ?? email.split("@")[0], role }
+  if (email) {
+    const access = await findAccessUser(email)
+    if (access?.status === "active") return { email, displayName: session?.user?.name ?? access.display_name ?? email.split("@")[0], role: access.role }
+  }
   return getLocalPreviewActor(request)
 }
 

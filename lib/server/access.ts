@@ -28,7 +28,8 @@ export async function findAccessUser(email: string): Promise<AccessUser | null> 
 export async function recordLogin(email: string, displayName: string, identity?: LoginIdentity) {
   const normalized = normalizedEmail(email)
   const db = await database()
-  const statements = [db.prepare("UPDATE app_users SET display_name = CASE WHEN ? = '' THEN display_name ELSE ? END, employee_id = COALESCE(employee_id, (SELECT employee_id FROM employees WHERE LOWER(work_email)=LOWER(?) AND archived_at IS NULL LIMIT 1)), onboarding_status = CASE WHEN onboarding_status='submitted' THEN 'submitted' WHEN COALESCE(employee_id, (SELECT employee_id FROM employees WHERE LOWER(work_email)=LOWER(?) AND archived_at IS NULL LIMIT 1)) IS NULL THEN onboarding_status ELSE 'complete' END, last_login_at = CURRENT_TIMESTAMP, updated_at = CURRENT_TIMESTAMP WHERE email = ?")
+  const matchingEmployee = `(SELECT employee_id FROM employees WHERE LOWER(work_email)=LOWER(?) ORDER BY CASE WHEN archived_at IS NULL AND LOWER(employment_status) NOT IN ('terminated','resigned') THEN 0 ELSE 1 END, updated_at DESC LIMIT 1)`
+  const statements = [db.prepare(`UPDATE app_users SET display_name = CASE WHEN ? = '' THEN display_name ELSE ? END, employee_id = COALESCE(employee_id, ${matchingEmployee}), onboarding_status = CASE WHEN onboarding_status='submitted' THEN 'submitted' WHEN COALESCE(employee_id, ${matchingEmployee}) IS NULL THEN onboarding_status ELSE 'complete' END, last_login_at = CURRENT_TIMESTAMP, updated_at = CURRENT_TIMESTAMP WHERE email = ?`)
     .bind(displayName, displayName, normalized, normalized, normalized)]
   if (identity?.subject) {
     statements.push(db.prepare(`
@@ -51,9 +52,9 @@ export async function ensureEmployeeAccessUser(emailValue: string, displayName: 
   await db.prepare(`
     INSERT INTO app_users(email, display_name, role, status, invited_by, employee_id, organization_id, onboarding_status, updated_at)
     VALUES (?, ?, 'employee', 'active', 'employee-self-service',
-      (SELECT employee_id FROM employees WHERE LOWER(work_email)=LOWER(?) AND archived_at IS NULL LIMIT 1),
+      (SELECT employee_id FROM employees WHERE LOWER(work_email)=LOWER(?) ORDER BY CASE WHEN archived_at IS NULL AND LOWER(employment_status) NOT IN ('terminated','resigned') THEN 0 ELSE 1 END, updated_at DESC LIMIT 1),
       'org:laidbackhr',
-      CASE WHEN EXISTS (SELECT 1 FROM employees WHERE LOWER(work_email)=LOWER(?) AND archived_at IS NULL) THEN 'complete' ELSE 'required' END,
+      CASE WHEN EXISTS (SELECT 1 FROM employees WHERE LOWER(work_email)=LOWER(?)) THEN 'complete' ELSE 'required' END,
       CURRENT_TIMESTAMP)
     ON CONFLICT(email) DO NOTHING
   `).bind(email, displayName.trim(), email, email).run()

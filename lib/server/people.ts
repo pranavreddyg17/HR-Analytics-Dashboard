@@ -87,6 +87,7 @@ export async function listPeople({
   status = "",
   employmentType = "",
   tenure = "",
+  population = "current",
   includeArchived = false,
   limit = 100,
   offset = 0,
@@ -97,6 +98,7 @@ export async function listPeople({
   status?: string
   employmentType?: string
   tenure?: string
+  population?: "current" | "former" | "all"
   includeArchived?: boolean
   limit?: number
   offset?: number
@@ -104,7 +106,13 @@ export async function listPeople({
   const database = await databaseOrThrow()
   const where: string[] = []
   const bindings: unknown[] = []
-  if (!includeArchived) where.push("e.archived_at IS NULL")
+  const effectivePopulation = includeArchived ? "all" : population
+  const populationCondition = effectivePopulation === "former"
+    ? "(e.archived_at IS NOT NULL OR LOWER(e.employment_status) IN ('terminated', 'resigned'))"
+    : effectivePopulation === "all"
+      ? "TRUE"
+      : "e.archived_at IS NULL AND LOWER(e.employment_status) NOT IN ('terminated', 'resigned')"
+  where.push(populationCondition)
   if (search.trim()) {
     where.push("LOWER(e.employee_id || ' ' || COALESCE(e.first_name, '') || ' ' || COALESCE(e.last_name, '') || ' ' || COALESCE(e.preferred_name, '') || ' ' || COALESCE(e.work_email, '') || ' ' || e.job_title) LIKE ?")
     bindings.push(`%${search.trim().toLowerCase()}%`)
@@ -125,8 +133,8 @@ export async function listPeople({
     database.prepare(`${employeeSelect}${clause} ORDER BY CASE e.employment_status WHEN 'Preboarding' THEN 0 WHEN 'Active' THEN 1 WHEN 'On Bench' THEN 2 WHEN 'On leave' THEN 3 WHEN 'Notice Period' THEN 4 WHEN 'Scheduled Exit' THEN 5 ELSE 6 END, display_name LIMIT ? OFFSET ?`)
       .bind(...bindings, safeLimit, safeOffset).all<ManagedEmployee>(),
     database.prepare(`SELECT COUNT(*) AS count FROM employee_directory_view e${clause}`).bind(...bindings).first<{ count: number }>(),
-    database.prepare("SELECT department, location, employment_status, employment_type FROM employee_directory_view WHERE archived_at IS NULL").all<{ department: string; location: string; employment_status: string; employment_type: string }>(),
-    database.prepare("SELECT department AS name, COUNT(*) AS count FROM employee_directory_view WHERE archived_at IS NULL GROUP BY department ORDER BY count DESC, department LIMIT 12")
+    database.prepare(`SELECT department, location, employment_status, employment_type FROM employee_directory_view e WHERE ${populationCondition}`).all<{ department: string; location: string; employment_status: string; employment_type: string }>(),
+    database.prepare(`SELECT department AS name, COUNT(*) AS count FROM employee_directory_view e WHERE ${populationCondition} GROUP BY department ORDER BY count DESC, department LIMIT 12`)
       .all<{ name: string; count: number }>(),
   ])
   const dimensions = dimensionResult.results ?? []
@@ -180,7 +188,7 @@ export async function getPerson(employeeId: string, actor?: RequestActor): Promi
   ])
   const assets = await Promise.all((assignedAssets.results ?? []).map((asset) => getAsset(asset.id)))
   return {
-    permissions: { canManageEmployment: canViewSensitiveHrData, canManageMeetings, canManageReviews },
+    permissions: { canManageEmployment: canViewSensitiveHrData, canManageMeetings, canManageReviews, canDeleteEmployee: actor?.role === "admin" },
     employee,
     manager,
     directReports: directReports.results ?? [],
@@ -262,17 +270,77 @@ export async function updatePerson(employeeId: string, value: unknown, actor: Re
 
 export async function setPersonArchived(employeeId: string, archived: boolean, actor: RequestActor): Promise<ManagedEmployee> {
   const database = await databaseOrThrow()
-  const current = await database.prepare("SELECT first_name, last_name FROM employee_directory_view WHERE employee_id = ?").bind(employeeId).first<{ first_name: string; last_name: string }>()
+  const current = await database.prepare("SELECT first_name, last_name, work_email FROM employee_directory_view WHERE employee_id = ?").bind(employeeId).first<{ first_name: string; last_name: string; work_email: string | null }>()
   if (!current) throw new PeopleError("Employee not found.", 404)
+  if (archived && current.work_email?.toLowerCase() === actor.email.toLowerCase()) throw new PeopleError("You cannot terminate your own employee record.", 409)
   const action = archived ? "archived" : "restored"
   await database.batch([
     archived
       ? database.prepare("UPDATE employees SET archived_at=CURRENT_TIMESTAMP, employment_status='Terminated', version=version+1, updated_at=CURRENT_TIMESTAMP WHERE employee_id=?").bind(employeeId)
       : database.prepare("UPDATE employees SET archived_at=NULL, employment_status='Active', version=version+1, updated_at=CURRENT_TIMESTAMP WHERE employee_id=?").bind(employeeId),
+    archived
+      ? database.prepare("UPDATE app_users SET role='employee', onboarding_status='complete', updated_at=CURRENT_TIMESTAMP WHERE employee_id=? OR LOWER(email)=LOWER(?)").bind(employeeId, current.work_email ?? "")
+      : database.prepare("UPDATE app_users SET employee_id=?, onboarding_status='complete', updated_at=CURRENT_TIMESTAMP WHERE LOWER(email)=LOWER(?)").bind(employeeId, current.work_email ?? ""),
     database.prepare("INSERT INTO employee_activity(id, employee_id, event_type, summary, changes_json, actor_email, created_at) VALUES (?, ?, ?, ?, NULL, ?, CURRENT_TIMESTAMP)")
       .bind(crypto.randomUUID(), employeeId, action, `${actor.displayName} ${action} ${current.first_name} ${current.last_name}`, actor.email),
   ])
   return (await getPerson(employeeId)).employee
+}
+
+export async function deletePersonPermanently(employeeId: string, actor: RequestActor): Promise<{ deleted: true; employeeId: string; email: string | null }> {
+  if (actor.role !== "admin") throw new PeopleError("Only an administrator can permanently delete an employee record.", 403)
+  const database = await databaseOrThrow()
+  const current = await database.prepare(`
+    SELECT employee_id, first_name, last_name, work_email, employment_status, archived_at
+    FROM employee_directory_view WHERE employee_id=?
+  `).bind(employeeId).first<{ employee_id: string; first_name: string; last_name: string; work_email: string | null; employment_status: string; archived_at: string | null }>()
+  if (!current) throw new PeopleError("Employee not found.", 404)
+  const former = Boolean(current.archived_at) || ["terminated", "resigned"].includes(current.employment_status.toLowerCase())
+  if (!former) throw new PeopleError("Terminate the employee before permanently deleting the record.", 409)
+  if (current.work_email?.toLowerCase() === actor.email.toLowerCase()) throw new PeopleError("You cannot permanently delete your own employee record.", 409)
+
+  const { purgeEmployeeDocumentBlobs } = await import("@/lib/server/employee-documents")
+  await purgeEmployeeDocumentBlobs(employeeId)
+
+  const auditDetails = JSON.stringify({
+    employeeId,
+    displayName: `${current.first_name} ${current.last_name}`.trim(),
+    employmentStatus: current.employment_status,
+    deletedAt: new Date().toISOString(),
+  })
+  await database.batch([
+    database.prepare("INSERT INTO access_audit(id, actor_email, action, target_email, details_json) VALUES (?, ?, 'employee_record_deleted', ?, ?)")
+      .bind(crypto.randomUUID(), actor.email, current.work_email ?? employeeId, auditDetails),
+    database.prepare("UPDATE projects SET manager_employee_id=NULL, updated_at=CURRENT_TIMESTAMP WHERE manager_employee_id=?").bind(employeeId),
+    database.prepare("UPDATE employees SET manager_id=NULL, updated_at=CURRENT_TIMESTAMP WHERE manager_id=?").bind(employeeId),
+    database.prepare("UPDATE performance_reviews SET manager_employee_id=NULL, updated_at=CURRENT_TIMESTAMP WHERE manager_employee_id=? AND employee_id<>?").bind(employeeId, employeeId),
+    database.prepare("UPDATE one_on_one_meetings SET manager_employee_id=NULL, updated_at=CURRENT_TIMESTAMP WHERE manager_employee_id=? AND employee_id<>?").bind(employeeId, employeeId),
+    database.prepare("UPDATE assets SET status='Available', updated_at=CURRENT_TIMESTAMP WHERE id IN (SELECT asset_id FROM asset_assignments WHERE employee_id=? AND status='Assigned' AND returned_at IS NULL)").bind(employeeId),
+    database.prepare("DELETE FROM offboarding_tasks WHERE employee_exit_id IN (SELECT id FROM employee_exits WHERE employee_id=?) OR asset_assignment_id IN (SELECT id FROM asset_assignments WHERE employee_id=?)").bind(employeeId, employeeId),
+    database.prepare("DELETE FROM employee_exits WHERE employee_id=?").bind(employeeId),
+    database.prepare("DELETE FROM asset_assignments WHERE employee_id=?").bind(employeeId),
+    database.prepare("DELETE FROM one_on_one_meetings WHERE employee_id=?").bind(employeeId),
+    database.prepare("DELETE FROM performance_reviews WHERE employee_id=?").bind(employeeId),
+    database.prepare("DELETE FROM expense_claims WHERE employee_id=?").bind(employeeId),
+    database.prepare("DELETE FROM employee_cases WHERE employee_id=?").bind(employeeId),
+    database.prepare("DELETE FROM employee_documents WHERE employee_id=?").bind(employeeId),
+    database.prepare("DELETE FROM employee_compensation WHERE employee_id=?").bind(employeeId),
+    database.prepare("DELETE FROM employee_project_assignments WHERE employee_id=?").bind(employeeId),
+    database.prepare("DELETE FROM employee_onboarding_submissions WHERE employee_id=? OR LOWER(user_email)=LOWER(?)").bind(employeeId, current.work_email ?? ""),
+    database.prepare("DELETE FROM course_assignments WHERE employee_id=?").bind(employeeId),
+    database.prepare("DELETE FROM workflow_requests WHERE employee_id=?").bind(employeeId),
+    database.prepare("DELETE FROM ai_workflow_drafts WHERE jsonb_exists(employee_ids_json::jsonb, ?)").bind(employeeId),
+    database.prepare("DELETE FROM leave_records WHERE employee_id=?").bind(employeeId),
+    database.prepare("DELETE FROM training_records WHERE employee_id=?").bind(employeeId),
+    database.prepare("DELETE FROM promotion_records WHERE employee_id=?").bind(employeeId),
+    database.prepare("DELETE FROM attrition_events WHERE employee_id=?").bind(employeeId),
+    database.prepare("DELETE FROM attrition_model_profiles WHERE employee_id=?").bind(employeeId),
+    database.prepare("DELETE FROM employee_activity WHERE employee_id=?").bind(employeeId),
+    database.prepare(`UPDATE app_users SET employee_id=NULL, role='employee', status='active', onboarding_status='required', invited_by='employee-self-service', updated_at=CURRENT_TIMESTAMP WHERE employee_id=? OR LOWER(email)=LOWER(?)`)
+      .bind(employeeId, current.work_email ?? ""),
+    database.prepare("DELETE FROM employees WHERE employee_id=?").bind(employeeId),
+  ])
+  return { deleted: true, employeeId, email: current.work_email }
 }
 
 export async function listInboxItems(actor?: RequestActor): Promise<InboxItem[]> {

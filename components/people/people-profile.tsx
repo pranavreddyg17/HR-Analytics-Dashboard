@@ -1,13 +1,15 @@
 "use client"
 
 import Link from "next/link"
+import { useRouter } from "next/navigation"
 import { useCallback, useEffect, useState } from "react"
 import {
-  Archive,
   ArrowLeft,
   ArrowUpRight,
   Pencil,
   RefreshCcw,
+  Trash2,
+  UserMinus,
   X,
 } from "lucide-react"
 
@@ -33,6 +35,7 @@ const tabs: Array<{ id: ProfileTab; label: string }> = [
 ]
 
 export function PeopleProfile({ employeeId, returnTo }: { employeeId: string; returnTo?: string }) {
+  const router = useRouter()
   const [data, setData] = useState<EmployeeProfileResponse | null>(null)
   const [managerPool, setManagerPool] = useState<ManagedEmployee[]>([])
   const [revision, setRevision] = useState(0)
@@ -41,6 +44,7 @@ export function PeopleProfile({ employeeId, returnTo }: { employeeId: string; re
   const [tab, setTab] = useState<ProfileTab>("overview")
   const [editOpen, setEditOpen] = useState(false)
   const [archiveOpen, setArchiveOpen] = useState(false)
+  const [deleteOpen, setDeleteOpen] = useState(false)
 
   useEffect(() => {
     const controller = new AbortController()
@@ -93,14 +97,15 @@ export function PeopleProfile({ employeeId, returnTo }: { employeeId: string; re
         <div className="flex flex-col gap-4 px-4 py-4 sm:px-5 lg:flex-row lg:items-end">
           <PersonAvatar employeeId={employee.employee_id} initials={employee.initials} size="xl" />
           <div className="min-w-0 flex-1">
-            {employee.archived_at && <div className="mb-2 text-meta font-semibold text-muted-foreground">Archived {formatDate(employee.archived_at)}</div>}
+            {employee.archived_at && <div className="mb-2 text-meta font-semibold text-muted-foreground">Employment ended {formatDate(employee.archived_at)}</div>}
             <h1 className="truncate text-page font-semibold">{employee.display_name}</h1>
             <p className="mt-1 text-sm text-muted-foreground">{employee.job_title} · {employee.department} · {employee.location}</p>
           </div>
           <div className="flex flex-wrap items-center gap-2">
             <StatusPill status={employee.employment_status} />
             <Button variant="outline" onClick={() => setEditOpen(true)} disabled={Boolean(employee.archived_at)}><Pencil className="size-3.5" />Edit profile</Button>
-            <Button variant={employee.archived_at ? "outline" : "ghost"} className={cn(!employee.archived_at && "text-muted-foreground hover:text-destructive")} onClick={() => setArchiveOpen(true)}>{employee.archived_at ? <RefreshCcw className="size-3.5" /> : <Archive className="size-3.5" />}{employee.archived_at ? "Restore" : "Archive"}</Button>
+            <Button variant={employee.archived_at ? "outline" : "ghost"} className={cn(!employee.archived_at && "text-muted-foreground hover:text-destructive")} onClick={() => setArchiveOpen(true)}>{employee.archived_at ? <RefreshCcw className="size-3.5" /> : <UserMinus className="size-3.5" />}{employee.archived_at ? "Restore" : "Terminate"}</Button>
+            {data.permissions.canDeleteEmployee && (employee.archived_at || ["terminated", "resigned"].includes(employee.employment_status.toLowerCase())) && <Button variant="ghost" className="text-muted-foreground hover:text-destructive" onClick={() => setDeleteOpen(true)}><Trash2 className="size-3.5" />Delete record</Button>}
           </div>
         </div>
 
@@ -133,6 +138,7 @@ export function PeopleProfile({ employeeId, returnTo }: { employeeId: string; re
         onSaved={refreshProfile}
       />
       <ArchiveDialog open={archiveOpen} employee={employee} onClose={() => setArchiveOpen(false)} onChanged={() => { setArchiveOpen(false); refreshProfile() }} />
+      <DeleteEmployeeDialog open={deleteOpen} employee={employee} onClose={() => setDeleteOpen(false)} onDeleted={() => { setDeleteOpen(false); router.replace("/people?population=former"); router.refresh() }} />
     </WorkspacePage>
   )
 }
@@ -434,7 +440,28 @@ function ArchiveDialog({ open, employee, onClose, onChanged }: { open: boolean; 
   }
 
   if (!open) return null
-  return <div className="fixed inset-0 z-[90] flex items-center justify-center p-4"><button type="button" aria-label="Close" className="absolute inset-0 bg-slate-950/30" onClick={onClose} /><div role="alertdialog" aria-modal="true" className="relative w-full max-w-md rounded-lg border border-border bg-background p-6"><button type="button" onClick={onClose} aria-label="Close" className="absolute right-4 top-4 text-muted-foreground hover:text-foreground"><X className="size-4" /></button><h3 className="text-lg font-semibold">{restoring ? "Restore employee?" : "Archive employee?"}</h3><p className="mt-2 text-sm text-muted-foreground">{restoring ? `${employee.display_name} will return to the active directory with an Active status.` : `${employee.display_name} will be removed from the active directory. The employee history will be retained.`}</p>{error && <p className="mt-4 rounded-md bg-destructive/10 p-3 text-xs text-destructive">{error}</p>}<div className="mt-6 flex justify-end gap-2"><Button variant="ghost" onClick={onClose} disabled={busy}>Cancel</Button><Button variant={restoring ? "default" : "destructive"} onClick={() => void changeStatus()} disabled={busy}>{busy ? "Updating…" : restoring ? "Restore employee" : "Archive employee"}</Button></div></div></div>
+  return <div className="fixed inset-0 z-[90] flex items-center justify-center p-4"><button type="button" aria-label="Close" className="absolute inset-0 bg-slate-950/30" onClick={onClose} /><div role="alertdialog" aria-modal="true" className="relative w-full max-w-md rounded-lg border border-border bg-background p-6"><button type="button" onClick={onClose} aria-label="Close" className="absolute right-4 top-4 text-muted-foreground hover:text-foreground"><X className="size-4" /></button><h3 className="text-lg font-semibold">{restoring ? "Restore employee?" : "Terminate employment?"}</h3><p className="mt-2 text-sm text-muted-foreground">{restoring ? `${employee.display_name} will return to the current directory with an Active status.` : `${employee.display_name} will move to Former employees and immediately lose employee self-service access. Their HR history will be retained.`}</p>{error && <p className="mt-4 rounded-md bg-destructive/10 p-3 text-xs text-destructive">{error}</p>}<div className="mt-6 flex justify-end gap-2"><Button variant="ghost" onClick={onClose} disabled={busy}>Cancel</Button><Button variant={restoring ? "default" : "destructive"} onClick={() => void changeStatus()} disabled={busy}>{busy ? "Updating…" : restoring ? "Restore employee" : "Terminate employee"}</Button></div></div></div>
+}
+
+function DeleteEmployeeDialog({ open, employee, onClose, onDeleted }: { open: boolean; employee: ManagedEmployee; onClose: () => void; onDeleted: () => void }) {
+  const [confirmation, setConfirmation] = useState("")
+  const [busy, setBusy] = useState(false)
+  const [error, setError] = useState("")
+
+  async function removeEmployee() {
+    if (confirmation !== employee.employee_id) return
+    setBusy(true); setError("")
+    try {
+      const response = await fetch(`/api/v1/hr/people/${encodeURIComponent(employee.employee_id)}`, { method: "DELETE" })
+      const body = await response.json() as { error?: string }
+      if (!response.ok) throw new Error(body.error ?? "Unable to delete this employee record.")
+      onDeleted()
+    } catch (reason) { setError(reason instanceof Error ? reason.message : "Unable to delete this employee record.") }
+    finally { setBusy(false) }
+  }
+
+  if (!open) return null
+  return <div className="fixed inset-0 z-[95] flex items-center justify-center p-4"><button type="button" aria-label="Close" className="absolute inset-0 bg-slate-950/35" onClick={onClose} /><div role="alertdialog" aria-modal="true" className="relative w-full max-w-md rounded-lg border border-destructive/30 bg-background p-6"><button type="button" onClick={onClose} aria-label="Close" className="absolute right-4 top-4 text-muted-foreground hover:text-foreground"><X className="size-4" /></button><h3 className="text-lg font-semibold">Permanently delete employee?</h3><p className="mt-2 text-sm text-muted-foreground">This deletes {employee.display_name}&apos;s employee record and linked HR transactions. Their sign-in email can then start a new employee onboarding profile. This action cannot be undone.</p><label className="mt-5 block"><span className="text-xs font-semibold">Enter {employee.employee_id} to confirm</span><input autoFocus value={confirmation} onChange={(event) => { setConfirmation(event.target.value); setError("") }} className="mt-1 h-9 w-full rounded-md border border-border bg-background px-3 text-sm outline-none focus:ring-2 focus:ring-primary/20" /></label>{error && <p className="mt-4 rounded-md bg-destructive/10 p-3 text-xs text-destructive">{error}</p>}<div className="mt-6 flex justify-end gap-2"><Button variant="ghost" onClick={onClose} disabled={busy}>Cancel</Button><Button variant="destructive" onClick={() => void removeEmployee()} disabled={busy || confirmation !== employee.employee_id}>{busy ? "Deleting…" : "Delete employee record"}</Button></div></div></div>
 }
 
 function ProfileSkeleton() {

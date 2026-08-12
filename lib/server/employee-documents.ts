@@ -117,3 +117,17 @@ export async function deleteEmployeeDocument(id: string, actor: RequestActor): P
   await containerClient().getBlobClient(row.blob_name).deleteIfExists()
   await db.prepare("DELETE FROM employee_documents WHERE id=?").bind(id).run()
 }
+
+/** Remove every stored object for an employee before the database record is permanently deleted. */
+export async function purgeEmployeeDocumentBlobs(employeeId: string): Promise<void> {
+  const db = await database()
+  const rows = await db.prepare("SELECT blob_name FROM employee_documents WHERE employee_id=?")
+    .bind(employeeId).all<{ blob_name: string }>()
+  if (!(rows.results ?? []).length) return
+  try {
+    const container = containerClient()
+    await Promise.all((rows.results ?? []).map((row) => container.getBlobClient(row.blob_name).deleteIfExists()))
+  } catch {
+    throw new PeopleError("Employee documents could not be removed from Azure storage. The employee record was not deleted.", 503)
+  }
+}

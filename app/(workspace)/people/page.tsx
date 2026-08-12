@@ -14,7 +14,7 @@ export default async function PeoplePage({ searchParams }: { searchParams: Promi
     status: stringParam("status"),
     employmentType: stringParam("employmentType"),
     tenure: stringParam("tenure"),
-    includeArchived: stringParam("archived") === "1",
+    population: (["current", "former", "all"].includes(stringParam("population")) ? stringParam("population") : "current") as "current" | "former" | "all",
     limit: 25,
     offset: page * 25,
   }

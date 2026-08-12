@@ -3,7 +3,7 @@
 import Link from "next/link"
 import { useRouter, useSearchParams } from "next/navigation"
 import { useCallback, useEffect, useMemo, useRef, useState } from "react"
-import { Archive, FilterX, Plus, Search, SlidersHorizontal } from "lucide-react"
+import { FilterX, Plus, Search, SlidersHorizontal } from "lucide-react"
 import { Cell, Pie, PieChart, ResponsiveContainer } from "recharts"
 
 import { Button } from "@/components/ui/button"
@@ -23,10 +23,10 @@ type Filters = {
   status: string
   employmentType: string
   tenure: string
-  includeArchived: boolean
+  population: "current" | "former" | "all"
 }
 
-const initialFilters: Filters = { department: "", location: "", status: "", employmentType: "", tenure: "", includeArchived: false }
+const initialFilters: Filters = { department: "", location: "", status: "", employmentType: "", tenure: "", population: "current" }
 const PAGE_SIZE = 25
 const compositionColors = categoricalChartColors
 const tenureOptions = [
@@ -53,7 +53,7 @@ export function PeopleDirectory({ initialData, initialManagerPool }: { initialDa
     status: searchParams.get("status") ?? "",
     employmentType: searchParams.get("employmentType") ?? "",
     tenure: validTenure(searchParams.get("tenure")),
-    includeArchived: searchParams.get("archived") === "1",
+    population: (["current", "former", "all"].includes(searchParams.get("population") ?? "") ? searchParams.get("population") : "current") as Filters["population"],
   }))
   const [page, setPage] = useState(() => Math.max(0, (Number(searchParams.get("page") ?? "1") || 1) - 1))
   const [data, setData] = useState<EmployeeDirectoryResponse | null>(initialData)
@@ -66,7 +66,7 @@ export function PeopleDirectory({ initialData, initialManagerPool }: { initialDa
     if (filters.status) params.set("status", filters.status)
     if (filters.employmentType) params.set("employmentType", filters.employmentType)
     if (filters.tenure) params.set("tenure", filters.tenure)
-    if (filters.includeArchived) params.set("includeArchived", "true")
+    params.set("population", filters.population)
     return params.toString()
   })
   const [loadedRequest, setLoadedRequest] = useState<string | null>(`${initialSearchString}:0`)
@@ -74,7 +74,7 @@ export function PeopleDirectory({ initialData, initialManagerPool }: { initialDa
   const [retry, setRetry] = useState(0)
   const [error, setError] = useState("")
   const drawerOpen = searchParams.get("new") === "employee"
-  const [showFilters, setShowFilters] = useState(() => ["department", "location", "status", "employmentType", "tenure", "archived"].some((key) => Boolean(searchParams.get(key))))
+  const [showFilters, setShowFilters] = useState(() => ["department", "location", "status", "employmentType", "tenure"].some((key) => Boolean(searchParams.get(key))))
 
   useEffect(() => {
     const timer = window.setTimeout(() => setDebouncedQuery(query.trim()), 220)
@@ -89,7 +89,7 @@ export function PeopleDirectory({ initialData, initialManagerPool }: { initialDa
     if (filters.status) params.set("status", filters.status)
     if (filters.employmentType) params.set("employmentType", filters.employmentType)
     if (filters.tenure) params.set("tenure", filters.tenure)
-    if (filters.includeArchived) params.set("includeArchived", "true")
+    params.set("population", filters.population)
     return params.toString()
   }, [debouncedQuery, filters, page])
 
@@ -101,7 +101,7 @@ export function PeopleDirectory({ initialData, initialManagerPool }: { initialDa
     if (filters.status) params.set("status", filters.status)
     if (filters.employmentType) params.set("employmentType", filters.employmentType)
     if (filters.tenure) params.set("tenure", filters.tenure)
-    if (filters.includeArchived) params.set("archived", "1")
+    if (filters.population !== "current") params.set("population", filters.population)
     if (page > 0) params.set("page", String(page + 1))
     const returnTo = safeReturnTo(searchParams.get("returnTo"))
     if (returnTo) params.set("returnTo", returnTo)
@@ -137,7 +137,7 @@ export function PeopleDirectory({ initialData, initialManagerPool }: { initialDa
 
   const dimensions = data?.dimensions
   const loading = loadedRequest !== `${searchString}:${retry}`
-  const activeFilterCount = Object.entries(filters).filter(([key, value]) => key === "includeArchived" ? value : Boolean(value)).length
+  const activeFilterCount = Object.entries(filters).filter(([key, value]) => key === "population" ? value !== "current" : Boolean(value)).length
   function clearFilters() {
     setQuery("")
     setFilters(initialFilters)
@@ -190,6 +190,9 @@ export function PeopleDirectory({ initialData, initialManagerPool }: { initialDa
               <Input value={query} onChange={(event) => { setQuery(event.target.value); setPage(0) }} placeholder="Search name, role, email, or employee ID" className="h-9 bg-background pl-10 pr-10" />
               {query && <button type="button" onClick={() => setQuery("")} aria-label="Clear search" className="absolute right-3 top-1/2 -translate-y-1/2 text-xs font-semibold text-muted-foreground hover:text-foreground">Clear</button>}
             </div>
+            <div className="flex rounded-md border border-border bg-background p-0.5" aria-label="Employee population">
+              {(["current", "former", "all"] as const).map((population) => <button key={population} type="button" aria-pressed={filters.population === population} onClick={() => { setFilters((current) => ({ ...current, population, status: "" })); setPage(0) }} className={cn("h-8 rounded px-3 text-xs font-semibold capitalize", filters.population === population ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:bg-muted hover:text-foreground")}>{population}</button>)}
+            </div>
             <Button variant={showFilters || activeFilterCount ? "secondary" : "outline"} onClick={() => setShowFilters((current) => !current)}><SlidersHorizontal className="size-3.5" />{activeFilterCount > 0 ? `Filters (${activeFilterCount})` : "Filters"}</Button>
           </div>
 
@@ -201,7 +204,6 @@ export function PeopleDirectory({ initialData, initialManagerPool }: { initialDa
               <FilterSelect label="Employment" value={filters.employmentType} options={dimensions?.employmentTypes ?? []} allLabel="All types" onChange={(employmentType) => { setFilters((current) => ({ ...current, employmentType })); setPage(0) }} />
               <FilterSelect label="Tenure" value={filters.tenure} options={tenureOptions} allLabel="All tenure ranges" onChange={updateTenure} />
               <div className="flex items-end gap-2">
-                <button type="button" onClick={() => { setFilters((current) => ({ ...current, includeArchived: !current.includeArchived })); setPage(0) }} className={cn("flex h-9 items-center gap-2 rounded-md border px-3 text-xs font-semibold", filters.includeArchived ? "border-primary/30 bg-primary/10 text-primary" : "border-border bg-background text-muted-foreground hover:text-foreground")}><Archive className="size-3.5" />Archived</button>
                 {activeFilterCount > 0 && <Button type="button" variant="ghost" size="icon" aria-label="Clear filters" onClick={clearFilters}><FilterX className="size-4" /></Button>}
               </div>
             </div>
@@ -346,7 +348,7 @@ function PersonRow({ employee, returnTo }: { employee: ManagedEmployee; returnTo
         <div className="truncate text-sm">{employee.department}</div>
         <div className="truncate text-sm text-muted-foreground">{employee.location}</div>
         <span className="text-sm tabular-nums text-muted-foreground">{employee.tenure_years.toFixed(1)} yrs</span>
-        <div className="flex items-center gap-2"><StatusPill status={employee.employment_status} />{employee.archived_at && <Archive className="size-3.5 text-muted-foreground" />}</div>
+        <div className="flex items-center gap-2"><StatusPill status={employee.employment_status} /></div>
       </Link>
   )
 }

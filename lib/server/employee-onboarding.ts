@@ -30,24 +30,29 @@ async function database(): Promise<Database> {
 
 export type EmployeeOnboardingState = {
   required: boolean
-  status: "required" | "submitted" | "rejected" | "complete"
+  status: "required" | "submitted" | "rejected" | "complete" | "employment_ended"
   submission: Record<string, unknown> | null
+  employmentStatus?: string
 }
 
 export async function getEmployeeOnboardingState(actor: RequestActor): Promise<EmployeeOnboardingState> {
   const db = await database()
   const user = await db.prepare(`
-    SELECT u.employee_id, u.onboarding_status,
+    SELECT u.employee_id, u.onboarding_status, e.employment_status, e.archived_at,
       s.id AS submission_id, s.status AS submission_status, s.organization_name,
       s.first_name, s.last_name, s.preferred_name, s.phone, s.department, s.job_title,
       s.job_level, s.location, s.manager_name, s.manager_email, s.hire_date,
       s.employment_type, s.requested_annual_salary, s.salary_currency, s.review_note
     FROM app_users u
+    LEFT JOIN employees e ON e.employee_id=u.employee_id
     LEFT JOIN employee_onboarding_submissions s ON s.user_email=u.email
     WHERE u.email=?
     ORDER BY s.created_at DESC LIMIT 1
   `).bind(actor.email).first<Record<string, unknown>>()
   if (!user) throw new PeopleError("Your sign-in account could not be loaded.", 404)
+  if (user.employee_id && (user.archived_at || ["terminated", "resigned"].includes(String(user.employment_status ?? "").toLowerCase()))) {
+    return { required: false, status: "employment_ended", submission: null, employmentStatus: String(user.employment_status || "Terminated") }
+  }
   if (user.employee_id && String(user.onboarding_status) !== "submitted") return { required: false, status: "complete", submission: null }
   const submissionStatus = String(user.submission_status ?? "")
   return {
