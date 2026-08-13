@@ -1,7 +1,7 @@
 "use client"
 
 import Link from "next/link"
-import { usePathname, useSearchParams } from "next/navigation"
+import { useSearchParams } from "next/navigation"
 import { Search } from "lucide-react"
 
 import type { ShellUser } from "@/components/app-navigation"
@@ -12,9 +12,8 @@ function initials(name: string): string {
   return name.split(/\s+/).filter(Boolean).slice(0, 2).map((part) => part[0]?.toUpperCase()).join("") || "HR"
 }
 
-export function Topbar({ user, navigation, onOpenPalette, onOpenNavigation, onOpenAssistant }: { user: ShellUser; navigation: React.ReactNode; onOpenPalette: () => void; onOpenNavigation: () => void; onOpenAssistant: () => void }) {
+export function Topbar({ user, navigation, onOpenPalette, onOpenNavigation }: { user: ShellUser; navigation: React.ReactNode; onOpenPalette: () => void; onOpenNavigation: () => void }) {
   const searchParams = useSearchParams()
-  const pathname = usePathname()
   const returnTo = safeReturnTo(searchParams.get("returnTo"))
 
   return (
@@ -37,9 +36,6 @@ export function Topbar({ user, navigation, onOpenPalette, onOpenNavigation, onOp
         </button>
 
         <div className="topbar__utilities">
-          {pathname === "/assistant"
-            ? <Link href="/assistant" className="topbar-assistant topbar-assistant--active" aria-current="page">Assistant</Link>
-            : <button type="button" className="topbar-assistant" onClick={onOpenAssistant}>Assistant</button>}
           <details className="user-menu">
             <summary aria-label="Open account menu">
               <span className="avatar-soft avatar-soft--small">{initials(user.displayName)}</span>

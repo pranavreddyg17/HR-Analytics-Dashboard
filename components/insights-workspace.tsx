@@ -185,15 +185,24 @@ function DepartmentPressure({ data, onSelect }: { data: WorkforceAnalytics; onSe
   const statusRank = { Gap: 0, Watch: 1, Covered: 2 }
   const rows = [...data.decisionSupport.departments].sort((left, right) => statusRank[left.coverageStatus] - statusRank[right.coverageStatus] || right.attritionRate - left.attritionRate)
   if (!rows.length) return <div className="flex h-48 items-center justify-center text-body text-muted-foreground">No department measures in this scope.</div>
-  return <div className="overflow-x-auto"><table className="w-full min-w-[940px] text-left text-body"><thead className="bg-muted/40 text-label font-semibold text-muted-foreground"><tr><th className="px-4 py-2.5">Department</th><th className="px-4 py-2.5">Workforce</th><th className="px-4 py-2.5">Attrition</th><th className="px-4 py-2.5">Hiring coverage</th><th className="px-4 py-2.5">Required learning</th><th className="px-4 py-2.5">Leave</th><th className="px-4 py-2.5"><span className="sr-only">Filter</span></th></tr></thead><tbody>{rows.map((row) => {
+  return <div className="grid gap-3 p-4 md:grid-cols-2 2xl:grid-cols-3">{rows.map((row) => {
     const attritionDelta = Number((row.attritionRate - data.attrition.rate).toFixed(1))
-    return <tr key={row.department} className="border-t border-border/70 hover:bg-muted/20"><td className="px-4 py-3"><p className="font-semibold">{row.department}</p><Badge className="mt-1" variant={row.coverageStatus === "Gap" ? "destructive" : row.coverageStatus === "Watch" ? "secondary" : "outline"}>{row.coverageStatus === "Gap" ? "Coverage gap" : row.coverageStatus === "Watch" ? "Monitor" : "Covered"}</Badge></td><td className="px-4 py-3"><p className="tabular-nums">{row.activeEmployees.toLocaleString()} active</p><p className="text-meta text-muted-foreground">{row.netMovement > 0 ? "+" : ""}{row.netMovement} net · {row.hires} hires / {row.exits} exits</p></td><td className="px-4 py-3"><p className="tabular-nums">{row.attritionRate}%</p><p className="text-meta text-muted-foreground">{attritionDelta > 0 ? "+" : ""}{attritionDelta} points vs company</p></td><td className="px-4 py-3"><p>{row.exits ? `${row.hires} of ${row.exits} exits replaced` : "No exits in scope"}</p><p className="text-meta text-muted-foreground">{row.openRequisitions} open role{row.openRequisitions === 1 ? "" : "s"}</p></td><td className="px-4 py-3"><p>{row.mandatoryTrainingGaps} open</p><p className="text-meta text-muted-foreground">{row.overdueMandatoryTrainingGaps} overdue · {row.trainingCompletionRate}% complete</p></td><td className="px-4 py-3"><p>{row.pendingLeaveRequests} pending</p><p className="text-meta text-muted-foreground">{row.leaveDaysPerActiveEmployee} approved days per active employee</p></td><td className="px-4 py-3 text-right"><Button size="xs" variant="outline" onClick={() => onSelect(row.department)}>Filter report</Button></td></tr>
-  })}</tbody></table><p className="border-t border-border bg-muted/20 px-4 py-2.5 text-meta text-muted-foreground">Net movement is completed hires minus recorded exits. Hiring coverage compares completed hires with exits in the selected period; open roles are shown separately.</p></div>
+    return <article key={row.department} className="insight-department-card">
+      <div className="flex items-start justify-between gap-3"><div><p className="text-card-title font-semibold">{row.department}</p><p className="mt-0.5 text-meta text-muted-foreground">{row.activeEmployees.toLocaleString()} active · {row.netMovement > 0 ? "+" : ""}{row.netMovement} net movement</p></div><Badge variant={row.coverageStatus === "Gap" ? "destructive" : row.coverageStatus === "Watch" ? "secondary" : "outline"}>{row.coverageStatus === "Gap" ? "Coverage gap" : row.coverageStatus === "Watch" ? "Monitor" : "Covered"}</Badge></div>
+      <div className="mt-4 grid grid-cols-2 gap-x-4 gap-y-3">
+        <div><p className="text-label font-semibold text-muted-foreground">Attrition</p><p className="mt-0.5 font-semibold tabular-nums">{row.attritionRate}%</p><p className="text-meta text-muted-foreground">{attritionDelta > 0 ? "+" : ""}{attritionDelta} points vs company</p></div>
+        <div><p className="text-label font-semibold text-muted-foreground">Hiring coverage</p><p className="mt-0.5 font-semibold tabular-nums">{row.exits ? `${row.hires} / ${row.exits}` : "No exits"}</p><p className="text-meta text-muted-foreground">{row.openRequisitions} open role{row.openRequisitions === 1 ? "" : "s"}</p></div>
+        <div><p className="text-label font-semibold text-muted-foreground">Required learning</p><p className="mt-0.5 font-semibold tabular-nums">{row.mandatoryTrainingGaps} open</p><p className="text-meta text-muted-foreground">{row.overdueMandatoryTrainingGaps} overdue</p></div>
+        <div><p className="text-label font-semibold text-muted-foreground">Leave planning</p><p className="mt-0.5 font-semibold tabular-nums">{row.pendingLeaveRequests} pending</p><p className="text-meta text-muted-foreground">{row.leaveDaysPerActiveEmployee} days / active</p></div>
+      </div>
+      <Button className="mt-4 w-full" size="xs" variant="outline" onClick={() => onSelect(row.department)}>View department</Button>
+    </article>
+  })}</div>
 }
 
 function TenureAttrition({ data }: { data: WorkforceAnalytics }) {
   const rows = data.decisionSupport.tenureAttrition
-  return <div className="h-72 w-full"><ResponsiveContainer width="100%" height="100%" minWidth={0} initialDimension={{ width: 900, height: 288 }}>
+  return <div className="h-64 w-full"><ResponsiveContainer width="100%" height="100%" minWidth={0} initialDimension={{ width: 560, height: 256 }}>
     <BarChart data={rows} margin={{ top: 12, right: 18, bottom: 4, left: -10 }}>
       <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="var(--border)" />
       <XAxis dataKey="cohort" axisLine={false} tickLine={false} tick={{ fill: "var(--muted-foreground)", fontSize: 11 }} />
@@ -208,7 +217,7 @@ function TenureAttrition({ data }: { data: WorkforceAnalytics }) {
 function SourceEfficiency({ data }: { data: WorkforceAnalytics }) {
   const rows = [...data.hiring.sourceStats].sort((left, right) => right.hires - left.hires || left.averageDays - right.averageDays).slice(0, 8)
   if (!rows.length) return <div className="flex h-64 items-center justify-center text-body text-muted-foreground">No completed hires with source data in this scope.</div>
-  return <div className="h-72 w-full"><ResponsiveContainer width="100%" height="100%" minWidth={0} initialDimension={{ width: 900, height: 288 }}>
+  return <div className="h-64 w-full"><ResponsiveContainer width="100%" height="100%" minWidth={0} initialDimension={{ width: 640, height: 256 }}>
     <ComposedChart data={rows} margin={{ top: 12, right: 8, bottom: 20, left: -10 }}>
       <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="var(--border)" />
       <XAxis dataKey="label" axisLine={false} tickLine={false} interval={0} angle={-18} textAnchor="end" height={56} tick={{ fill: "var(--muted-foreground)", fontSize: 10 }} />
@@ -236,8 +245,8 @@ function ManagerConcentration({ data }: { data: WorkforceAnalytics }) {
   const selected = rows.find((row) => `${row.managerId ?? row.manager}-${row.department}` === selectedKey) ?? rows[0]
   return <div className="grid gap-5 lg:grid-cols-[minmax(0,1.55fr)_minmax(250px,0.75fr)]">
     <div>
-      <div className="h-80 w-full">
-        <ResponsiveContainer width="100%" height="100%" minWidth={0} initialDimension={{ width: 760, height: 320 }}>
+      <div className="h-64 w-full">
+        <ResponsiveContainer width="100%" height="100%" minWidth={0} initialDimension={{ width: 760, height: 256 }}>
           <BarChart data={rows} layout="vertical" margin={{ top: 4, right: 24, bottom: 4, left: 36 }}>
             <CartesianGrid strokeDasharray="3 3" horizontal={false} stroke="var(--border)" />
             <XAxis type="number" domain={[0, 100]} unit="%" axisLine={false} tickLine={false} tick={{ fill: "var(--muted-foreground)", fontSize: 11 }} />
@@ -327,19 +336,19 @@ function CapabilityAssumptions({ data, onApply }: { data: WorkforceAnalytics; on
     && Number.isFinite(parsedFee) && parsedFee >= 0
     && Number.isFinite(parsedHours) && parsedHours > 0 && parsedHours <= 500
 
-  return <details className="surface-card overflow-hidden">
-    <summary className="flex list-none items-center justify-between gap-4 px-5 py-4 [&::-webkit-details-marker]:hidden"><span><span className="block text-card-title font-semibold">Learning cost scenario</span><span className="mt-0.5 block text-meta text-muted-foreground">Course fees and fallback delivery hours</span></span><span className="text-meta font-semibold text-primary">Adjust</span></summary>
-    <div className="border-t border-border p-4">
-      <div className="grid gap-3 sm:grid-cols-2 lg:max-w-xl">
+  return <Card className="h-full gap-0 overflow-hidden py-0 shadow-none">
+    <CardHeader className="border-b border-border px-5 py-4"><CardTitle>Learning cost scenario</CardTitle><CardDescription>Estimate remaining delivery cost from current pay and assignment records.</CardDescription></CardHeader>
+    <CardContent className="flex h-full flex-col p-5">
+      <div className="grid gap-4">
         <Filter label="Course fee per assignment"><input type="number" min="0" step="50" value={fee} onChange={(event) => setFee(event.target.value)} /></Filter>
         <Filter label="Fallback hours"><input type="number" min="0.5" max="500" step="0.5" value={fallbackHours} onChange={(event) => setFallbackHours(event.target.value)} /></Filter>
       </div>
-      <div className="mt-3 flex flex-wrap items-center justify-between gap-3 border-t border-border pt-3">
-        <p className="text-meta text-muted-foreground">Uses recorded assignment hours when available. Estimated cost equals course fees plus employee time from current pay records.</p>
-        <Button size="sm" disabled={!valid} onClick={() => onApply({ courseFeePerLearner: parsedFee, courseHoursPerLearner: parsedHours })}>Recalculate</Button>
+      <div className="mt-5 border-t border-border pt-4">
+        <p className="text-meta text-muted-foreground">Recorded assignment hours take precedence. The fallback applies only where hours are missing.</p>
+        <Button className="mt-4 w-full" size="sm" disabled={!valid} onClick={() => onApply({ courseFeePerLearner: parsedFee, courseHoursPerLearner: parsedHours })}>Update scenario</Button>
       </div>
-    </div>
-  </details>
+    </CardContent>
+  </Card>
 }
 
 function ReplacementCostChart({ data }: { data: WorkforceAnalytics }) {
@@ -349,7 +358,7 @@ function ReplacementCostChart({ data }: { data: WorkforceAnalytics }) {
     .slice(0, 8)
     .map((row) => ({ ...row, label: row.jobTitle.length > 28 ? `${row.jobTitle.slice(0, 27)}…` : row.jobTitle }))
   if (!rows.length) return <div className="flex h-64 items-center justify-center text-body text-muted-foreground">No role-level cost exposure is available in this scope.</div>
-  return <div className="h-72 w-full"><ResponsiveContainer width="100%" height="100%" minWidth={0} initialDimension={{ width: 800, height: 288 }}>
+  return <div className="h-64 w-full"><ResponsiveContainer width="100%" height="100%" minWidth={0} initialDimension={{ width: 800, height: 256 }}>
     <BarChart data={rows} layout="vertical" margin={{ top: 6, right: 18, bottom: 2, left: 38 }}>
       <CartesianGrid strokeDasharray="3 3" horizontal={false} stroke="var(--border)" />
       <XAxis type="number" tickFormatter={(value) => currency(Number(value))} axisLine={false} tickLine={false} tick={{ fill: "var(--muted-foreground)", fontSize: 10 }} />
@@ -662,9 +671,9 @@ export function InsightsWorkspace({ initialData }: { initialData: WorkforceAnaly
             </CardHeader>
             <CardContent className="divide-y divide-border p-0">{actions.map((action) => <div id={`insight-${action.id}`} key={action.id} className={cn("grid scroll-mt-24 gap-3 px-5 py-4 lg:grid-cols-[minmax(150px,0.65fr)_minmax(220px,1fr)_minmax(260px,1.2fr)_auto] lg:items-center", action.workItem?.id === selectedWorkItemId && "bg-accent/45 ring-1 ring-inset ring-primary/30")}><div><p className="text-card-title font-semibold">{action.department}</p><Badge className="mt-1" variant={action.severity === "high" ? "destructive" : "secondary"}>{action.severity === "high" ? "High priority" : "Review"}</Badge></div><div><p className="text-body font-semibold">{action.title}</p><p className="mt-0.5 text-meta text-muted-foreground">Trigger: {action.evidence}</p></div><div><p className="text-label font-semibold text-muted-foreground">Recommended check</p><p className="mt-0.5 text-body">{action.recommendedAction}</p></div><InsightActionButton action={action} filters={filters} onUpdated={() => setRefreshVersion((current) => current + 1)} /></div>)}{!actions.length && <p className="px-5 py-8 text-center text-body text-muted-foreground">No exceptions meet the review rules in this reporting scope.</p>}</CardContent>
         </Card>
-        <div className="grid items-start gap-4 xl:grid-cols-[minmax(0,1fr)_minmax(360px,0.6fr)]">
-          <details className="surface-card overflow-hidden"><summary className="flex list-none items-center justify-between gap-4 px-5 py-4 [&::-webkit-details-marker]:hidden"><span><span className="block text-card-title font-semibold">Department comparison</span><span className="mt-0.5 block text-meta text-muted-foreground">Movement, coverage, learning, and leave</span></span><span className="text-meta font-semibold text-primary">View details</span></summary><div className="border-t border-border"><DepartmentPressure data={data} onSelect={(department) => setFilters({ ...filters, department })} /></div></details>
-          <Card className="shadow-none"><CardHeader><CardTitle>Exit reasons</CardTitle><CardDescription>Recorded outcomes in this period.</CardDescription></CardHeader><CardContent><ExitReasonChart rows={exitReasons} /></CardContent></Card>
+        <div className="grid items-stretch gap-4 xl:grid-cols-[minmax(0,1.65fr)_minmax(340px,0.75fr)]">
+          <Card className="h-full gap-0 overflow-hidden py-0 shadow-none"><CardHeader className="border-b border-border px-5 py-4"><CardTitle>Department comparison</CardTitle><CardDescription>Movement, attrition, hiring coverage, learning, and leave from the selected scope.</CardDescription></CardHeader><CardContent className="p-0"><DepartmentPressure data={data} onSelect={(department) => setFilters({ ...filters, department })} /></CardContent></Card>
+          <Card className="h-full shadow-none"><CardHeader><CardTitle>Exit reasons</CardTitle><CardDescription>Recorded outcomes in this period.</CardDescription></CardHeader><CardContent><ExitReasonChart rows={exitReasons} /></CardContent></Card>
         </div>
       </>}
 
@@ -688,8 +697,10 @@ export function InsightsWorkspace({ initialData }: { initialData: WorkforceAnaly
           { label: "Recorded exits", value: data.attrition.totalExits, detail: `${data.attrition.voluntary} voluntary` },
         ]} />
         <div className="grid gap-4 xl:grid-cols-2"><Card className="shadow-none"><CardHeader><CardTitle>Workforce flow</CardTitle><CardDescription>Completed hires and recorded exits by {data.filters.period}.</CardDescription></CardHeader><CardContent><FlowChart rows={flow} /></CardContent></Card><Card className="shadow-none"><CardHeader><CardTitle>Hiring source performance</CardTitle><CardDescription>Completed hire volume compared with time to hire.</CardDescription></CardHeader><CardContent><SourceEfficiency data={data} /></CardContent></Card></div>
-        <Card className="shadow-none"><CardHeader><CardTitle>Manager cohorts</CardTitle><CardDescription>Recorded team exits normalized to the current cohort, with department context.</CardDescription></CardHeader><CardContent><ManagerConcentration data={data} /></CardContent></Card>
-        <details className="surface-card overflow-hidden"><summary className="flex list-none items-center justify-between gap-4 px-5 py-4 [&::-webkit-details-marker]:hidden"><span><span className="block text-card-title font-semibold">Tenure attrition</span><span className="mt-0.5 block text-meta text-muted-foreground">Exit rates by tenure cohort</span></span><span className="text-meta font-semibold text-primary">View details</span></summary><div className="border-t border-border p-5"><TenureAttrition data={data} /></div></details>
+        <div className="grid items-stretch gap-4 2xl:grid-cols-[minmax(0,1.5fr)_minmax(360px,0.7fr)]">
+          <Card className="h-full shadow-none"><CardHeader><CardTitle>Manager cohorts</CardTitle><CardDescription>Recorded team exits normalized to the current cohort, with department context.</CardDescription></CardHeader><CardContent><ManagerConcentration data={data} /></CardContent></Card>
+          <Card className="h-full shadow-none"><CardHeader><CardTitle>Tenure attrition</CardTitle><CardDescription>Recorded exit rate by tenure cohort compared with the company rate.</CardDescription></CardHeader><CardContent><TenureAttrition data={data} /></CardContent></Card>
+        </div>
       </>}
 
       {analysisView === "capability" && <>
@@ -699,8 +710,10 @@ export function InsightsWorkspace({ initialData }: { initialData: WorkforceAnaly
           { label: "Required learning", value: company.mandatoryTrainingGaps, detail: `${company.overdueMandatoryTrainingGaps} overdue` },
           { label: "Remaining effort", value: `${company.incompleteTrainingHours}h`, detail: "Recorded assignment hours" },
         ]} />
-        <CapabilityAnalysis data={data} onFilterDepartment={(department) => setFilters((current) => ({ ...current, department }))} />
-        <CapabilityAssumptions key={`capability-${impact.assumptions.courseFeePerLearner}-${impact.assumptions.courseHoursPerLearner}`} data={data} onApply={(values) => setFilters((current) => ({ ...current, ...values }))} />
+        <div className="grid items-stretch gap-4 2xl:grid-cols-[minmax(0,1fr)_320px]">
+          <CapabilityAnalysis data={data} onFilterDepartment={(department) => setFilters((current) => ({ ...current, department }))} />
+          <CapabilityAssumptions key={`capability-${impact.assumptions.courseFeePerLearner}-${impact.assumptions.courseHoursPerLearner}`} data={data} onApply={(values) => setFilters((current) => ({ ...current, ...values }))} />
+        </div>
       </>}
     </WorkspacePage>
   )

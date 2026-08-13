@@ -216,7 +216,6 @@ export function AppShell({ user, children }: { user: ShellUser; children: React.
             navigation={<AppNavigation user={user} />}
             onOpenPalette={() => setPaletteOpen(true)}
             onOpenNavigation={() => setMobileNavigationOpen(true)}
-            onOpenAssistant={() => setAssistantOpen(true)}
           />
         </div>
         <main className="app-content">{children}</main>

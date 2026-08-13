@@ -599,30 +599,6 @@
   flex: 0 0 auto;
 }
 
-.topbar-assistant {
-  display: inline-flex;
-  height: 34px;
-  align-items: center;
-  justify-content: center;
-  padding-inline: 11px;
-  border: 1px solid #4b4555;
-  border-radius: 8px;
-  color: var(--shell-foreground);
-  background: #27232d;
-  font-weight: 600;
-  transition: border-color 140ms ease, background-color 140ms ease;
-}
-
-.topbar-assistant--active {
-  border-color: #7668d4;
-  background: #302b38;
-}
-
-.topbar-assistant:hover {
-  border-color: #7668d4;
-  background: #302b38;
-}
-
 .topbar-menu-button {
   display: none;
 }
@@ -861,6 +837,62 @@
   z-index: 110;
   display: flex;
   justify-content: flex-end;
+}
+
+.assistant-launcher {
+  position: fixed;
+  right: 24px;
+  bottom: 24px;
+  z-index: 70;
+  display: inline-flex;
+  min-width: 92px;
+  height: 42px;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+  padding: 1px;
+  border-radius: 999px;
+  color: #ffffff;
+  background: #211e27;
+  box-shadow: 0 10px 28px rgb(41 30 62 / 0.22), 0 2px 8px rgb(41 30 62 / 0.16);
+  isolation: isolate;
+  transition: transform 160ms ease, box-shadow 160ms ease;
+}
+
+.assistant-launcher::before {
+  position: absolute;
+  z-index: -2;
+  width: 150%;
+  aspect-ratio: 1;
+  background: conic-gradient(from 0deg, transparent 0 58%, #ad9cff 70%, #6d45ff 82%, transparent 94%);
+  content: "";
+  animation: assistant-launcher-orbit 4.8s linear infinite;
+}
+
+.assistant-launcher::after {
+  position: absolute;
+  inset: 1px;
+  z-index: -1;
+  border-radius: inherit;
+  background: linear-gradient(135deg, #2a2532, #1d1a22);
+  content: "";
+}
+
+.assistant-launcher span {
+  position: relative;
+  padding-inline: 17px;
+  font-size: 13px;
+  font-weight: 600;
+  line-height: 20px;
+}
+
+.assistant-launcher:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 14px 34px rgb(64 43 99 / 0.28), 0 0 0 4px rgb(109 69 255 / 0.08);
+}
+
+@keyframes assistant-launcher-orbit {
+  to { transform: rotate(360deg); }
 }
 
 .assistant-drawer-backdrop {
@@ -1450,6 +1482,14 @@ summary:hover {
   line-height: 16px;
 }
 
+.insight-department-card {
+  min-width: 0;
+  padding: 15px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--surface-subtle);
+}
+
 .employee-shell__account p:first-child,
 .employee-shell__sign-out {
   color: var(--shell-foreground);
@@ -1479,6 +1519,11 @@ summary:hover {
 }
 
 @media (max-width: 700px) {
+  .assistant-launcher {
+    right: 16px;
+    bottom: calc(16px + env(safe-area-inset-bottom));
+  }
+
   .employee-shell__header-inner {
     flex-wrap: wrap;
     gap: 8px 12px;
