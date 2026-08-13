@@ -41,8 +41,8 @@ const portalViews: Array<{ value: PortalView; label: string }> = [
   { value: "reviews", label: "Reviews" },
 ]
 
-const fieldClass = "mt-1 h-9 w-full rounded-md border border-border bg-background px-3 text-body outline-none focus:ring-2 focus:ring-primary/20"
-const textAreaClass = "mt-1 min-h-24 w-full resize-y rounded-md border border-border bg-background px-3 py-2 text-body outline-none focus:ring-2 focus:ring-primary/20"
+const fieldClass = "mt-1 h-9 w-full rounded-[9px] border border-input bg-white px-3 text-body shadow-[inset_0_1px_1px_rgb(24_21_31_/_0.025)] outline-none focus:border-ring focus:ring-3 focus:ring-primary/10"
+const textAreaClass = "mt-1 min-h-24 w-full resize-y rounded-[9px] border border-input bg-white px-3 py-2 text-body shadow-[inset_0_1px_1px_rgb(24_21_31_/_0.025)] outline-none focus:border-ring focus:ring-3 focus:ring-primary/10"
 
 function date(value: unknown): string {
   if (!value) return "—"
@@ -57,7 +57,15 @@ function money(value: unknown, currency: unknown): string {
 }
 
 function Status({ value }: { value: unknown }) {
-  return <span className="rounded border border-border bg-muted/40 px-2 py-0.5 text-status font-semibold capitalize">{String(value || "unknown").replaceAll("_", " ")}</span>
+  const normalized = String(value || "unknown").toLowerCase().replaceAll("_", " ")
+  const tone = ["approved", "active", "completed", "resolved", "paid"].some((item) => normalized.includes(item))
+    ? "border-emerald-200 bg-emerald-50 text-emerald-800"
+    : ["rejected", "declined", "overdue", "failed"].some((item) => normalized.includes(item))
+      ? "border-rose-200 bg-rose-50 text-rose-800"
+      : ["pending", "submitted", "review", "progress", "scheduled"].some((item) => normalized.includes(item))
+        ? "border-amber-200 bg-amber-50 text-amber-800"
+        : "border-border bg-muted/50 text-muted-foreground"
+  return <span className={`rounded-[6px] border px-2 py-0.5 text-status font-semibold capitalize ${tone}`}>{normalized}</span>
 }
 
 export function EmployeePortal({ initialData, user }: { initialData: PortalData; user: { name: string; email: string; authenticated: boolean; workspaceAccess: boolean } }) {
@@ -247,7 +255,7 @@ export function EmployeePortal({ initialData, user }: { initialData: PortalData;
   return <div className="employee-shell min-h-screen text-foreground">
     <SessionRevalidator enabled={user.authenticated} />
     <header className="employee-shell__header">
-      <div className="employee-shell__header-inner mx-auto flex min-h-14 max-w-[1280px] items-center px-4 sm:px-6">
+      <div className="employee-shell__header-inner mx-auto flex min-h-[60px] max-w-[1380px] items-center px-4 sm:px-7">
         <nav className="employee-shell__navigation" aria-label="Employee navigation">
           {portalViews.map((item) => <button key={item.value} type="button" aria-current={active === item.value ? "page" : undefined} onClick={() => selectView(item.value)} className={active === item.value ? "employee-shell__navigation-link employee-shell__navigation-link--active" : "employee-shell__navigation-link"}>{item.label}</button>)}
         </nav>
@@ -259,9 +267,9 @@ export function EmployeePortal({ initialData, user }: { initialData: PortalData;
       </div>
     </header>
 
-    <main className="mx-auto max-w-[1280px] space-y-4 px-4 py-5 sm:px-6">
-      <div><h1 className="text-page-title">Employee services</h1><p className="text-page-description text-muted-foreground">Profile, requests, learning, and reviews.</p></div>
-      {message && <div className="rounded-md border border-border bg-background px-4 py-3 text-body" role="status">{message}</div>}
+    <main className="mx-auto max-w-[1380px] space-y-4 px-4 py-6 sm:px-7 sm:py-7">
+      <div className="employee-page-header"><h1 className="text-page-title">Employee services</h1><p className="text-page-description text-muted-foreground">Profile, requests, learning, and reviews.</p></div>
+      {message && <div className="notice-bar" role="status">{message}</div>}
 
       {active === "overview" && <>
         <section className="grid gap-4 lg:grid-cols-[1.3fr_1fr]">

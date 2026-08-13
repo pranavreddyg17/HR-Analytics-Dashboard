@@ -1,7 +1,7 @@
 "use client"
 
 import { useEffect, useRef, useState } from "react"
-import { ArrowUp, LoaderCircle } from "lucide-react"
+import { LoaderCircle } from "lucide-react"
 import Link from "next/link"
 
 import { AssistantRichText } from "@/components/assistant-rich-text"
@@ -314,7 +314,7 @@ export function AgentCopilot({ dataMode, pageContext, compact = false, onReviewW
             placeholder={pageContext ? `Ask about ${pageContext.label.toLowerCase()}` : "Ask a workforce analytics question"}
             className="max-h-32 min-h-9 flex-1 resize-none bg-transparent py-2 text-sm outline-none placeholder:text-muted-foreground"
           />
-          <Button type="submit" size="icon" disabled={!input.trim() || thinking || loadingHistory} aria-label="Send question"><ArrowUp className="size-4" /></Button>
+          <Button type="submit" size="sm" disabled={!input.trim() || thinking || loadingHistory}>Send</Button>
         </form>
         <p className="mt-2 text-meta text-muted-foreground">Uses the current page, live workspace records, and the knowledge index.</p>
       </div>

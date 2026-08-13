@@ -641,11 +641,11 @@ export function InsightsWorkspace({ initialData }: { initialData: WorkforceAnaly
 
       {error && <div className="rounded-md border border-rose-200 bg-rose-50 px-4 py-3 text-meta text-rose-800 dark:border-rose-900/40 dark:bg-rose-950/20 dark:text-rose-200">{error}</div>}
 
-      <div className="surface-card overflow-hidden">
-        <div className="flex flex-wrap gap-1 p-2" role="tablist" aria-label="Insights view">
-          {([['overview', 'Overview'], ['impact', 'Workforce impact'], ['talent', 'Talent supply'], ['capability', 'Capability']] as Array<[AnalysisView, string]>).map(([id, label]) => <Button key={id} size="sm" variant={analysisView === id ? "secondary" : "ghost"} role="tab" aria-selected={analysisView === id} onClick={() => selectAnalysisView(id)}>{label}</Button>)}
+      <div className="view-switcher">
+        <div className="view-switcher__tabs" role="tablist" aria-label="Insights view">
+          {([['overview', 'Overview'], ['impact', 'Workforce impact'], ['talent', 'Talent supply'], ['capability', 'Capability']] as Array<[AnalysisView, string]>).map(([id, label]) => <button key={id} type="button" className="view-switcher__tab" role="tab" aria-selected={analysisView === id} onClick={() => selectAnalysisView(id)}>{label}</button>)}
         </div>
-        <div className="border-t border-border px-4 py-2.5"><p className="text-meta text-muted-foreground"><span className="font-semibold text-foreground">{viewGuidance[analysisView].title}:</span> {viewGuidance[analysisView].description}</p></div>
+        <div className="view-switcher__context"><span className="font-semibold text-foreground">{viewGuidance[analysisView].title}</span><span aria-hidden="true"> · </span>{viewGuidance[analysisView].description}</div>
       </div>
 
       {analysisView === "overview" && <>

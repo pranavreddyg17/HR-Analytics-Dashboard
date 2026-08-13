@@ -1,7 +1,8 @@
 "use client"
 
 import Link from "next/link"
-import { useSearchParams } from "next/navigation"
+import { usePathname, useSearchParams } from "next/navigation"
+import { Search } from "lucide-react"
 
 import type { ShellUser } from "@/components/app-navigation"
 import { SignOutControl } from "@/components/sign-out-control"
@@ -11,8 +12,9 @@ function initials(name: string): string {
   return name.split(/\s+/).filter(Boolean).slice(0, 2).map((part) => part[0]?.toUpperCase()).join("") || "HR"
 }
 
-export function Topbar({ user, navigation, onOpenPalette, onOpenNavigation }: { user: ShellUser; navigation: React.ReactNode; onOpenPalette: () => void; onOpenNavigation: () => void }) {
+export function Topbar({ user, navigation, onOpenPalette, onOpenNavigation, onOpenAssistant }: { user: ShellUser; navigation: React.ReactNode; onOpenPalette: () => void; onOpenNavigation: () => void; onOpenAssistant: () => void }) {
   const searchParams = useSearchParams()
+  const pathname = usePathname()
   const returnTo = safeReturnTo(searchParams.get("returnTo"))
 
   return (
@@ -29,11 +31,15 @@ export function Topbar({ user, navigation, onOpenPalette, onOpenNavigation }: { 
           className="topbar-search"
           aria-label="Search pages, actions, reports, and people"
         >
+          <Search className="topbar-search__icon" aria-hidden="true" />
           <span className="topbar-search__full">Search workspace records and pages</span>
           <span className="topbar-search__compact">Search</span>
         </button>
 
         <div className="topbar__utilities">
+          {pathname === "/assistant"
+            ? <Link href="/assistant" className="topbar-assistant topbar-assistant--active" aria-current="page">Assistant</Link>
+            : <button type="button" className="topbar-assistant" onClick={onOpenAssistant}>Assistant</button>}
           <details className="user-menu">
             <summary aria-label="Open account menu">
               <span className="avatar-soft avatar-soft--small">{initials(user.displayName)}</span>

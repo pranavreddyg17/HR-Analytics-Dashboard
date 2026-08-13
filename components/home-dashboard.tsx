@@ -3,6 +3,7 @@
 import Link from "next/link"
 
 import { Card, CardContent } from "@/components/ui/card"
+import { Button } from "@/components/ui/button"
 import { MetricStrip, WorkspaceHeader, WorkspacePage, WorkspaceSectionHeader } from "@/components/workspace-ui"
 import type { InboxOperations } from "@/lib/inbox-types"
 import { withReturnTo } from "@/lib/navigation"
@@ -57,7 +58,7 @@ export function HomeDashboard({ snapshot, inbox, actorEmail }: HomeDashboardProp
       <WorkspaceHeader
         title="Home"
         description="Work requiring attention."
-        actions={<Link href={withReturnTo("/people?new=employee", "/")} className="inline-flex h-9 items-center rounded-md bg-primary px-3 font-semibold text-primary-foreground hover:bg-primary/85">Add employee</Link>}
+        actions={<Button nativeButton={false} render={<Link href={withReturnTo("/people?new=employee", "/")} />}>Add employee</Button>}
       />
 
       <MetricStrip metrics={[
