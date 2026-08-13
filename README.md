@@ -322,7 +322,7 @@ The route files under `app/api` are the implementation source of truth. The cust
 | GET/POST | `/api/auth/[...nextauth]` | Public OAuth flow | Auth.js Google sign-in, callback, session, and sign-out |
 | GET | `/api/v1/health` | Public | Embedded model and dataset health |
 | GET | `/api/v1/ready` | Public | Release SHA, PostgreSQL, embedded model, and Azure AI configuration readiness |
-| GET | `/api/v1/search?q=` | Workspace | Dynamic search across authorized pages, actions, and employee records |
+| GET | `/api/v1/search?q=` | Workspace | Query-driven search across authorized pages, actions, and employee records; the palette presents no static result list before typing |
 | GET | `/api/v1/data-dictionary` | Model reference | Historical prediction input dictionary |
 | GET | `/api/v1/schema` | Model reference | Prediction JSON schema |
 | GET | `/api/v1/model` | Model reference | Version, metrics, ranges, features, and governance metadata |

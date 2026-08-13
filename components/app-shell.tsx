@@ -37,28 +37,13 @@ type SearchDestination = {
 
 type WorkspaceSearchResult = Omit<PaletteItem, "kind"> & { kind: "person" | "record" }
 
-const pageDetails: Record<string, string> = {
-  "/": "Priorities and upcoming people work",
-  "/people": "Employee directory and records",
-  "/inbox": "Requests, decisions, and follow-ups",
-  "/onboarding": "New joiners, headcount, and candidate handoff",
-  "/leaves": "Leave requests, schedules, and coverage",
-  "/courses": "Capability recommendations and assignments",
-  "/insights": "Workforce movement and department review",
-  "/attrition": "Retention signals and model analysis",
-  "/assistant": "Workforce questions and assisted actions",
-  "/imports": "Imports, record coverage, and reporting feeds",
-  "/admin": "Application health, usage, cost, and service performance",
-  "/access": "Accounts, roles, and access history",
-}
-
 const searchDestinations: SearchDestination[] = [
   ...commandNavigation.map((item) => ({
     id: `page-${item.href}`,
     href: item.href,
     label: item.label,
-    detail: pageDetails[item.href] ?? "Workspace page",
-    keywords: `${item.label} ${item.href}`,
+    detail: item.detail,
+    keywords: `${item.label} ${item.detail} ${item.href}`,
     section: "Pages" as const,
     adminOnly: item.adminOnly,
   })),
@@ -86,12 +71,13 @@ function CommandPalette({ onClose, user }: { onClose: () => void; user: ShellUse
   const inputRef = useRef<HTMLInputElement>(null)
 
   useEffect(() => {
-    if (query.trim().length < 2) return
+    const normalizedQuery = query.trim()
+    if (normalizedQuery.length < 2) return
     const controller = new AbortController()
     const timer = window.setTimeout(async () => {
       setLoading(true)
       try {
-        const response = await fetch(`/api/v1/search?q=${encodeURIComponent(query.trim())}`, { cache: "no-store", signal: controller.signal })
+        const response = await fetch(`/api/v1/search?q=${encodeURIComponent(normalizedQuery)}`, { cache: "no-store", signal: controller.signal })
         if (!response.ok) throw new Error("Search unavailable")
         const body = await response.json() as { results?: WorkspaceSearchResult[] }
         setRecords(body.results ?? [])
@@ -107,6 +93,7 @@ function CommandPalette({ onClose, user }: { onClose: () => void; user: ShellUse
 
   const items = useMemo<PaletteItem[]>(() => {
     const normalized = query.trim().toLowerCase()
+    if (!normalized) return []
     const destinations = searchDestinations
       .filter((item) => !item.adminOnly || user.role === "admin")
       .map((item) => ({ item, score: destinationScore(item, normalized) }))
@@ -114,7 +101,7 @@ function CommandPalette({ onClose, user }: { onClose: () => void; user: ShellUse
       .sort((left, right) => {
         return right.score - left.score
       })
-      .slice(0, normalized ? 5 : 8)
+      .slice(0, 5)
       .map(({ item }) => ({ ...item, kind: "destination" as const }))
     return [...destinations, ...records]
   }, [query, records, user.role])
@@ -137,11 +124,9 @@ function CommandPalette({ onClose, user }: { onClose: () => void; user: ShellUse
             onChange={(event) => {
               const next = event.target.value
               setQuery(next)
+              setRecords([])
+              setLoading(false)
               setActiveIndex(0)
-              if (next.trim().length < 2) {
-                setRecords([])
-                setLoading(false)
-              }
             }}
             onKeyDown={(event) => {
               if (event.key === "ArrowDown") { event.preventDefault(); setActiveIndex((current) => Math.min(current + 1, Math.max(0, items.length - 1))) }
@@ -159,7 +144,7 @@ function CommandPalette({ onClose, user }: { onClose: () => void; user: ShellUse
             const beginsSection = index === 0 || items[index - 1]?.section !== item.section
             return (
               <div key={item.id}>
-                {beginsSection && <p className="command-section-label mt-2">{!query && item.section === "Pages" ? "Quick navigation" : item.section}</p>}
+                {beginsSection && <p className="command-section-label mt-2">{item.section}</p>}
                 <button
                   type="button"
                   onMouseEnter={() => setActiveIndex(index)}

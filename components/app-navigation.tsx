@@ -17,6 +17,7 @@ export type ShellUser = {
 type NavigationItem = {
   href: string
   label: string
+  detail: string
   adminOnly?: boolean
 }
 
@@ -24,35 +25,35 @@ const navigationGroups: Array<{ label: string; items: NavigationItem[] }> = [
   {
     label: "Work",
     items: [
-      { href: "/", label: "Home" },
-      { href: "/people", label: "People" },
-      { href: "/inbox", label: "Work queue" },
+      { href: "/", label: "Home", detail: "Priorities and upcoming people work" },
+      { href: "/people", label: "People", detail: "Employee directory and records" },
+      { href: "/inbox", label: "Work queue", detail: "Requests, decisions, and follow-ups" },
     ],
   },
   {
     label: "Lifecycle",
     items: [
-      { href: "/onboarding", label: "Onboarding" },
-      { href: "/leaves", label: "Leaves" },
-      { href: "/courses", label: "Learning" },
-      { href: "/exits", label: "Exit management" },
+      { href: "/onboarding", label: "Onboarding", detail: "New joiners, headcount, and candidate handoff" },
+      { href: "/leaves", label: "Leaves", detail: "Leave requests, schedules, and coverage" },
+      { href: "/courses", label: "Learning", detail: "Capability recommendations and assignments" },
+      { href: "/exits", label: "Exit management", detail: "Offboarding, tasks, and asset recovery" },
     ],
   },
   {
     label: "Intelligence",
     items: [
-      { href: "/insights", label: "Insights" },
-      { href: "/attrition", label: "Retention risk" },
-      { href: "/assistant", label: "AI assistant" },
+      { href: "/insights", label: "Insights", detail: "Workforce movement and department review" },
+      { href: "/attrition", label: "Retention risk", detail: "Retention signals and model analysis" },
+      { href: "/assistant", label: "AI assistant", detail: "Workforce questions and assisted actions" },
     ],
   },
   {
     label: "System",
     items: [
-      { href: "/imports", label: "Data exchange" },
-      { href: "/assets", label: "Asset inventory" },
-      { href: "/admin", label: "Operations monitor", adminOnly: true },
-      { href: "/access", label: "Access", adminOnly: true },
+      { href: "/imports", label: "Data exchange", detail: "Imports, record coverage, and reporting feeds" },
+      { href: "/assets", label: "Asset inventory", detail: "Assigned equipment and return status" },
+      { href: "/admin", label: "Operations monitor", detail: "Application health, usage, cost, and service performance", adminOnly: true },
+      { href: "/access", label: "Access", detail: "Accounts, roles, and access history", adminOnly: true },
     ],
   },
 ]
