@@ -298,9 +298,9 @@ function CostAssumptions({ data, onApply }: { data: WorkforceAnalytics; onApply:
     && parsed.courseFeePerLearner >= 0
     && parsed.courseHoursPerLearner > 0
 
-  return <Card className="gap-0 overflow-hidden py-0 shadow-none">
-    <CardHeader className="border-b border-border px-5 py-4"><CardTitle>Cost assumptions</CardTitle><CardDescription>Adjust the scenario inputs. Calculations refresh from the backend.</CardDescription></CardHeader>
-    <CardContent className="p-4">
+  return <details className="surface-card overflow-hidden">
+    <summary className="flex list-none items-center justify-between gap-4 px-5 py-4 [&::-webkit-details-marker]:hidden"><span><span className="block text-card-title font-semibold">Cost assumptions</span><span className="mt-0.5 block text-meta text-muted-foreground">Recruiting, vacancy, ramp, and learning scenario inputs</span></span><span className="text-meta font-semibold text-primary">Adjust</span></summary>
+    <div className="border-t border-border p-4">
       <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-6">
         <Filter label="Recruiting cost"><input type="number" min="0" step="500" value={draft.recruitingCostPerHire} onChange={(event) => field("recruitingCostPerHire", event.target.value)} /></Filter>
         <Filter label="Vacancy impact"><input type="number" min="0" max="100" step="5" value={draft.vacancyProductivityPercent} onChange={(event) => field("vacancyProductivityPercent", event.target.value)} /></Filter>
@@ -313,8 +313,8 @@ function CostAssumptions({ data, onApply }: { data: WorkforceAnalytics; onApply:
         <p className="text-meta text-muted-foreground">Vacancy and ramp impact are percentages of salary cost. Employee pay is available for {data.decisionSupport.workforceImpact.summary.payDataCoverage}% of active records.</p>
         <Button size="sm" disabled={!valid} onClick={() => onApply(parsed)}>Recalculate</Button>
       </div>
-    </CardContent>
-  </Card>
+    </div>
+  </details>
 }
 
 function CapabilityAssumptions({ data, onApply }: { data: WorkforceAnalytics; onApply: (values: Pick<CostInputs, "courseFeePerLearner" | "courseHoursPerLearner">) => void }) {
@@ -327,9 +327,9 @@ function CapabilityAssumptions({ data, onApply }: { data: WorkforceAnalytics; on
     && Number.isFinite(parsedFee) && parsedFee >= 0
     && Number.isFinite(parsedHours) && parsedHours > 0 && parsedHours <= 500
 
-  return <Card className="gap-0 overflow-hidden py-0 shadow-none">
-    <CardHeader className="border-b border-border px-5 py-4"><CardTitle>Learning cost scenario</CardTitle><CardDescription>Estimate the remaining delivery cost for assignments already in the learning register.</CardDescription></CardHeader>
-    <CardContent className="p-4">
+  return <details className="surface-card overflow-hidden">
+    <summary className="flex list-none items-center justify-between gap-4 px-5 py-4 [&::-webkit-details-marker]:hidden"><span><span className="block text-card-title font-semibold">Learning cost scenario</span><span className="mt-0.5 block text-meta text-muted-foreground">Course fees and fallback delivery hours</span></span><span className="text-meta font-semibold text-primary">Adjust</span></summary>
+    <div className="border-t border-border p-4">
       <div className="grid gap-3 sm:grid-cols-2 lg:max-w-xl">
         <Filter label="Course fee per assignment"><input type="number" min="0" step="50" value={fee} onChange={(event) => setFee(event.target.value)} /></Filter>
         <Filter label="Fallback hours"><input type="number" min="0.5" max="500" step="0.5" value={fallbackHours} onChange={(event) => setFallbackHours(event.target.value)} /></Filter>
@@ -338,8 +338,8 @@ function CapabilityAssumptions({ data, onApply }: { data: WorkforceAnalytics; on
         <p className="text-meta text-muted-foreground">Uses recorded assignment hours when available. Estimated cost equals course fees plus employee time from current pay records.</p>
         <Button size="sm" disabled={!valid} onClick={() => onApply({ courseFeePerLearner: parsedFee, courseHoursPerLearner: parsedHours })}>Recalculate</Button>
       </div>
-    </CardContent>
-  </Card>
+    </div>
+  </details>
 }
 
 function ReplacementCostChart({ data }: { data: WorkforceAnalytics }) {
@@ -429,7 +429,7 @@ function EmployeeImpactPanel({ data, filters }: { data: WorkforceAnalytics; filt
   const selected = scenario
   const selectedIdentity = pendingEmployee ?? selected
   return <Card className="gap-0 overflow-hidden py-0 shadow-none">
-    <CardHeader className="gap-3 border-b border-border px-5 py-4 sm:flex-row sm:items-end sm:justify-between">
+    <CardHeader className="gap-3 border-b border-border px-5 py-4 sm:flex sm:flex-row sm:items-end sm:justify-between">
       <div><CardTitle>Employee continuity scenario</CardTitle><CardDescription>Role coverage and replacement assumptions for any active employee.</CardDescription></div>
       <EmployeeImpactPicker value={selectedIdentity} filters={filters} onSelect={(employee) => { setLoading(true); setPendingEmployee(employee); setEmployeeId(employee.employeeId); setError("") }} />
     </CardHeader>
@@ -464,10 +464,10 @@ function EmployeeImpactPanel({ data, filters }: { data: WorkforceAnalytics; filt
 
 function RoleContinuityTable({ data }: { data: WorkforceAnalytics }) {
   const rows = data.decisionSupport.workforceImpact.roles.filter((row) => row.continuityStatus !== "Covered").slice(0, 12)
-  return <Card className="gap-0 overflow-hidden py-0 shadow-none">
-    <CardHeader className="border-b border-border px-5 py-4"><CardTitle>Role continuity</CardTitle><CardDescription>Roles where observed movement, model-review concentration, or refill time warrants coverage planning.</CardDescription></CardHeader>
-      <CardContent className="p-0"><div className="overflow-x-auto"><table className="w-full min-w-[980px] text-left text-body"><thead className="bg-muted/40 text-label font-semibold text-muted-foreground"><tr>{["Role", "Status", "Coverage", "Movement", "Refill", "Replacement scenario", "Open"].map((heading) => <th key={heading} className="px-4 py-2.5">{heading}</th>)}</tr></thead><tbody>{rows.map((row) => <tr key={`${row.department}-${row.jobTitle}`} className="border-t border-border/70"><td className="px-4 py-3"><p className="font-semibold">{row.jobTitle}</p><p className="text-meta text-muted-foreground">{row.department}</p></td><td className="px-4 py-3"><Badge variant={row.continuityStatus === "Critical" ? "destructive" : "secondary"}>{row.continuityStatus}</Badge></td><td className="px-4 py-3"><p>{row.activeEmployees} active · {row.reviewProfiles} in review</p><p className="text-meta text-muted-foreground">{row.reviewShare}% review share</p></td><td className="px-4 py-3"><p>{row.recordedExits} exits · {row.completedHires} hires</p><p className="text-meta text-muted-foreground">{row.openRequisitions} open requisitions</p></td><td className="px-4 py-3"><p>{row.refillDays} days</p><p className="text-meta text-muted-foreground">{refillBasisLabel(row.refillBasis)}</p></td><td className="px-4 py-3"><p className="font-semibold tabular-nums">{currency(row.replacementCostPerExit)}</p><p className="text-meta text-muted-foreground">Role-average cost scenario</p></td><td className="px-4 py-3"><Link className={actionLinkClass} href={`/onboarding?view=talent&department=${encodeURIComponent(row.department)}&q=${encodeURIComponent(row.jobTitle)}`}>Talent</Link></td></tr>)}</tbody></table></div>{!rows.length && <p className="p-8 text-center text-body text-muted-foreground">No roles require a continuity review in this scope.</p>}</CardContent>
-  </Card>
+  return <details className="surface-card overflow-hidden">
+    <summary className="flex list-none items-center justify-between gap-4 px-5 py-4 [&::-webkit-details-marker]:hidden"><span><span className="block text-card-title font-semibold">Role continuity</span><span className="mt-0.5 block text-meta text-muted-foreground">{rows.length} roles require coverage review</span></span><span className="text-meta font-semibold text-primary">View roles</span></summary>
+    <div className="border-t border-border"><div className="overflow-x-auto"><table className="w-full min-w-[980px] text-left text-body"><thead className="bg-muted/40 text-label font-semibold text-muted-foreground"><tr>{["Role", "Status", "Coverage", "Movement", "Refill", "Replacement scenario", "Open"].map((heading) => <th key={heading} className="px-4 py-2.5">{heading}</th>)}</tr></thead><tbody>{rows.map((row) => <tr key={`${row.department}-${row.jobTitle}`} className="border-t border-border/70"><td className="px-4 py-3"><p className="font-semibold">{row.jobTitle}</p><p className="text-meta text-muted-foreground">{row.department}</p></td><td className="px-4 py-3"><Badge variant={row.continuityStatus === "Critical" ? "destructive" : "secondary"}>{row.continuityStatus}</Badge></td><td className="px-4 py-3"><p>{row.activeEmployees} active · {row.reviewProfiles} in review</p><p className="text-meta text-muted-foreground">{row.reviewShare}% review share</p></td><td className="px-4 py-3"><p>{row.recordedExits} exits · {row.completedHires} hires</p><p className="text-meta text-muted-foreground">{row.openRequisitions} open requisitions</p></td><td className="px-4 py-3"><p>{row.refillDays} days</p><p className="text-meta text-muted-foreground">{refillBasisLabel(row.refillBasis)}</p></td><td className="px-4 py-3"><p className="font-semibold tabular-nums">{currency(row.replacementCostPerExit)}</p><p className="text-meta text-muted-foreground">Role-average cost scenario</p></td><td className="px-4 py-3"><Link className={actionLinkClass} href={`/onboarding?view=talent&department=${encodeURIComponent(row.department)}&q=${encodeURIComponent(row.jobTitle)}`}>Talent</Link></td></tr>)}</tbody></table></div>{!rows.length && <p className="p-8 text-center text-body text-muted-foreground">No roles require a continuity review in this scope.</p>}</div>
+  </details>
 }
 
 function CapabilityAnalysis({ data, onFilterDepartment }: { data: WorkforceAnalytics; onFilterDepartment: (department: string) => void }) {
@@ -623,27 +623,30 @@ export function InsightsWorkspace({ initialData }: { initialData: WorkforceAnaly
         </>}
       />
 
-      <Card className="gap-4 p-4 shadow-none">
-        <div className="flex items-center justify-between"><p className="text-card-title font-semibold">Reporting scope</p><Button size="sm" variant="ghost" onClick={() => setFilters({ ...rollingYear(), department: "", location: "", period: "quarter" })}>Reset</Button></div>
-        <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-5">
+      <details className="surface-card overflow-hidden">
+        <summary className="flex list-none items-center justify-between gap-4 px-5 py-3.5 [&::-webkit-details-marker]:hidden"><span><span className="block text-card-title font-semibold">Reporting scope</span><span className="mt-0.5 block text-meta text-muted-foreground">{filters.department || "All departments"} · {filters.location || "All locations"} · {filters.period === "month" ? "Monthly" : filters.period === "year" ? "Yearly" : "Quarterly"}</span></span><span className="text-meta font-semibold text-primary">Adjust</span></summary>
+        <div className="border-t border-border p-4">
+          <div className="mb-3 flex justify-end"><Button size="sm" variant="ghost" onClick={() => setFilters({ ...rollingYear(), department: "", location: "", period: "quarter" })}>Reset scope</Button></div>
+          <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-5">
           <Filter label="From"><input type="date" value={filters.from} onChange={(event) => setFilters({ ...filters, from: event.target.value })} /></Filter>
           <Filter label="To"><input type="date" value={filters.to} onChange={(event) => setFilters({ ...filters, to: event.target.value })} /></Filter>
           <Filter label="Department"><select value={filters.department} onChange={(event) => setFilters({ ...filters, department: event.target.value })}><option value="">All departments</option>{data.dimensions.departments.map((item) => <option key={item}>{item}</option>)}</select></Filter>
           <Filter label="Location"><select value={filters.location} onChange={(event) => setFilters({ ...filters, location: event.target.value })}><option value="">All locations</option>{data.dimensions.locations.map((item) => <option key={item}>{item}</option>)}</select></Filter>
           <Filter label="Interval"><select value={filters.period} onChange={(event) => setFilters({ ...filters, period: event.target.value as Filters["period"] })}><option value="month">Monthly</option><option value="quarter">Quarterly</option><option value="year">Yearly</option></select></Filter>
+          </div>
+          {loading && <div className="mt-3 h-1 overflow-hidden rounded-full bg-muted"><div className="h-full w-2/3 animate-pulse rounded-full bg-primary" /></div>}
+          <p className="mt-3 text-meta text-muted-foreground">Headcount and open roles are current. Movement and learning measures use persisted dates in this range. Cost values are scenarios.</p>
         </div>
-        {loading && <div className="h-1 overflow-hidden rounded-full bg-muted"><div className="h-full w-2/3 animate-pulse rounded-full bg-primary" /></div>}
-        <p className="text-meta text-muted-foreground">Headcount and open roles are current snapshots. Hires, exits, leave, learning, and promotions use persisted dates in this range. Cost values are scenarios.</p>
-      </Card>
+      </details>
 
       {error && <div className="rounded-md border border-rose-200 bg-rose-50 px-4 py-3 text-meta text-rose-800 dark:border-rose-900/40 dark:bg-rose-950/20 dark:text-rose-200">{error}</div>}
 
-      <Card className="gap-0 overflow-hidden py-0 shadow-none">
-        <CardContent className="flex flex-wrap gap-1 border-b border-border p-2" role="tablist" aria-label="Insights view">
+      <div className="surface-card overflow-hidden">
+        <div className="flex flex-wrap gap-1 p-2" role="tablist" aria-label="Insights view">
           {([['overview', 'Overview'], ['impact', 'Workforce impact'], ['talent', 'Talent supply'], ['capability', 'Capability']] as Array<[AnalysisView, string]>).map(([id, label]) => <Button key={id} size="sm" variant={analysisView === id ? "secondary" : "ghost"} role="tab" aria-selected={analysisView === id} onClick={() => selectAnalysisView(id)}>{label}</Button>)}
-        </CardContent>
-        <CardContent className="px-4 py-3"><p className="text-card-title font-semibold">{viewGuidance[analysisView].title}</p><p className="mt-0.5 text-meta text-muted-foreground">{viewGuidance[analysisView].description}</p></CardContent>
-      </Card>
+        </div>
+        <div className="border-t border-border px-4 py-2.5"><p className="text-meta text-muted-foreground"><span className="font-semibold text-foreground">{viewGuidance[analysisView].title}:</span> {viewGuidance[analysisView].description}</p></div>
+      </div>
 
       {analysisView === "overview" && <>
         <MetricStrip metrics={[
@@ -651,17 +654,18 @@ export function InsightsWorkspace({ initialData }: { initialData: WorkforceAnaly
           { label: "Attrition rate", value: `${data.attrition.rate}%`, detail: `${data.attrition.totalExits} recorded exits` },
           { label: "Replacement rate", value: percent(company.replacementRate), detail: "Completed hires per 100 exits" },
           { label: "Open roles", value: compact(data.hiring.activeRequisitions), detail: `${company.vacancyRate}% vacancy rate` },
-          { label: "Continuity reviews", value: impact.summary.rolesNeedingContinuityReview, detail: "Roles marked critical or watch" },
         ]} />
-        <Card className="gap-0 overflow-hidden py-0 shadow-none"><CardHeader className="border-b border-border px-5 py-4"><CardTitle>Department comparison</CardTitle><CardDescription>Current workforce, movement, hiring coverage, required learning, and leave in one view.</CardDescription></CardHeader><CardContent className="p-0"><DepartmentPressure data={data} onSelect={(department) => setFilters({ ...filters, department })} /></CardContent></Card>
         <Card className="gap-0 overflow-hidden py-0 shadow-none">
-            <CardHeader className="gap-3 border-b border-border px-5 py-4 sm:flex-row sm:items-center sm:justify-between">
+            <CardHeader className="gap-3 border-b border-border px-5 py-4 sm:flex sm:flex-row sm:items-center sm:justify-between">
               <div><CardTitle>Priority reviews</CardTitle><CardDescription>Generated from current operating records. Creating a review adds a durable item to the work queue.</CardDescription></div>
               <Link className={actionLinkClass} href="/inbox?view=my_work&type=insight&returnTo=%2Finsights">Open work queue</Link>
             </CardHeader>
             <CardContent className="divide-y divide-border p-0">{actions.map((action) => <div id={`insight-${action.id}`} key={action.id} className={cn("grid scroll-mt-24 gap-3 px-5 py-4 lg:grid-cols-[minmax(150px,0.65fr)_minmax(220px,1fr)_minmax(260px,1.2fr)_auto] lg:items-center", action.workItem?.id === selectedWorkItemId && "bg-accent/45 ring-1 ring-inset ring-primary/30")}><div><p className="text-card-title font-semibold">{action.department}</p><Badge className="mt-1" variant={action.severity === "high" ? "destructive" : "secondary"}>{action.severity === "high" ? "High priority" : "Review"}</Badge></div><div><p className="text-body font-semibold">{action.title}</p><p className="mt-0.5 text-meta text-muted-foreground">Trigger: {action.evidence}</p></div><div><p className="text-label font-semibold text-muted-foreground">Recommended check</p><p className="mt-0.5 text-body">{action.recommendedAction}</p></div><InsightActionButton action={action} filters={filters} onUpdated={() => setRefreshVersion((current) => current + 1)} /></div>)}{!actions.length && <p className="px-5 py-8 text-center text-body text-muted-foreground">No exceptions meet the review rules in this reporting scope.</p>}</CardContent>
         </Card>
-        <Card className="shadow-none"><CardHeader><CardTitle>Exit reasons</CardTitle><CardDescription>Recorded outcomes in the reporting period. Use these categories to select a cohort for review, not to infer an individual cause.</CardDescription></CardHeader><CardContent className="max-w-3xl"><ExitReasonChart rows={exitReasons} /></CardContent></Card>
+        <div className="grid items-start gap-4 xl:grid-cols-[minmax(0,1fr)_minmax(360px,0.6fr)]">
+          <details className="surface-card overflow-hidden"><summary className="flex list-none items-center justify-between gap-4 px-5 py-4 [&::-webkit-details-marker]:hidden"><span><span className="block text-card-title font-semibold">Department comparison</span><span className="mt-0.5 block text-meta text-muted-foreground">Movement, coverage, learning, and leave</span></span><span className="text-meta font-semibold text-primary">View details</span></summary><div className="border-t border-border"><DepartmentPressure data={data} onSelect={(department) => setFilters({ ...filters, department })} /></div></details>
+          <Card className="shadow-none"><CardHeader><CardTitle>Exit reasons</CardTitle><CardDescription>Recorded outcomes in this period.</CardDescription></CardHeader><CardContent><ExitReasonChart rows={exitReasons} /></CardContent></Card>
+        </div>
       </>}
 
       {analysisView === "impact" && <>
@@ -670,7 +674,6 @@ export function InsightsWorkspace({ initialData }: { initialData: WorkforceAnaly
           { label: "Average replacement", value: currency(impact.summary.averageReplacementCost), detail: "Per costed exit" },
           { label: "Replacement coverage", value: percent(company.replacementRate), detail: "Completed hires per 100 exits" },
           { label: "Continuity reviews", value: impact.summary.rolesNeedingContinuityReview, detail: "Critical or watch roles" },
-          { label: "Pay data coverage", value: `${impact.summary.payDataCoverage}%`, detail: "Active employee profiles" },
         ]} />
         <CostAssumptions key={Object.values(impact.assumptions).join("-")} data={data} onApply={(values) => setFilters((current) => ({ ...current, ...values }))} />
         <div className="grid items-start gap-4 xl:grid-cols-2"><Card className="shadow-none"><CardHeader><CardTitle>Replacement cost by role</CardTitle><CardDescription>Scenario cost calculated from average pay, refill history, and the assumptions above.</CardDescription></CardHeader><CardContent><ReplacementCostChart data={data} /></CardContent></Card><EmployeeImpactPanel data={data} filters={filters} /></div>
@@ -683,17 +686,15 @@ export function InsightsWorkspace({ initialData }: { initialData: WorkforceAnaly
           { label: "Average time to hire", value: `${data.hiring.averageTimeToHire} days`, detail: "Completed hires" },
           { label: "Open requisitions", value: data.hiring.activeRequisitions, detail: `${data.hiring.offers} at offer` },
           { label: "Recorded exits", value: data.attrition.totalExits, detail: `${data.attrition.voluntary} voluntary` },
-          { label: "Replacement rate", value: percent(company.replacementRate), detail: "Completed hires per 100 exits" },
         ]} />
         <div className="grid gap-4 xl:grid-cols-2"><Card className="shadow-none"><CardHeader><CardTitle>Workforce flow</CardTitle><CardDescription>Completed hires and recorded exits by {data.filters.period}.</CardDescription></CardHeader><CardContent><FlowChart rows={flow} /></CardContent></Card><Card className="shadow-none"><CardHeader><CardTitle>Hiring source performance</CardTitle><CardDescription>Completed hire volume compared with time to hire.</CardDescription></CardHeader><CardContent><SourceEfficiency data={data} /></CardContent></Card></div>
-        <Card className="shadow-none"><CardHeader><CardTitle>Tenure attrition</CardTitle><CardDescription>Observed exits normalized by tenure-cohort population.</CardDescription></CardHeader><CardContent><TenureAttrition data={data} /></CardContent></Card>
         <Card className="shadow-none"><CardHeader><CardTitle>Manager cohorts</CardTitle><CardDescription>Recorded team exits normalized to the current cohort, with department context.</CardDescription></CardHeader><CardContent><ManagerConcentration data={data} /></CardContent></Card>
+        <details className="surface-card overflow-hidden"><summary className="flex list-none items-center justify-between gap-4 px-5 py-4 [&::-webkit-details-marker]:hidden"><span><span className="block text-card-title font-semibold">Tenure attrition</span><span className="mt-0.5 block text-meta text-muted-foreground">Exit rates by tenure cohort</span></span><span className="text-meta font-semibold text-primary">View details</span></summary><div className="border-t border-border p-5"><TenureAttrition data={data} /></div></details>
       </>}
 
       {analysisView === "capability" && <>
         <MetricStrip metrics={[
           { label: "Learning completion", value: `${company.trainingCompletionRate}%`, detail: `${data.training.totalAssignments} assignments in scope` },
-          { label: "Employees assigned", value: company.trainingAssignedEmployees, detail: "Unique employees in this scope" },
           { label: "Open assignments", value: company.incompleteTrainingAssignments, detail: `${company.incompleteTrainingEmployees} employees` },
           { label: "Required learning", value: company.mandatoryTrainingGaps, detail: `${company.overdueMandatoryTrainingGaps} overdue` },
           { label: "Remaining effort", value: `${company.incompleteTrainingHours}h`, detail: "Recorded assignment hours" },

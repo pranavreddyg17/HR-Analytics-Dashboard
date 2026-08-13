@@ -303,7 +303,7 @@
   width: 100%;
   max-width: 1680px;
   margin-inline: auto;
-  padding: 26px 28px 52px;
+  padding: 22px 24px 44px;
 }
 
 .workspace-page {
@@ -311,17 +311,17 @@
   width: 100%;
   max-width: 1440px;
   margin-inline: auto;
-  padding-bottom: 32px;
+  padding-bottom: 24px;
   flex-direction: column;
-  gap: 20px;
+  gap: 16px;
 }
 
 .workspace-header {
   display: flex;
-  align-items: flex-end;
+  align-items: center;
   justify-content: space-between;
-  gap: 20px;
-  padding: 4px 2px 16px;
+  gap: 18px;
+  padding: 2px 2px 10px;
   border-bottom: 0;
 }
 
@@ -354,24 +354,26 @@
 .workspace-metrics {
   display: grid;
   grid-template-columns: repeat(var(--metric-count, 4), minmax(0, 1fr));
-  gap: 8px;
-  overflow: visible;
-  border: 0;
-  border-radius: 0;
-  background: transparent;
+  gap: 0;
+  overflow: hidden;
+  border: 1px solid rgb(223 219 230 / 0.9);
+  border-radius: 12px;
+  background: var(--card);
+  box-shadow: 0 1px 2px rgb(24 21 31 / 0.03), 0 8px 24px rgb(24 21 31 / 0.025);
 }
 
 .workspace-metric {
   min-width: 0;
-  padding: 14px 16px;
-  border: 1px solid rgb(223 219 230 / 0.9);
-  border-radius: 12px;
-  background: var(--card);
-  box-shadow: 0 1px 2px rgb(24 21 31 / 0.035), 0 8px 24px rgb(24 21 31 / 0.025);
+  padding: 12px 15px;
+  border: 0;
+  border-left: 1px solid var(--border);
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
 }
 
 .workspace-metric:first-child {
-  border-left: 1px solid rgb(223 219 230 / 0.9);
+  border-left: 0;
 }
 
 .workspace-section-header {
@@ -386,10 +388,9 @@
 
 .surface-card {
   border: 1px solid var(--border);
-  border-radius: 14px;
+  border-radius: 12px;
   background: var(--card);
-  box-shadow: 0 1px 2px rgb(29 25 37 / 0.035), 0 12px 34px rgb(29 25 37 / 0.035);
-  backdrop-filter: blur(16px);
+  box-shadow: 0 1px 2px rgb(29 25 37 / 0.03), 0 8px 24px rgb(29 25 37 / 0.025);
 }
 
 @media (max-width: 1023px) {
@@ -398,7 +399,7 @@
   }
 
   .workspace-metric:nth-child(odd) {
-    border-left: 1px solid rgb(223 219 230 / 0.9);
+    border-left: 0;
   }
 
   .workspace-metric:nth-child(n + 3) {
@@ -422,19 +423,19 @@
 
   .workspace-metric,
   .workspace-metric:nth-child(odd) {
-    border: 1px solid rgb(223 219 230 / 0.9);
+    border: 0;
+    border-top: 1px solid var(--border);
   }
 
   .workspace-metric:first-child {
-    border-top: 1px solid rgb(223 219 230 / 0.9);
+    border-top: 0;
   }
 }
 
 [data-slot="card"] {
   border-color: rgb(223 219 230 / 0.9);
-  border-radius: 14px;
-  box-shadow: 0 1px 2px rgb(29 25 37 / 0.035), 0 12px 34px rgb(29 25 37 / 0.035);
-  backdrop-filter: blur(16px);
+  border-radius: 12px;
+  box-shadow: 0 1px 2px rgb(29 25 37 / 0.03), 0 8px 24px rgb(29 25 37 / 0.025);
 }
 
 [data-slot="button"] {

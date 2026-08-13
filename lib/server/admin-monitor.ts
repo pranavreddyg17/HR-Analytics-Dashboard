@@ -57,6 +57,9 @@ export type AdminMonitor = {
   }>
 }
 
+export type AdminMonitorUsage = Pick<AdminMonitor, "generatedAt" | "usage">
+export type AdminMonitorProviders = Pick<AdminMonitor, "generatedAt" | "application" | "cost">
+
 // Production runs on App Service with a system-assigned identity. Selecting it
 // explicitly avoids walking the developer credential chain on every monitor
 // refresh; local development keeps the standard Azure CLI-aware fallback.
@@ -315,5 +318,19 @@ export function getAdminMonitor(): Promise<AdminMonitor> {
   return cachedAnalyticsRead("admin-monitor:v1", async () => {
     const [application, cost, usage] = await Promise.all([applicationMetrics(), costMetrics(), internalUsage()])
     return { generatedAt: new Date().toISOString(), application, cost, usage }
+  })
+}
+
+export function getAdminMonitorUsage(): Promise<AdminMonitorUsage> {
+  return cachedAnalyticsRead("admin-monitor:usage:v1", async () => ({
+    generatedAt: new Date().toISOString(),
+    usage: await internalUsage(),
+  }))
+}
+
+export function getAdminMonitorProviders(): Promise<AdminMonitorProviders> {
+  return cachedAnalyticsRead("admin-monitor:providers:v1", async () => {
+    const [application, cost] = await Promise.all([applicationMetrics(), costMetrics()])
+    return { generatedAt: new Date().toISOString(), application, cost }
   })
 }

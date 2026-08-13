@@ -55,7 +55,7 @@ export function EmployeesClient({ employees, total }: { employees: Employee[]; t
   return (
     <div className="flex flex-col gap-4">
       <Card className="gap-0 overflow-hidden py-0">
-        <CardHeader className="flex-col gap-4 border-b sm:flex-row sm:items-center">
+        <CardHeader className="flex flex-col gap-4 border-b sm:flex-row sm:items-center">
           <div>
             <CardTitle>Model-scored records</CardTitle>
             <CardDescription>
