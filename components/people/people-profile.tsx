@@ -15,6 +15,7 @@ import {
 
 import { Button } from "@/components/ui/button"
 import { Card } from "@/components/ui/card"
+import { StatusIndicator } from "@/components/status-indicator"
 import { EmployeeDrawer } from "@/components/people/employee-drawer"
 import { PersonAvatar, StatusPill, formatDate, plural } from "@/components/people/people-ui"
 import type { EmployeeActivity, EmployeeDirectoryResponse, EmployeeProfileResponse, ManagedEmployee } from "@/lib/people-types"
@@ -397,9 +398,7 @@ function MetricCard({ label, value, detail }: { label: string; value: string; de
 }
 
 function RecordStatus({ status }: { status: string }) {
-  const positive = /approved|completed|voluntary/i.test(status)
-  const pending = /pending|incomplete|open/i.test(status)
-  return <span className={cn("inline-flex w-fit items-center rounded-sm border px-2.5 py-1 text-status font-semibold", positive ? "border-emerald-200 bg-emerald-50 text-emerald-800 dark:border-emerald-900/60 dark:bg-emerald-950/30 dark:text-emerald-300" : pending ? "border-amber-200 bg-amber-50 text-amber-800 dark:border-amber-900/60 dark:bg-amber-950/30 dark:text-amber-300" : "border-border bg-muted text-muted-foreground")}>{status}</span>
+  return <StatusIndicator value={status} />
 }
 
 function Timeline({ activity, compact = false }: { activity: EmployeeActivity[]; compact?: boolean }) {

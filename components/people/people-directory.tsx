@@ -215,8 +215,8 @@ export function PeopleDirectory({ initialData, initialManagerPool }: { initialDa
           {(debouncedQuery || activeFilterCount > 0) && <button type="button" onClick={clearFilters} className="text-xs font-semibold text-primary hover:underline">Reset view</button>}
         </div>
 
-        <div className="hidden grid-cols-[minmax(250px,1.4fr)_minmax(170px,1fr)_minmax(130px,.7fr)_90px_120px] gap-4 border-b border-border/60 px-5 py-2.5 text-xs font-semibold text-muted-foreground md:grid">
-          <span>Employee</span><span>Department</span><span>Location</span><span>Tenure</span><span>Status</span>
+        <div className="hidden grid-cols-[minmax(220px,1.3fr)_minmax(160px,1fr)_minmax(140px,.85fr)_minmax(110px,.7fr)_130px] gap-4 border-b border-border/60 px-5 py-2.5 text-xs font-semibold text-muted-foreground lg:grid">
+          <span>Employee</span><span>Role</span><span>Manager</span><span>Location</span><span>Employment</span>
         </div>
 
         <div className="relative min-h-48">
@@ -337,22 +337,22 @@ function FilterSelect({ label, value, options, allLabel, onChange }: { label: st
 
 function PersonRow({ employee, returnTo }: { employee: ManagedEmployee; returnTo: string }) {
   return (
-      <Link href={withReturnTo(`/people/${encodeURIComponent(employee.employee_id)}`, returnTo)} className={cn("group grid gap-3 border-b border-border/55 px-4 py-3 last:border-b-0 hover:bg-muted/25 sm:px-5 md:grid-cols-[minmax(250px,1.4fr)_minmax(170px,1fr)_minmax(130px,.7fr)_90px_120px] md:items-center md:gap-4", employee.archived_at && "opacity-65")}>
+      <Link href={withReturnTo(`/people/${encodeURIComponent(employee.employee_id)}`, returnTo)} className={cn("group grid gap-3 border-b border-border/55 px-4 py-3 last:border-b-0 hover:bg-muted/25 sm:px-5 lg:grid-cols-[minmax(220px,1.3fr)_minmax(160px,1fr)_minmax(140px,.85fr)_minmax(110px,.7fr)_130px] lg:items-center lg:gap-4", employee.archived_at && "opacity-65")}>
         <div className="flex min-w-0 items-center gap-3.5">
           <PersonAvatar employeeId={employee.employee_id} initials={employee.initials} size="lg" />
           <div className="min-w-0 flex-1">
             <p className="truncate text-sm font-semibold group-hover:text-primary">{employee.display_name}</p>
-            <p className="mt-0.5 truncate text-xs text-muted-foreground">{employee.job_title} · {employee.employee_id}</p>
+            <p className="mt-0.5 truncate text-xs text-muted-foreground">{employee.employee_id}{employee.work_email ? ` · ${employee.work_email}` : ""}</p>
           </div>
         </div>
-        <div className="truncate text-sm">{employee.department}</div>
-        <div className="truncate text-sm text-muted-foreground">{employee.location}</div>
-        <span className="text-sm tabular-nums text-muted-foreground">{employee.tenure_years.toFixed(1)} yrs</span>
-        <div className="flex items-center gap-2"><StatusPill status={employee.employment_status} /></div>
+        <div className="min-w-0"><span className="text-label font-semibold text-muted-foreground lg:hidden">Role</span><p className="truncate text-sm">{employee.job_title}</p><p className="truncate text-xs text-muted-foreground">{employee.department}</p></div>
+        <div className="min-w-0"><span className="text-label font-semibold text-muted-foreground lg:hidden">Manager</span><p className="truncate text-sm">{employee.manager_name || "Not assigned"}</p>{employee.direct_reports > 0 && <p className="text-xs text-muted-foreground">{employee.direct_reports} direct report{employee.direct_reports === 1 ? "" : "s"}</p>}</div>
+        <div className="min-w-0"><span className="text-label font-semibold text-muted-foreground lg:hidden">Location</span><p className="truncate text-sm text-muted-foreground">{employee.location}</p></div>
+        <div className="min-w-0"><span className="text-label font-semibold text-muted-foreground lg:hidden">Employment</span><StatusPill status={employee.employment_status} /><p className="mt-0.5 truncate text-xs text-muted-foreground">{employee.employment_type}</p></div>
       </Link>
   )
 }
 
 function DirectorySkeleton() {
-  return <div>{Array.from({ length: 7 }, (_, index) => <div key={index} className="grid grid-cols-[auto_1fr] gap-3 border-b border-border/60 px-5 py-4 md:grid-cols-[auto_1.3fr_1fr_.7fr_130px]"><div className="size-11 animate-pulse rounded-full bg-muted" /><div className="space-y-2"><div className="h-3.5 w-36 animate-pulse rounded bg-muted" /><div className="h-3 w-52 animate-pulse rounded bg-muted" /></div><div className="hidden h-4 w-28 animate-pulse rounded bg-muted md:block" /><div className="hidden h-4 w-20 animate-pulse rounded bg-muted md:block" /><div className="hidden h-6 w-20 animate-pulse rounded-full bg-muted md:block" /></div>)}</div>
+  return <div>{Array.from({ length: 7 }, (_, index) => <div key={index} className="grid grid-cols-[auto_1fr] gap-3 border-b border-border/60 px-5 py-4 lg:grid-cols-[auto_1.3fr_1fr_.85fr_.7fr_130px]"><div className="size-11 animate-pulse rounded-full bg-muted" /><div className="space-y-2"><div className="h-3.5 w-36 animate-pulse rounded bg-muted" /><div className="h-3 w-52 animate-pulse rounded bg-muted" /></div><div className="hidden h-4 w-28 animate-pulse rounded bg-muted lg:block" /><div className="hidden h-4 w-24 animate-pulse rounded bg-muted lg:block" /><div className="hidden h-4 w-20 animate-pulse rounded bg-muted lg:block" /><div className="hidden h-4 w-20 animate-pulse rounded bg-muted lg:block" /></div>)}</div>
 }

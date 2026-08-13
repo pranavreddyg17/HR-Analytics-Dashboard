@@ -8,6 +8,7 @@ import { SignOutControl } from "@/components/sign-out-control"
 import { SessionRevalidator } from "@/components/session-revalidator"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
+import { StatusIndicator } from "@/components/status-indicator"
 
 type PortalData = {
   employee: {
@@ -57,15 +58,7 @@ function money(value: unknown, currency: unknown): string {
 }
 
 function Status({ value }: { value: unknown }) {
-  const normalized = String(value || "unknown").toLowerCase().replaceAll("_", " ")
-  const tone = ["approved", "active", "completed", "resolved", "paid"].some((item) => normalized.includes(item))
-    ? "border-emerald-200 bg-emerald-50 text-emerald-800"
-    : ["rejected", "declined", "overdue", "failed"].some((item) => normalized.includes(item))
-      ? "border-rose-200 bg-rose-50 text-rose-800"
-      : ["pending", "submitted", "review", "progress", "scheduled"].some((item) => normalized.includes(item))
-        ? "border-amber-200 bg-amber-50 text-amber-800"
-        : "border-border bg-muted/50 text-muted-foreground"
-  return <span className={`rounded-[6px] border px-2 py-0.5 text-status font-semibold capitalize ${tone}`}>{normalized}</span>
+  return <StatusIndicator value={value} />
 }
 
 export function EmployeePortal({ initialData, user }: { initialData: PortalData; user: { name: string; email: string; authenticated: boolean; workspaceAccess: boolean } }) {
