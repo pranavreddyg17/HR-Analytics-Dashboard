@@ -5,10 +5,14 @@ import { getRequestActor, type RequestActor } from "@/lib/server/request-user"
 
 const integrationScopes = [
   "analytics:read",
+  "people:read",
   "retention:read",
   "model:invoke",
   "operations:read",
+  "assistant:use",
   "agent:invoke",
+  "workflows:read",
+  "workflows:write",
   "data:write",
 ] as const
 
@@ -24,6 +28,12 @@ export type IntegrationPrincipal = {
   scopes: IntegrationScope[]
   requestId: string
   startedAt: number
+}
+
+export type IntegrationIdempotencyClaim = {
+  clientId: string | null
+  key: string
+  replay: { status: number; data: unknown } | null
 }
 
 type ClientRow = {
@@ -117,6 +127,52 @@ export async function auditIntegrationRequest(principal: IntegrationPrincipal, r
     .bind(crypto.randomUUID(), principal.clientId, principal.organizationId, principal.actor.email, request.method, new URL(request.url).pathname, statusCode, Date.now() - principal.startedAt, principal.requestId).run()
 }
 
+export async function claimIntegrationIdempotency(
+  principal: IntegrationPrincipal,
+  request: Request,
+  key: string,
+  requestBody: unknown,
+): Promise<IntegrationIdempotencyClaim> {
+  if (!principal.clientId) return { clientId: null, key, replay: null }
+  const database = await ensureHrDatabase()
+  const route = new URL(request.url).pathname
+  const requestHash = keyHash(JSON.stringify(requestBody))
+  await database.prepare("DELETE FROM integration_idempotency WHERE expires_at::timestamptz <= CURRENT_TIMESTAMP").run()
+  const inserted = await database.prepare(`INSERT INTO integration_idempotency(client_id, idempotency_key, route, request_hash)
+    VALUES (?, ?, ?, ?) ON CONFLICT(client_id, idempotency_key) DO NOTHING RETURNING client_id`)
+    .bind(principal.clientId, key, route, requestHash).first<{ client_id: string }>()
+  if (inserted) return { clientId: principal.clientId, key, replay: null }
+  const existing = await database.prepare(`SELECT route, request_hash, state, status_code, response_json
+    FROM integration_idempotency WHERE client_id=? AND idempotency_key=?`)
+    .bind(principal.clientId, key).first<{ route: string; request_hash: string; state: string; status_code: number | null; response_json: string | null }>()
+  if (!existing || existing.route !== route || existing.request_hash !== requestHash) {
+    throw new IntegrationApiError("The Idempotency-Key was already used for a different request.", 409)
+  }
+  if (existing.state !== "completed" || !existing.response_json) {
+    throw new IntegrationApiError("A request with this Idempotency-Key is still processing.", 409)
+  }
+  return {
+    clientId: principal.clientId,
+    key,
+    replay: { status: Number(existing.status_code ?? 200), data: JSON.parse(existing.response_json) },
+  }
+}
+
+export async function completeIntegrationIdempotency(claim: IntegrationIdempotencyClaim, status: number, data: unknown): Promise<void> {
+  if (!claim.clientId) return
+  const database = await ensureHrDatabase()
+  await database.prepare(`UPDATE integration_idempotency SET state='completed', status_code=?, response_json=?, updated_at=CURRENT_TIMESTAMP
+    WHERE client_id=? AND idempotency_key=?`)
+    .bind(status, JSON.stringify(data), claim.clientId, claim.key).run()
+}
+
+export async function releaseIntegrationIdempotency(claim: IntegrationIdempotencyClaim | undefined): Promise<void> {
+  if (!claim?.clientId || claim.replay) return
+  const database = await ensureHrDatabase()
+  await database.prepare("DELETE FROM integration_idempotency WHERE client_id=? AND idempotency_key=? AND state='processing'")
+    .bind(claim.clientId, claim.key).run()
+}
+
 export async function listIntegrationClients(): Promise<Array<Record<string, unknown>>> {
   const database = await ensureHrDatabase()
   const result = await database.prepare(`SELECT id, name, key_prefix AS "keyPrefix", scopes_json AS "scopesJson", status,
@@ -158,7 +214,15 @@ export async function revokeIntegrationClient(id: string): Promise<{ id: string;
 
 export function integrationFailure(error: unknown): Response {
   const status = error instanceof IntegrationApiError ? error.status : error instanceof Error && error.message === "AUTH_REQUIRED" ? 401 : 500
-  return Response.json({ error: { code: status === 401 ? "unauthorized" : status === 403 ? "forbidden" : status === 429 ? "rate_limited" : status === 422 ? "invalid_request" : status === 404 ? "not_found" : "internal_error", message: error instanceof Error ? error.message : "Integration request failed." } }, { status, headers: status === 429 ? { "retry-after": "60" } : undefined })
+  const code = status === 401 ? "unauthorized"
+    : status === 403 ? "forbidden"
+      : status === 404 ? "not_found"
+        : status === 409 ? "conflict"
+          : status === 422 ? "invalid_request"
+            : status === 429 ? "rate_limited"
+              : status === 503 ? "service_unavailable"
+                : "internal_error"
+  return Response.json({ error: { code, message: error instanceof Error ? error.message : "Integration request failed." } }, { status, headers: status === 429 ? { "retry-after": "60" } : undefined })
 }
 
 export async function auditedIntegrationFailure(error: unknown, request: Request, principal?: IntegrationPrincipal): Promise<Response> {

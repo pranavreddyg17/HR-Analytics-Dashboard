@@ -128,19 +128,28 @@ test("the explainable prediction runtime validates inputs and returns bounded ou
   assert.equal(invalid.response.status, 422)
 })
 
-test("integration API exposes reporting, retention, exit, asset, and model contracts", async () => {
-  const [capabilities, overview, workforceImpact, model, exits, assets] = await Promise.all([
+test("integration API exposes reporting, people, operations, workflows, retention, asset, and model contracts", async () => {
+  const [capabilities, overview, workforceImpact, model, exits, assets, people, onboarding, recruiting, leave, learning, workItems, workflowCatalog] = await Promise.all([
     json("/api/v1/integrations/v1/capabilities"),
     json("/api/v1/integrations/v1/insights?view=overview&period=quarter"),
     json("/api/v1/integrations/v1/insights?view=workforce-impact"),
     json("/api/v1/integrations/v1/retention/model"),
     json("/api/v1/integrations/v1/exits"),
     json("/api/v1/integrations/v1/assets"),
+    json("/api/v1/integrations/v1/people?limit=2"),
+    json("/api/v1/integrations/v1/onboarding?limit=2"),
+    json("/api/v1/integrations/v1/recruiting?limit=2"),
+    json("/api/v1/integrations/v1/leave?limit=2"),
+    json("/api/v1/integrations/v1/learning?limit=2"),
+    json("/api/v1/integrations/v1/work-items?limit=2"),
+    json("/api/v1/integrations/v1/workflows/catalog"),
   ])
-  for (const result of [capabilities, overview, workforceImpact, model, exits, assets]) assert.equal(result.response.status, 200)
+  for (const result of [capabilities, overview, workforceImpact, model, exits, assets, people, onboarding, recruiting, leave, learning, workItems, workflowCatalog]) assert.equal(result.response.status, 200)
   assert.ok(capabilities.body.data.endpoints.some((endpoint) => endpoint.path.endsWith("/retention/predict")))
   assert.ok(capabilities.body.data.endpoints.some((endpoint) => endpoint.path.endsWith("/exits")))
   assert.ok(capabilities.body.data.endpoints.some((endpoint) => endpoint.path.endsWith("/assets")))
+  assert.ok(capabilities.body.data.endpoints.some((endpoint) => endpoint.path.endsWith("/assistant/conversations")))
+  assert.ok(capabilities.body.data.endpoints.some((endpoint) => endpoint.path.endsWith("/workflows/requests")))
   assert.equal(overview.body.data.view, "overview")
   assert.ok(Array.isArray(overview.body.data.departments))
   assert.equal(workforceImpact.body.data.view, "workforce-impact")
@@ -149,6 +158,13 @@ test("integration API exposes reporting, retention, exit, asset, and model contr
   assert.ok(model.body.data.inputSchema.threshold > 0)
   assert.ok(Array.isArray(exits.body.data.items))
   assert.ok(Array.isArray(assets.body.data.items))
+  assert.ok(Array.isArray(people.body.data.items))
+  assert.ok(Array.isArray(onboarding.body.data.joiners.items))
+  assert.ok(Array.isArray(recruiting.body.data.requisitions.items))
+  assert.ok(Array.isArray(leave.body.data.requests.items))
+  assert.ok(Array.isArray(learning.body.data.assignments.items))
+  assert.ok(Array.isArray(workItems.body.data.workItems.items))
+  assert.equal(workflowCatalog.body.data.controls.executeRequiresIdempotencyKey, true)
 
   const prediction = await json("/api/v1/integrations/v1/retention/predict", {
     method: "POST",

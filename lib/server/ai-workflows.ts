@@ -491,6 +491,20 @@ export async function listAiWorkflowDrafts(actor: RequestActor) {
   return { items: (rows.results ?? []).map(publicDraft) }
 }
 
+export async function getAiWorkflowDraft(id: string, actor: RequestActor) {
+  const db = await database()
+  const row = await db.prepare("SELECT * FROM ai_workflow_drafts WHERE id=?").bind(id).first<DraftRow>()
+  if (!row) throw new PeopleError("Prepared workflow not found.", 404)
+  if (row.created_by_email.toLowerCase() !== actor.email.toLowerCase() && !["admin", "hr"].includes(actor.role)) {
+    throw new PeopleError("You cannot view this prepared workflow.", 403)
+  }
+  return {
+    ...publicDraft(row),
+    details: parseJson<Record<string, unknown>>(row.details_json, {}),
+    requiresConfirmation: true as const,
+  }
+}
+
 export async function createAiWorkflowDraft(value: unknown, actor: RequestActor) {
   if (!["admin", "hr", "manager"].includes(actor.role)) throw new PeopleError("Your role cannot prepare employee communications.", 403)
   const input = draftSchema.parse(value)

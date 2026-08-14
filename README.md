@@ -172,6 +172,8 @@ SQL migrations in `db/postgres` are append-only and run idempotently during appl
 | `0009_integration_api.sql` | Scoped integration clients and request audit |
 | `0010_admin_provider_snapshots.sql` | Persistent Azure provider snapshots and retry state for the operations monitor |
 | `0011_exit_and_assets.sql` | Employee exits, accountable offboarding tasks, IT assets, custody history, and lifecycle settings |
+| `0012_federated_identities.sql` | Google and Microsoft identity linkage for one account per employee identity |
+| `0013_integration_expansion.sql` | Idempotency state for externally initiated governed workflows |
 
 ### Core relational domains
 
@@ -290,7 +292,7 @@ The assistant can prepare four governed workflows:
 - a hiring requisition with business justification; or
 - a retention review for a department evidence cohort.
 
-An employee email draft can also be prepared for review in Gmail. Planning and execution are separate API calls. Drafts are stored in `ai_workflow_drafts`, visible to their creator, and must be confirmed. Learning, requisition, and retention execution writes the relevant operational record; Calendar execution requires a valid Google Calendar grant. The agent never sends an employment communication or changes employment status solely from model output.
+An employee email draft can also be prepared for review in Gmail. Planning and execution are separate API calls. Drafts are stored in `ai_workflow_drafts`, visible to their creator, and must be confirmed. Learning, requisition, and retention execution writes the relevant operational record; Calendar execution requires the interactive creator's delegated Google Calendar or Microsoft Teams grant. Service clients can plan, create, inspect, and idempotently execute supported internal drafts, but cannot borrow an interactive user's Calendar grant. The agent never sends an employment communication or changes employment status solely from model output.
 
 ### Attrition model
 
@@ -429,19 +431,35 @@ Use `Authorization: Bearer <service-credential>` and optionally pass `X-Request-
 | GET | `/api/v1/integrations/v1/capabilities` | `analytics:read` | Discover contract version, features, agents, filters, and limits |
 | GET | `/api/v1/integrations/v1/workforce` | `analytics:read` | Workforce and decision-support measures |
 | GET | `/api/v1/integrations/v1/insights?view=overview\|workforce-impact\|talent-supply\|capability` | `analytics:read` | Bounded reporting views from the shared analytics service |
+| GET | `/api/v1/integrations/v1/people` | `people:read` | Paginated employee directory with minimum operational fields |
+| GET | `/api/v1/integrations/v1/people/{employeeId}` | `people:read` | Minimum employee profile and linked operational counts |
 | GET | `/api/v1/integrations/v1/retention` | `retention:read` | Retention cohorts and governed review state |
 | GET | `/api/v1/integrations/v1/retention/model` | `retention:read` | Model card, metrics, input schema, and prohibited uses |
 | POST | `/api/v1/integrations/v1/retention/predict` | `model:invoke` | Explainable historical-profile scenario score |
 | GET | `/api/v1/integrations/v1/operations` | `operations:read` | Onboarding, leave, learning, and work queues |
+| GET | `/api/v1/integrations/v1/onboarding` | `operations:read` | Paginated onboarding readiness and handoffs |
+| GET | `/api/v1/integrations/v1/recruiting` | `operations:read` | Paginated requisition and candidate pipeline |
+| GET | `/api/v1/integrations/v1/leave` | `operations:read` | Filtered leave register, coverage, and schedule |
+| GET | `/api/v1/integrations/v1/learning` | `operations:read` | Learning assignments, capability evidence, and recommendations |
+| GET | `/api/v1/integrations/v1/work-items` | `operations:read` | Paginated operational work queue |
 | GET | `/api/v1/integrations/v1/exits` | `operations:read` | Confirmed exit register and offboarding progress |
 | GET | `/api/v1/integrations/v1/assets` | `operations:read` | Asset inventory, custody, lifecycle, warranty, and replacement state |
+| GET/POST | `/api/v1/integrations/v1/assistant/conversations` | `assistant:use` | List conversations or start a grounded conversation with durable memory |
+| GET/DELETE | `/api/v1/integrations/v1/assistant/conversations/{conversationId}` | `assistant:use` | Read or remove caller-owned conversation history |
+| POST | `/api/v1/integrations/v1/assistant/conversations/{conversationId}/messages` | `assistant:use` | Continue a conversation with prior context and optional page context |
 | POST | `/api/v1/integrations/v1/agents/{agentId}/invoke` | `agent:invoke` | Audited read-only specialist agent |
+| GET | `/api/v1/integrations/v1/workflows/catalog` | `workflows:read` | Supported workflow types, execution controls, and limitations |
+| POST | `/api/v1/integrations/v1/workflows/plan` | `workflows:write` | Convert a natural-language objective into a validated, non-persisted plan |
+| GET/POST | `/api/v1/integrations/v1/workflows` | `workflows:read` / `workflows:write` | List caller-owned drafts or create a reviewed draft |
+| GET | `/api/v1/integrations/v1/workflows/{workflowId}` | `workflows:read` | Read draft details and execution state |
+| POST | `/api/v1/integrations/v1/workflows/{workflowId}/execute` | `workflows:write` | Confirm and idempotently execute a supported internal workflow |
+| POST | `/api/v1/integrations/v1/workflows/requests` | `workflows:write` | Create a confirmed leave or hiring request in the normal approval queue |
 | POST | `/api/v1/integrations/v1/data/import` | `data:write` | Validate or apply domain records through the governed importer |
 | GET | `/api/v1/integrations/openapi` | Public contract | OpenAPI 3.1 contract |
 | GET/POST | `/api/v1/integrations/clients` | Admin | List or create API clients |
 | DELETE | `/api/v1/integrations/clients/{clientId}` | Admin | Revoke an API client |
 
-The integration surface intentionally excludes direct approval and employee-status mutations. Customer systems can submit data, obtain analytics, invoke read-only agents, and use model scenarios, but cannot bypass the product's actor and approval model.
+Mutation requests require `confirm: true` and an `Idempotency-Key`; completed responses are replayable for 24 hours so network retries do not duplicate work. The integration surface intentionally excludes approval, reimbursement decisions, termination, compensation, promotion, and performance mutations. Customer systems can create reviewed drafts and normal approval requests, but cannot bypass the product's actor and approval model.
 
 ## Authentication and authorization
 

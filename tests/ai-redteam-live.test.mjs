@@ -114,7 +114,11 @@ test("service credentials are scoped, audited and revocable", async () => {
   const created = await json("/api/v1/integrations/clients", {
     method: "POST",
     headers: { "content-type": "application/json" },
-    body: JSON.stringify({ name: "Red-team integration client", scopes: ["analytics:read", "agent:invoke"], expiresInDays: 1 }),
+    body: JSON.stringify({
+      name: "Red-team integration client",
+      scopes: ["analytics:read", "people:read", "operations:read", "assistant:use", "agent:invoke", "workflows:read", "workflows:write"],
+      expiresInDays: 1,
+    }),
   })
   assert.equal(created.response.status, 201)
   assert.match(created.body.apiKey, /^lbh\.IC-[A-Z0-9]{12}\./)
@@ -135,6 +139,65 @@ test("service credentials are scoped, audited and revocable", async () => {
   })
   assert.equal(agent.response.status, 200)
   assert.ok(agent.body.data.tools.length > 0)
+
+  const people = await json("/api/v1/integrations/v1/people?limit=2", { headers: authorization })
+  assert.equal(people.response.status, 200)
+  assert.ok(Array.isArray(people.body.data.items))
+  assert.ok(people.body.data.items.length <= 2)
+  assert.equal("phone" in (people.body.data.items[0] ?? {}), false)
+
+  const workItems = await json("/api/v1/integrations/v1/work-items?limit=2", { headers: authorization })
+  assert.equal(workItems.response.status, 200)
+  assert.ok(Array.isArray(workItems.body.data.workItems.items))
+
+  const assistant = await json("/api/v1/integrations/v1/assistant/conversations", {
+    method: "POST",
+    headers: { ...authorization, "content-type": "application/json" },
+    body: JSON.stringify({ message: "Summarize active headcount and open work.", pageContext: { route: "/", filters: {} } }),
+  })
+  assert.equal(assistant.response.status, 201)
+  assert.match(assistant.body.data.conversationId, /^CONV-/)
+  assert.ok(Array.isArray(assistant.body.data.tools) && assistant.body.data.tools.length > 0)
+  const conversationId = assistant.body.data.conversationId
+
+  const followUp = await json(`/api/v1/integrations/v1/assistant/conversations/${conversationId}/messages`, {
+    method: "POST",
+    headers: { ...authorization, "content-type": "application/json" },
+    body: JSON.stringify({ message: "What should HR review first from that result?" }),
+  })
+  assert.equal(followUp.response.status, 200)
+  assert.equal(followUp.body.data.conversationId, conversationId)
+  const conversation = await json(`/api/v1/integrations/v1/assistant/conversations/${conversationId}`, { headers: authorization })
+  assert.equal(conversation.response.status, 200)
+  assert.ok(conversation.body.data.messages.length >= 4)
+
+  const workflowCatalog = await json("/api/v1/integrations/v1/workflows/catalog", { headers: authorization })
+  assert.equal(workflowCatalog.response.status, 200)
+  assert.ok(workflowCatalog.body.data.workflowTypes.some((workflow) => workflow.type === "learning_assignment"))
+  assert.equal(workflowCatalog.body.data.controls.directApprovalActions, false)
+
+  const workflowKey = `red-team-${Date.now()}`
+  const workflowRequest = {
+    confirm: true,
+    request: {
+      type: "hiring",
+      position: `API Reliability Engineer ${Date.now()}`,
+      department: "Research & Development",
+      location: "Remote",
+      employmentType: "Full-time",
+      justification: "Validate the external workflow request and idempotent replay contract.",
+    },
+  }
+  const workflowHeaders = { ...authorization, "content-type": "application/json", "idempotency-key": workflowKey }
+  const workflow = await json("/api/v1/integrations/v1/workflows/requests", { method: "POST", headers: workflowHeaders, body: JSON.stringify(workflowRequest) })
+  assert.equal(workflow.response.status, 201)
+  const replay = await json("/api/v1/integrations/v1/workflows/requests", { method: "POST", headers: workflowHeaders, body: JSON.stringify(workflowRequest) })
+  assert.equal(replay.response.status, 201)
+  assert.equal(replay.response.headers.get("x-idempotent-replay"), "true")
+  assert.equal(replay.body.data.id, workflow.body.data.id)
+
+  const removedConversation = await json(`/api/v1/integrations/v1/assistant/conversations/${conversationId}`, { method: "DELETE", headers: authorization })
+  assert.equal(removedConversation.response.status, 200)
 
   const revoked = await json(`/api/v1/integrations/clients/${created.body.client.id}`, { method: "DELETE" })
   assert.equal(revoked.response.status, 200)

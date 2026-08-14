@@ -18,10 +18,14 @@ type ApiClient = {
 
 const availableScopes = [
   { value: "analytics:read", label: "Workforce analytics" },
+  { value: "people:read", label: "Employee directory" },
   { value: "retention:read", label: "Retention intelligence" },
   { value: "model:invoke", label: "Retention model scenarios" },
   { value: "operations:read", label: "Operational queues" },
+  { value: "assistant:use", label: "AI assistant conversations" },
   { value: "agent:invoke", label: "Read-only agents" },
+  { value: "workflows:read", label: "Workflow status" },
+  { value: "workflows:write", label: "Governed workflow execution" },
   { value: "data:write", label: "Data imports" },
 ]
 
@@ -29,20 +33,33 @@ const endpoints = [
   ["GET", "/api/v1/integrations/v1/capabilities", "Discover supported endpoints, scopes, and agents"],
   ["GET", "/api/v1/integrations/v1/workforce", "Workforce and decision-support measures"],
   ["GET", "/api/v1/integrations/v1/insights?view={view}", "Overview, workforce impact, talent supply, or capability projections"],
+  ["GET", "/api/v1/integrations/v1/people", "Paginated employee directory"],
+  ["GET", "/api/v1/integrations/v1/people/{employeeId}", "Minimum employee profile and operational counts"],
   ["GET", "/api/v1/integrations/v1/retention", "Retention cohorts and governed review state"],
   ["GET", "/api/v1/integrations/v1/retention/model", "Model metadata, input contract, and intended-use controls"],
   ["POST", "/api/v1/integrations/v1/retention/predict", "Explainable historical-model scenario assessment"],
   ["GET", "/api/v1/integrations/v1/operations", "Onboarding, leave, learning, and work queues"],
+  ["GET", "/api/v1/integrations/v1/onboarding", "Onboarding readiness and employee handoffs"],
+  ["GET", "/api/v1/integrations/v1/recruiting", "Requisitions and candidate pipeline"],
+  ["GET", "/api/v1/integrations/v1/leave", "Filtered leave register and coverage"],
+  ["GET", "/api/v1/integrations/v1/learning", "Assignments and capability recommendations"],
+  ["GET", "/api/v1/integrations/v1/work-items", "Paginated operational work queue"],
   ["GET", "/api/v1/integrations/v1/exits", "Confirmed exits, offboarding progress, asset recovery, and access removal"],
   ["GET", "/api/v1/integrations/v1/assets", "Equipment inventory, custody, condition, warranty, and lifecycle"],
   ["POST", "/api/v1/integrations/v1/agents/{agentId}/invoke", "Grounded read-only agent invocation"],
+  ["GET/POST", "/api/v1/integrations/v1/assistant/conversations", "Stateful AI assistant conversations"],
+  ["POST", "/api/v1/integrations/v1/assistant/conversations/{id}/messages", "Continue an assistant conversation"],
+  ["GET/POST", "/api/v1/integrations/v1/workflows", "Read or create reviewed workflow drafts"],
+  ["POST", "/api/v1/integrations/v1/workflows/plan", "Plan a workflow from a natural-language objective"],
+  ["POST", "/api/v1/integrations/v1/workflows/{id}/execute", "Confirm and execute an idempotent internal workflow"],
+  ["POST", "/api/v1/integrations/v1/workflows/requests", "Create a governed leave or hiring request"],
   ["POST", "/api/v1/integrations/v1/data/import", "Validate or apply domain records"],
 ]
 
 export function IntegrationApiManager({ canManage }: { canManage: boolean }) {
   const [clients, setClients] = useState<ApiClient[]>([])
   const [name, setName] = useState("")
-  const [scopes, setScopes] = useState(["analytics:read", "retention:read", "model:invoke", "operations:read", "agent:invoke"])
+  const [scopes, setScopes] = useState(["analytics:read", "people:read", "retention:read", "model:invoke", "operations:read", "assistant:use", "agent:invoke", "workflows:read"])
   const [apiKey, setApiKey] = useState("")
   const [pendingRevoke, setPendingRevoke] = useState<ApiClient | null>(null)
   const [busy, setBusy] = useState(false)
