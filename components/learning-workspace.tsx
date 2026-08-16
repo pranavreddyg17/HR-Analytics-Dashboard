@@ -5,6 +5,7 @@ import { useRouter, useSearchParams } from "next/navigation"
 import { LoaderCircle, Plus, Search, X } from "lucide-react"
 
 import { SelectEmployee } from "@/components/workflow-creator"
+import { RegisterPagination } from "@/components/register-pagination"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
@@ -247,9 +248,11 @@ export function LearningWorkspace({ actor, initialData }: { actor: WorkflowActor
         </div>
       </CardHeader>
       <CardContent className="p-0">
+        <RegisterPagination rows={visible} itemLabel="assignments" resetKey={`${query}|${status}|${department}|${location}|${selectedAssignmentId ?? ""}`} initialItemIndex={selectedAssignmentId ? visible.findIndex((row) => row.id === selectedAssignmentId) : -1}>
+        {(pageRows) => <>
         <div className="overflow-x-auto"><table className="w-full min-w-[940px] text-left text-body">
           <thead className="bg-muted/40 text-label font-semibold text-muted-foreground"><tr>{["Course", "Employee", "Status", "Due", "Hours", "Evidence", ""].map((heading) => <th key={heading} className="px-4 py-2.5">{heading}</th>)}</tr></thead>
-          <tbody>{visible.map((row) => {
+          <tbody>{pageRows.map((row) => {
             const completed = row.status.toLowerCase() === "completed"
             const overdue = !completed && Boolean(row.dueDate && row.dueDate < today)
             return <tr id={`assignment-${row.id}`} key={row.id} aria-current={row.id === selectedAssignmentId ? "true" : undefined} className={cn("scroll-mt-24 border-t border-border/70 hover:bg-muted/20", row.id === selectedAssignmentId && "bg-accent/45 ring-1 ring-inset ring-primary/30")}>
@@ -263,8 +266,9 @@ export function LearningWorkspace({ actor, initialData }: { actor: WorkflowActor
             </tr>
           })}</tbody>
         </table></div>
-        {!visible.length && <p className="p-10 text-center text-body text-muted-foreground">No assignments match this view.</p>}
-        <div className="border-t border-border bg-muted/20 px-4 py-2.5 text-meta text-muted-foreground">Showing {visible.length} of {data.assignments.length} assignments</div>
+        {!pageRows.length && <p className="p-10 text-center text-body text-muted-foreground">No assignments match this view.</p>}
+        </>}
+        </RegisterPagination>
       </CardContent>
     </Card>
     {dialog === "assign" && <Modal title="Assign course" description="Create tracked assignments for one employee or a defined workforce group." onClose={() => !saving && setDialog(null)}><form onSubmit={submitAssignment} className="space-y-4 p-5">

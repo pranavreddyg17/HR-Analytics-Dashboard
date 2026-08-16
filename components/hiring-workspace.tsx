@@ -7,6 +7,7 @@ import { LoaderCircle, Plus, Search, X } from "lucide-react"
 
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
+import { RegisterPagination } from "@/components/register-pagination"
 import { formatWorkspaceDateTime } from "@/lib/date-format"
 import type { HiringActivity, HiringCandidate, HiringCandidateStage, HiringOperations, HiringRequisition } from "@/lib/hiring-types"
 import { cn } from "@/lib/utils"
@@ -609,10 +610,12 @@ export function HiringWorkspace({ canRequestHiring, basePath = "/hiring", initia
           </div>
         </CardHeader>
         <CardContent className="p-0">
+          <RegisterPagination rows={visibleRequisitions} itemLabel="requisitions" resetKey={`${query}|${status}|${department}|${location}`}>
+          {(pageRows) => <>
           <div className="overflow-x-auto">
             <table className="w-full min-w-[980px] text-left text-body">
               <thead className="bg-muted/40 text-label font-semibold text-muted-foreground"><tr>{["Role", "Status", "Pipeline", "Owner", "Next action", "Due", ""].map((heading) => <th key={heading} className="px-4 py-2.5">{heading}</th>)}</tr></thead>
-              <tbody>{visibleRequisitions.map((item) => (
+              <tbody>{pageRows.map((item) => (
                 <tr key={item.id} className="border-t border-border/70 hover:bg-muted/20">
                   <td className="px-4 py-3"><button type="button" onClick={() => selectRequisition(item.id)} className="text-left"><span className="block font-semibold hover:text-primary">{item.position}</span><span className="mt-0.5 block text-meta text-muted-foreground">{item.department} · {item.location}</span></button></td>
                   <td className="px-4 py-3"><span className={cn("text-status font-semibold", statusTone(item.status))}>{item.status}</span></td>
@@ -625,8 +628,9 @@ export function HiringWorkspace({ canRequestHiring, basePath = "/hiring", initia
               ))}</tbody>
             </table>
           </div>
-          {!visibleRequisitions.length && <p className="p-10 text-center text-body text-muted-foreground">No requisitions match these filters.</p>}
-          <div className="border-t border-border bg-muted/20 px-4 py-2.5 text-meta text-muted-foreground">Showing {visibleRequisitions.length} of {data.requisitions.length} requisitions</div>
+          {!pageRows.length && <p className="p-10 text-center text-body text-muted-foreground">No requisitions match these filters.</p>}
+          </>}
+          </RegisterPagination>
         </CardContent>
       </Card>}
 
@@ -642,10 +646,12 @@ export function HiringWorkspace({ canRequestHiring, basePath = "/hiring", initia
           </div>
         </CardHeader>
         <CardContent className="p-0">
+          <RegisterPagination rows={visibleCandidates} itemLabel="candidates" resetKey={`${candidateQuery}|${candidateStage}|${department}|${location}|${selectedFromUrl ?? ""}`}>
+          {(pageRows) => <>
           <div className="overflow-x-auto">
             <table className="w-full min-w-[1050px] text-left text-body">
               <thead className="bg-muted/40 text-label font-semibold text-muted-foreground"><tr>{["Candidate", "Role", "Stage", "Owner", "Next action", "Due", ""].map((heading) => <th key={heading} className="px-4 py-2.5">{heading}</th>)}</tr></thead>
-              <tbody>{visibleCandidates.map((candidate) => (
+              <tbody>{pageRows.map((candidate) => (
                 <tr key={candidate.id} className="border-t border-border/70 hover:bg-muted/20">
                   <td className="px-4 py-3"><p className="font-semibold">{candidate.fullName}</p><p className="text-meta text-muted-foreground">{candidate.email} · {candidate.source}</p></td>
                   <td className="px-4 py-3"><button type="button" className="text-left hover:text-primary" onClick={() => selectRequisition(candidate.requisitionId)}>{candidate.requisitionTitle}<span className="block text-meta text-muted-foreground">{candidate.location}</span></button></td>
@@ -658,8 +664,9 @@ export function HiringWorkspace({ canRequestHiring, basePath = "/hiring", initia
               ))}</tbody>
             </table>
           </div>
-          {!visibleCandidates.length && <p className="p-10 text-center text-body text-muted-foreground">No candidates match this view.</p>}
-          <div className="border-t border-border bg-muted/20 px-4 py-2.5 text-meta text-muted-foreground">Showing {visibleCandidates.length} of {data.candidates.length} candidates</div>
+          {!pageRows.length && <p className="p-10 text-center text-body text-muted-foreground">No candidates match this view.</p>}
+          </>}
+          </RegisterPagination>
         </CardContent>
       </Card>}
 

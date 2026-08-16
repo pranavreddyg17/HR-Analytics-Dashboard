@@ -59,6 +59,7 @@ jobs:
           pnpm install --frozen-lockfile
           pnpm test:interactions
           pnpm test:providers
+          pnpm test:pagination
           pnpm test:insights
           DATABASE_URL='postgresql://postgres:postgres@127.0.0.1:5432/laidbackhr_test' DATABASE_SSL_MODE=disable pnpm test:operations
           pnpm test:knowledge
