@@ -15,10 +15,10 @@ function dateLabel(value: string | null): string {
   return Number.isFinite(parsed.getTime()) ? new Intl.DateTimeFormat("en", { month: "short", day: "numeric", year: "numeric" }).format(parsed) : value
 }
 
-export function OnboardingWorkspace({ initialData, canRequestHiring }: { initialData: OnboardingOperations; canRequestHiring: boolean }) {
+export function OnboardingWorkspace({ initialData, canRequestHiring, initialError = "" }: { initialData: OnboardingOperations; canRequestHiring: boolean; initialError?: string }) {
   const [data, setData] = useState(initialData)
   const [loading, setLoading] = useState(false)
-  const [error, setError] = useState("")
+  const [error, setError] = useState(initialError)
 
   async function refresh() {
     setLoading(true); setError("")
