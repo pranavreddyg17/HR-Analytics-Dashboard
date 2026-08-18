@@ -386,9 +386,9 @@ export async function updateHiringCandidate(candidateId: string, value: unknown,
       candidateId,
       requisitionId: candidate.requisition_id,
       plannedStartDate: input.startDate,
-      employmentStatus: "Preboarding",
+      employmentStatus: "Pending start",
     })
-    const completionNote = `${actor.displayName} recorded ${candidate.full_name} as hired and created preboarding profile ${employeeId}.`
+    const completionNote = `${actor.displayName} recorded ${candidate.full_name} as hired and created pending-start profile ${employeeId}.`
     await db.batch([
       candidateUpdate,
       db.prepare("UPDATE hiring_records SET recruitment_status='Hired', hiring_date=?, updated_at=CURRENT_TIMESTAMP WHERE id=?").bind(today, candidate.requisition_id),
@@ -399,12 +399,12 @@ export async function updateHiringCandidate(candidateId: string, value: unknown,
       db.prepare(`INSERT INTO employees(employee_id, first_name, last_name, preferred_name, work_email, phone,
         location, manager_id, hire_date, employment_type, employment_status, data_source, organization_id, job_profile_id,
         archived_at, version, created_at, updated_at)
-        VALUES (?, ?, ?, NULL, ?, NULL, ?, NULL, ?, ?, 'Preboarding', 'workflow', 'org:laidbackhr',
+        VALUES (?, ?, ?, NULL, ?, NULL, ?, NULL, ?, ?, 'Pending start', 'workflow', 'org:laidbackhr',
           (SELECT id FROM job_profiles WHERE organization_id='org:laidbackhr' AND department_name=? AND title=? AND job_level=? LIMIT 1),
           NULL, 1, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)`)
         .bind(employeeId, firstName, lastName, candidate.email, candidate.location, input.startDate, employmentType, candidate.department, candidate.position, jobLevel),
-      db.prepare("INSERT INTO employee_activity(id, employee_id, event_type, summary, changes_json, actor_email, created_at) VALUES (?, ?, 'preboarding_created', ?, ?, ?, CURRENT_TIMESTAMP)")
-        .bind(crypto.randomUUID(), employeeId, `${actor.displayName} created this preboarding profile from the hiring pipeline`, employeeChanges, actor.email),
+      db.prepare("INSERT INTO employee_activity(id, employee_id, event_type, summary, changes_json, actor_email, created_at) VALUES (?, ?, 'pending_start_created', ?, ?, ?, CURRENT_TIMESTAMP)")
+        .bind(crypto.randomUUID(), employeeId, `${actor.displayName} created this pending-start profile from the hiring pipeline`, employeeChanges, actor.email),
       db.prepare("UPDATE workflow_requests SET status='Hired', next_action='No further action.', due_at=NULL, resolved_by_email=?, resolved_at=CURRENT_TIMESTAMP, completed_at=CURRENT_TIMESTAMP, completion_notes=?, updated_at=CURRENT_TIMESTAMP WHERE id=? AND type='hiring'")
         .bind(actor.email, completionNote, candidate.requisition_id),
       db.prepare("UPDATE hiring_candidates SET stage='Rejected', next_step='No further action', next_step_due_at=NULL, rejected_reason='Position filled', updated_at=CURRENT_TIMESTAMP WHERE requisition_id=? AND id<>? AND stage NOT IN ('Hired','Rejected')")
@@ -412,7 +412,7 @@ export async function updateHiringCandidate(candidateId: string, value: unknown,
       db.prepare("INSERT INTO hiring_activity(id, entity_type, entity_id, requisition_id, action, from_status, to_status, detail, actor_email) VALUES (?, 'candidate', ?, ?, 'candidate_hired', ?, 'Hired', ?, ?)")
         .bind(crypto.randomUUID(), candidateId, candidate.requisition_id, candidate.stage, completionNote, actor.email),
     ])
-    return { id: candidateId, stage: "Hired", message: `${candidate.full_name} was hired and preboarding profile ${employeeId} was created.` }
+    return { id: candidateId, stage: "Hired", message: `${candidate.full_name} was hired and pending-start profile ${employeeId} was created.` }
   } else {
     await candidateUpdate.run()
     const offerCount = await db.prepare("SELECT COUNT(*) AS count FROM candidate_applications_view WHERE requisition_id=? AND stage='Offer'").bind(candidate.requisition_id).first<{ count: number }>()

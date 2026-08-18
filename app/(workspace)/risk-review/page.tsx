@@ -30,6 +30,7 @@ export default async function RiskReviewPage() {
       riskScore: record.riskScore,
       riskLevel: record.riskLevel,
       topDriver: record.topDriver,
+      modelDrivers: explanation.topDrivers,
       suggestion: explanation.recommendation,
       monthlyIncome: record.monthlyIncome,
       distanceFromHome: record.distanceFromHome,

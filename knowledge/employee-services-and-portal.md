@@ -20,7 +20,7 @@ Cases cover workplace, payroll, benefits, equipment, policy, manager support, an
 
 ## Onboarding self-service
 
-An employee who signs in without a linked employee profile can submit an onboarding profile. The record remains Preboarding and Verification until People Operations validates organization, job profile, manager, work location, start date, employment type, and compensation evidence. Employee-submitted compensation is not authoritative until verified.
+An employee who signs in without a linked employee profile can submit an onboarding profile. The record remains Pending start and Verification until People Operations validates organization, job profile, manager, work location, start date, employment type, and compensation evidence. Employee-submitted compensation is not authoritative until verified.
 
 ## Document storage
 

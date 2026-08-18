@@ -628,7 +628,7 @@ async function calculateWorkforceAnalytics(filters: HrFilters = {}, options: { r
       total: employees.length,
       active: activeEmployees.length,
       onLeave: employees.filter((record) => record.employment_status.toLowerCase() === "on leave").length,
-      preboarding: employees.filter((record) => record.employment_status.toLowerCase() === "preboarding").length,
+      preboarding: employees.filter((record) => ["pending start", "preboarding"].includes(record.employment_status.toLowerCase())).length,
       terminated: employees.filter((record) => ["terminated", "resigned"].includes(record.employment_status.toLowerCase())).length,
       byDepartment: employeeByDepartment,
       activeByDepartment: groupBy(activeEmployees, (record) => record.department),

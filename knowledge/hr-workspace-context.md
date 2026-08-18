@@ -6,11 +6,11 @@ Every analytics response must identify its source mode. `demo` means the domain 
 
 ## Workforce and headcount
 
-Active headcount includes employee records with an Active employment status. On-leave and preboarding records are reported separately. Department, location, job title, employment type, tenure, and manager span are descriptive dimensions. Counts describe the current database view and do not establish employee performance.
+Active headcount includes employee records with an Active employment status. On-leave and pending-start records are reported separately. Department, location, job title, employment type, tenure, and manager span are descriptive dimensions. Counts describe the current database view and do not establish employee performance.
 
 ## Onboarding and talent acquisition
 
-Preboarding employees and submitted onboarding profiles are persisted separately from recruiting records. Talent acquisition covers headcount approval, candidates, interviews, offers, and the handoff that creates a preboarding employee. Completed hires use records with a Hired recruitment status. Average time to hire is calculated only from completed hires with a recorded duration. Source performance combines completed-hire volume and average hiring speed; source volume alone is not a quality-of-hire measure.
+Pending-start employees and submitted onboarding profiles are persisted separately from recruiting records. Talent acquisition covers headcount approval, candidates, interviews, offers, and the handoff that creates a pending-start employee. Completed hires use records with a Hired recruitment status. Average time to hire is calculated only from completed hires with a recorded duration. Source performance combines completed-hire volume and average hiring speed; source volume alone is not a quality-of-hire measure.
 
 ## Attrition and model risk
 

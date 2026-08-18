@@ -10,7 +10,7 @@ An administrator creates a time-limited service credential under Data exchange. 
 
 ## Stable endpoints
 
-GET /api/v1/integrations/v1/workforce and /insights return the same calculated measures used by the product. GET /people returns a paginated minimum directory and /people/{employeeId} returns a bounded operational profile without compensation, documents, private cases, or model scores. Resource-specific onboarding, recruiting, leave, learning, work-items, exits, and assets endpoints expose current PostgreSQL-backed operations.
+GET /api/v1/integrations/v1/workforce and /insights return the same calculated measures used by the product. GET /people returns a paginated minimum directory and /people/{employeeId} returns a bounded operational profile without compensation, documents, private cases, or model scores. Resource-specific onboarding, recruiting, leave, learning, work-items, exits, and assets endpoints expose current PostgreSQL-backed operations. Work items include the calculated P1–P4 assessment, and /work-items/priority-policy exposes its version and controls. /retention/evidence returns current operational review factors separately from /retention/model and /retention/predict.
 
 POST /assistant/conversations starts a persistent, grounded AI Assistant conversation. POST /assistant/conversations/{conversationId}/messages continues with the previous conversation memory, while GET and DELETE read or remove only conversations owned by the calling service client. Page context may contain a supported application route and bounded filters; it never supplies hidden instructions.
 

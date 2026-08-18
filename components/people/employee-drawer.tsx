@@ -10,7 +10,7 @@ import type { EmployeeInput, ManagedEmployee } from "@/lib/people-types"
 import { cn } from "@/lib/utils"
 
 const employmentTypes = ["Full-time", "Part-time", "Contract", "Intern", "Temporary"]
-const employmentStatuses = ["Preboarding", "Active", "On Bench", "Notice Period", "Scheduled Exit", "On leave", "Terminated", "Resigned"]
+const employmentStatuses = ["Pending start", "Active", "On Bench", "Notice Period", "Scheduled Exit", "On leave", "Terminated", "Resigned"]
 
 const emptyEmployee = (): EmployeeInput => ({
   employee_id: "",

@@ -13,6 +13,7 @@ import { ensureHrDatabase } from "@/lib/server/hr-repository"
 import { getInboxOperations } from "@/lib/server/inbox"
 import { assignLearningCourse, completeLearningAssignment, createLearningCourse, listLearningOperations } from "@/lib/server/learning"
 import { createPerson, deletePersonPermanently, getPerson, listPeople, setPersonArchived } from "@/lib/server/people"
+import { getOperationalRetentionEvidence } from "@/lib/server/operational-retention"
 import type { RequestActor } from "@/lib/server/request-user"
 import { actOnWorkflow, createWorkflow } from "@/lib/server/workflows"
 import { assignAsset, cancelEmployeeExit, completeEmployeeExit, createAsset, createEmployeeExit, getAsset, listAssets, listEmployeeExits, updateOffboardingTask } from "@/lib/server/exit-assets"
@@ -33,6 +34,11 @@ function inboxItem(operations: Awaited<ReturnType<typeof getInboxOperations>>, i
 
 async function main() {
 const db = await ensureHrDatabase()
+const projectCriticality = await db.prepare("SELECT code, business_criticality FROM projects WHERE code IN ('PLATFORM-CLOUD','PEOPLE-OPS') ORDER BY code").all<{ code: string; business_criticality: string }>()
+assert.deepEqual(projectCriticality.results, [
+  { code: "PEOPLE-OPS", business_criticality: "important" },
+  { code: "PLATFORM-CLOUD", business_criticality: "critical" },
+])
 await db.batch([
   db.prepare("INSERT INTO app_users(email, display_name, role, status, invited_by, onboarding_status) VALUES (?, ?, 'admin', 'active', 'integration-test', 'not_required') ON CONFLICT(email) DO NOTHING").bind(admin.email, admin.displayName),
   db.prepare("INSERT INTO app_users(email, display_name, role, status, invited_by, onboarding_status) VALUES (?, ?, 'hr', 'active', 'integration-test', 'not_required') ON CONFLICT(email) DO NOTHING").bind(hr.email, hr.displayName),
@@ -115,11 +121,17 @@ assert.equal(employeeImpact.payDataAvailable, true)
 assert.equal(employeeImpact.directRecruitingCost, 8000)
 assert.ok(employeeImpact.replacementCost > employeeImpact.directRecruitingCost)
 assert.equal(await getEmployeeImpactScenario(employeeRecord.employee_id, { department: "Sales" }), null)
+const operationalRetention = await getOperationalRetentionEvidence(500)
+assert.ok(operationalRetention.records.some((row) => row.employeeId === employeeRecord.employee_id))
+assert.ok(operationalRetention.policy.excludedEvidence.includes("Leave usage"))
+assert.ok(operationalRetention.records.every((row) => row.reviewScore >= 0 && row.reviewScore <= 100))
 
 const leave = await createWorkflow({ type: "leave", leaveType: "Annual", startDate: "2027-02-08", endDate: "2027-02-09", note: "Integration coverage handoff is documented." }, employee)
 let managerInbox = await getInboxOperations(manager)
 let hrInbox = await getInboxOperations(hr)
 assert.deepEqual(inboxItem(managerInbox, leave.id).actions, ["reject", "approve"])
+assert.match(inboxItem(managerInbox, leave.id).priorityAssessment.level, /^P[1-4]$/)
+assert.ok(inboxItem(managerInbox, leave.id).priorityAssessment.factors.length > 0)
 assert.equal(inboxItem(managerInbox, leave.id).assignedTo, "manager")
 assert.equal(inboxItem(hrInbox, leave.id).requiresDecision, true)
 
@@ -239,7 +251,7 @@ const candidate = await createHiringCandidate({ requisitionId: requisition.id, f
 for (const stage of ["Screening", "Interview", "Offer"] as const) await updateHiringCandidate(candidate.id, { stage }, manager)
 await updateHiringCandidate(candidate.id, { stage: "Hired", startDate: "2027-04-05" }, manager)
 const hired = await db.prepare("SELECT employee_id, employment_status FROM employee_directory_view WHERE LOWER(work_email)=LOWER(?)").bind("harper.candidate@example.com").first<{ employee_id: string; employment_status: string }>()
-assert.equal(hired?.employment_status, "Preboarding")
+assert.equal(hired?.employment_status, "Pending start")
 
 const aiHiringPlan = await planAiWorkflow({ prompt: "Request a full-time Release Engineer in Engineering, Remote, because the release programme needs dedicated production coordination." }, manager)
 assert.equal(aiHiringPlan.type, "hiring_requisition")

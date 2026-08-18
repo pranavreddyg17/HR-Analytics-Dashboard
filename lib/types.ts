@@ -56,6 +56,7 @@ export type Employee = {
   riskScore: number
   riskLevel: RiskLevel
   topDriver: string
+  modelDrivers: PredictionDriver[]
   suggestion: string
   monthlyIncome: number
   distanceFromHome: number

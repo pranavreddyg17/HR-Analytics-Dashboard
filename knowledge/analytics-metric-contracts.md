@@ -8,15 +8,15 @@ When a filter is applied, every numerator and denominator must use the same depa
 
 ## Active headcount and workforce composition
 
-Active headcount counts non-archived employees whose status is Active or On leave. Preboarding employees are reported separately and do not enter active-headcount denominators. Terminated and archived records are excluded. Workforce composition groups the same active population by department, role, location, employment type, or manager.
+Active headcount counts non-archived employees whose status is Active or On leave. Pending-start employees are reported separately and do not enter active-headcount denominators. Terminated and archived records are excluded. Workforce composition groups the same active population by department, role, location, employment type, or manager.
 
-Use active headcount for capacity and representation questions. Use the full directory count only for data administration. A directory total can be larger than active headcount because it can contain preboarding, terminated, and archived records.
+Use active headcount for capacity and representation questions. Use the full directory count only for data administration. A directory total can be larger than active headcount because it can contain pending-start, terminated, and archived records.
 
 ## Hiring and onboarding measures
 
 Completed hires count requisitions or hiring records with status Hired and a hiring date in the reporting window. Open requisitions are the current count of Requested, Open, or Offer records. Average time to hire is the mean calendar days between application date and hiring date for completed hires with valid dates.
 
-Replacement rate is completed hires divided by recorded exits in the same event window. It is a staffing-flow indicator, not a quality-of-hire or retention measure. Candidate pipeline counts current candidate stages. New-joiner readiness comes from preboarding employee records, submitted onboarding verification, start date, and manager assignment.
+Replacement rate is completed hires divided by recorded exits in the same event window. It is a staffing-flow indicator, not a quality-of-hire or retention measure. Candidate pipeline counts current candidate stages. New-joiner readiness comes from pending-start employee records, submitted onboarding verification, start date, and manager assignment.
 
 ## Attrition measures
 

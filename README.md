@@ -34,14 +34,14 @@ Production runs at [www.laidbackhr.cloud](https://www.laidbackhr.cloud). The emp
 |---|---|---|
 | `/` | Priority work and upcoming workforce events | Reads the actor-scoped workflow queue and operational records |
 | `/people` | Current/former employee search, profiles, organization, manager, job, compensation, project, review, and one-to-one administration | Employee and related lifecycle tables; admin-only permanent deletion is restricted to former employees |
-| `/inbox` | Decisions and assigned work across onboarding, recruiting, leave, learning, reimbursement, employee cases, and insight actions | Workflow status, owner, due date, resolution, and action history |
+| `/inbox` | Decisions and assigned work across onboarding, recruiting, leave, learning, reimbursement, employee cases, and insight actions | Workflow status, owner, due date, explainable P1–P4 priority assessment, resolution, and action history |
 | `/onboarding` | Requisition-to-employee handoff and new-joiner verification | Requisitions, candidates, onboarding submissions, employees, and workflow records |
 | `/leaves` | Leave register, approval decisions, absence schedule, and coverage | Leave and workflow records |
 | `/courses` | Course catalog, capability mappings, cohort assignment, due dates, completion, and compliance | Courses, campaigns, assignments, and workflow records |
 | `/exits` | Scheduled exits, accountable offboarding checklists, asset recovery, access removal, and completion | Employee exits, offboarding tasks, asset assignments, workflow records, and recorded exit outcomes |
 | `/insights` | Workforce movement, continuity, talent supply, manager-cohort movement, capability completion, remaining effort, cost scenarios, and action queues | Calculated read models plus durable insight work items |
-| `/attrition` | Historical model validation, cohort evidence, and explainable scenario testing | Model metadata, historical profiles, and retention reviews |
-| `/risk-review` | Employee-linked review worklist with governed follow-up | Retention reviews and review status |
+| `/attrition` | Current operational retention evidence, department continuity, historical model validation, and explainable scenario testing | Current evidence factors, model metadata, historical profiles, and retention reviews |
+| `/risk-review` | Historical model-record audit with local contributors and outcomes | Read-only validation records; no operational employee action is created |
 | `/assistant` | Context-aware workforce chat and workflow preparation | Conversations, messages, agent runs, tool steps, and approved workflow drafts |
 | `/imports` | Validated imports, PDF/XLSX exports, Power BI feeds, and integration clients | Import jobs, imported domain records, API clients, and API audit |
 | `/assets` | Equipment inventory, custody, assignment history, warranty, replacement, return, and condition | Assets and immutable assignment history |
@@ -174,6 +174,7 @@ SQL migrations in `db/postgres` are append-only and run idempotently during appl
 | `0011_exit_and_assets.sql` | Employee exits, accountable offboarding tasks, IT assets, custody history, and lifecycle settings |
 | `0012_federated_identities.sql` | Google and Microsoft identity linkage for one account per employee identity |
 | `0013_integration_expansion.sql` | Idempotency state for externally initiated governed workflows |
+| `0014_review_intelligence.sql` | Auditable P1–P4 work-priority assessments, explicit project criticality, and pending-start terminology migration |
 
 ### Core relational domains
 
@@ -182,7 +183,7 @@ SQL migrations in `db/postgres` are append-only and run idempotently during appl
 - **Talent acquisition and onboarding:** `hiring_records`, `hiring_candidates`, `hiring_activity`, `employee_onboarding_submissions`.
 - **Time, services, and employee relations:** `leave_records`, `expense_claims`, `employee_cases`.
 - **Capability and performance:** `learning_courses`, `learning_assignment_campaigns`, `course_assignments`, `capability_skills`, job/course skill mappings, `review_cycles`, `performance_reviews`, `one_on_one_meetings`, `promotion_records`.
-- **Retention intelligence:** `attrition_events`, `attrition_model_profiles`, `model_versions`, and persisted retention review workflows.
+- **Retention intelligence:** `attrition_events`, current compensation/project/performance/manager-support evidence, `attrition_model_profiles`, `model_versions`, persisted retention review workflows, and `workflow_priority_assessments`.
 - **Exit and asset operations:** `employee_exits`, `offboarding_tasks`, `assets`, `asset_assignments`, and `asset_lifecycle_settings`.
 - **Workflow and audit:** `workflow_requests`, employee/hiring activity, `access_audit`, `data_imports`, `integration_api_audit`.
 - **AI:** `ai_conversations`, `ai_conversation_messages`, `ai_workflow_drafts`, `agent_runs`, `agent_run_steps`.
@@ -271,7 +272,7 @@ Every run records the actor, objective, provider, status, timing, and ordered to
 
 | MCP tool | Evidence returned |
 |---|---|
-| `review_work_queue` | Page- and actor-scoped decisions, overdue work, owners, due dates, and next actions |
+| `review_work_queue` | Page- and actor-scoped decisions, P1–P4 priority factors, overdue work, owners, due dates, and next actions |
 | `workforce_overview` | Workforce KPIs, open work, executive observations, and data status |
 | `compare_departments` | Headcount, hiring, exits, leave, learning, or promotion comparison |
 | `analyze_attrition_signals` | Recorded exits, model review signals, linked employee evidence, and local model explanations |
@@ -305,7 +306,7 @@ The deployed prediction runtime is **Compact Gradient Boosting 2.0.0**. It is em
 - Explanation: reference-profile sensitivity reports model contributors, not causal reasons.
 - Runtime artifacts: the Python joblib pipeline and model card are the retraining/test reference; `lib/server/runtime-data.json` is the web runtime export.
 
-The public integration API exposes metadata, the validated input schema, and explainable scenario scoring. Current operational employees are not automatically scored or acted upon.
+The public integration API exposes metadata, the validated input schema, and explainable scenario scoring. Current operational employees are not assigned that probability. A separate deterministic operational review policy can prioritize human review from available pay-position, role-tenure, completed performance-review, staffing, active-project, and manager-check-in evidence; it explicitly excludes leave usage and protected characteristics.
 
 ## API reference
 
@@ -434,6 +435,7 @@ Use `Authorization: Bearer <service-credential>` and optionally pass `X-Request-
 | GET | `/api/v1/integrations/v1/people` | `people:read` | Paginated employee directory with minimum operational fields |
 | GET | `/api/v1/integrations/v1/people/{employeeId}` | `people:read` | Minimum employee profile and linked operational counts |
 | GET | `/api/v1/integrations/v1/retention` | `retention:read` | Retention cohorts and governed review state |
+| GET | `/api/v1/integrations/v1/retention/evidence` | `retention:read` | Current explainable operational review evidence, coverage, and follow-up |
 | GET | `/api/v1/integrations/v1/retention/model` | `retention:read` | Model card, metrics, input schema, and prohibited uses |
 | POST | `/api/v1/integrations/v1/retention/predict` | `model:invoke` | Explainable historical-profile scenario score |
 | GET | `/api/v1/integrations/v1/operations` | `operations:read` | Onboarding, leave, learning, and work queues |
@@ -442,6 +444,7 @@ Use `Authorization: Bearer <service-credential>` and optionally pass `X-Request-
 | GET | `/api/v1/integrations/v1/leave` | `operations:read` | Filtered leave register, coverage, and schedule |
 | GET | `/api/v1/integrations/v1/learning` | `operations:read` | Learning assignments, capability evidence, and recommendations |
 | GET | `/api/v1/integrations/v1/work-items` | `operations:read` | Paginated operational work queue |
+| GET | `/api/v1/integrations/v1/work-items/priority-policy` | `operations:read` | Versioned priority factors, thresholds, intended use, and controls |
 | GET | `/api/v1/integrations/v1/exits` | `operations:read` | Confirmed exit register and offboarding progress |
 | GET | `/api/v1/integrations/v1/assets` | `operations:read` | Asset inventory, custody, lifecycle, warranty, and replacement state |
 | GET/POST | `/api/v1/integrations/v1/assistant/conversations` | `assistant:use` | List conversations or start a grounded conversation with durable memory |
@@ -538,6 +541,9 @@ Never commit `.env.local`, API credentials, downloaded Key Vault values, Terrafo
 
 ```bash
 pnpm test:interactions
+pnpm test:priority
+pnpm test:onboarding
+pnpm audit --prod --audit-level high
 DATABASE_URL=postgresql://postgres:postgres@127.0.0.1:5432/laidbackhr_test \
   DATABASE_SSL_MODE=disable \
   pnpm test:operations
@@ -601,13 +607,13 @@ flowchart LR
 
 `.github/workflows/production.yml` runs on pull requests and `main`:
 
-1. Install locked Node dependencies.
-2. Run interaction, PostgreSQL operational, knowledge, lint, TypeScript, build, live, AI red-team, and concurrency checks.
+1. Install locked Node dependencies and fail on high-severity production dependency vulnerabilities.
+2. Run interaction, priority-policy, PostgreSQL operational, knowledge, lint, TypeScript, build, live, AI red-team, and concurrency checks.
 3. Run the Python model test suite.
-4. Validate Terraform.
+4. Validate Terraform and run CodeQL extended security analysis.
 5. Authenticate to Azure using GitHub OIDC.
 6. copy the protected Azure AI settings into the application Key Vault;
-7. build and push `laidbackhr-web:<git-sha>` to ACR;
+7. build and push `laidbackhr-web:<git-sha>` to ACR with an SBOM and build provenance;
 8. apply `infra/environments/production/production.tfvars` with remote state;
 9. synchronize and probe the Azure AI Search index; and
 10. require three consecutive readiness responses for the deployed SHA.

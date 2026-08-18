@@ -9,6 +9,7 @@ import { Card, CardContent } from "@/components/ui/card"
 import { withReturnTo } from "@/lib/navigation"
 import { getWorkforceAnalytics } from "@/lib/server/hr-analytics"
 import { getRetentionIntelligence } from "@/lib/server/retention-intelligence"
+import { getOperationalRetentionEvidence } from "@/lib/server/operational-retention"
 import { getDashboard, getPredictionSchema } from "@/lib/server/runtime"
 
 export const dynamic = "force-dynamic"
@@ -24,14 +25,15 @@ export default async function AttritionPage() {
   const fromDate = new Date(`${to}T12:00:00Z`)
   fromDate.setUTCFullYear(fromDate.getUTCFullYear() - 1)
   const workforce = await getWorkforceAnalytics({ from: fromDate.toISOString().slice(0, 10), to, period: "quarter" })
-  const [retention, dashboard] = await Promise.all([
+  const [retention, operational, dashboard] = await Promise.all([
     getRetentionIntelligence(workforce),
+    getOperationalRetentionEvidence(100),
     Promise.resolve(getDashboard()),
   ])
   const schema = getPredictionSchema()
-  const priorityCohorts = retention.cohortAlerts.filter((cohort) => cohort.priority === "Priority").length
   const replacementGaps = retention.continuity.filter((row) => row.replacementStatus === "Gap").length
   const openReviews = retention.cohortAlerts.filter((cohort) => ["pending", "in_progress"].includes(cohort.reviewStatus)).length
+  const employeeReviews = operational.records.filter((record) => record.reviewLevel !== "Monitor")
   const priorities = new Map(retention.priorities.map((priority) => [priority.cohort, priority]))
   const continuity = new Map(retention.continuity.map((row) => [row.department, row]))
   const voluntaryShare = workforce.attrition.totalExits
@@ -42,7 +44,7 @@ export default async function AttritionPage() {
     <WorkspacePage>
       <WorkspaceHeader
         title="Attrition and retention"
-        description="Review 12-month retention signals and assign follow-up."
+        description="Review current operational evidence separately from the historical model benchmark."
         meta={<>{workforce.calculationBasis.reportingWindow}</>}
         actions={(
           <Button nativeButton={false} render={<Link href={withReturnTo("/risk-review", "/attrition")} />}>
@@ -53,15 +55,37 @@ export default async function AttritionPage() {
 
       <MetricStrip metrics={[
         { label: "Recorded attrition", value: `${number.format(workforce.attrition.rate)}%`, detail: `${workforce.attrition.totalExits} exits · ${number.format(voluntaryShare)}% voluntary` },
-        { label: "Priority departments", value: priorityCohorts, detail: `${retention.cohortAlerts.length} departments reviewed` },
+        { label: "Employee reviews", value: employeeReviews.length, detail: "Current-record signals" },
         { label: "Open reviews", value: openReviews, detail: "Pending or in progress" },
         { label: "Coverage gaps", value: replacementGaps, detail: "Hiring and succession coverage" },
       ]} />
 
+      <section aria-labelledby="operational-evidence-heading">
+        <WorkspaceSectionHeader
+          title="Operational review signals"
+          description="Current pay, role tenure, performance, staffing, project, and manager-support evidence. Scores prioritize review; they are not resignation probabilities."
+        />
+        <Card className="mt-3 gap-0 overflow-hidden py-0 shadow-none">
+          <CardContent className="p-0">
+            <div className="hidden grid-cols-[1.1fr_100px_1.35fr_1.35fr_auto] gap-4 border-b bg-muted/35 px-5 py-2.5 text-label text-muted-foreground lg:grid">
+              <span>Employee</span><span>Review</span><span>Leading evidence</span><span>Recommended check</span><span>Open</span>
+            </div>
+            {employeeReviews.slice(0, 8).map((record) => <div key={record.employeeId} className="grid gap-3 border-b px-5 py-4 last:border-b-0 lg:grid-cols-[1.1fr_100px_1.35fr_1.35fr_auto] lg:items-start lg:gap-4">
+              <div><p className="text-card-title font-semibold">{record.name}</p><p className="mt-1 text-meta text-muted-foreground">{record.jobTitle} · {record.department}</p></div>
+              <div><Badge variant={record.reviewLevel === "Priority" ? "destructive" : "secondary"}>{record.reviewLevel}</Badge><p className="mt-1 text-meta tabular-nums text-muted-foreground">{record.reviewScore}/100 · {record.evidenceCoverage}% coverage</p></div>
+              <div><p className="text-body font-semibold">{record.factors[0]?.label}</p><p className="mt-1 text-meta text-muted-foreground">{record.factors[0]?.evidence}</p></div>
+              <p className="text-body">{record.recommendedReview}</p>
+              <Button nativeButton={false} size="xs" variant="outline" render={<Link href={`/people/${encodeURIComponent(record.employeeId)}?returnTo=%2Fattrition`} />}>Review</Button>
+            </div>)}
+            {!employeeReviews.length && <p className="px-5 py-8 text-center text-body text-muted-foreground">No current employee records meet the operational review threshold.</p>}
+          </CardContent>
+        </Card>
+      </section>
+
       <section aria-labelledby="department-review-heading">
         <WorkspaceSectionHeader
-          title="Department review queue"
-          description="Current evidence, operational exposure, and accountable follow-up."
+          title="Department continuity"
+          description="Recorded exits, hiring coverage, and the separate historical model cohort."
         />
         <Card className="mt-3 gap-0 overflow-hidden py-0 shadow-none">
           <CardContent className="p-0">

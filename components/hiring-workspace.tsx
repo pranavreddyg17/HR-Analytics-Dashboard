@@ -241,7 +241,7 @@ function CandidateUpdateDialog({ candidate, activity, onClose, onSaved }: { cand
         </div>
         {stage === "Hired" && (
           <p className="rounded-md border border-border bg-muted/25 px-3 py-2 text-meta sm:col-span-2">
-            Saving creates a preboarding employee profile, fills the requisition, and closes the remaining candidates as position filled.
+            Saving creates a pending-start employee profile, fills the requisition, and closes the remaining candidates as position filled.
           </p>
         )}
         {error && <p role="alert" className="text-meta text-destructive sm:col-span-2">{error}</p>}
@@ -261,7 +261,7 @@ function CandidateUpdateDialog({ candidate, activity, onClose, onSaved }: { cand
   )
 }
 
-function RequisitionDialog({ requisition, activity, busy, onClose, onDecision, onAddCandidate, onSaved }: { requisition: HiringRequisition; activity: HiringActivity[]; busy: boolean; onClose: () => void; onDecision: (action: "approve" | "reject", note?: string) => Promise<void>; onAddCandidate: () => void; onSaved: (message: string, close: boolean) => Promise<void> }) {
+function RequisitionDialog({ requisition, candidates, activity, busy, onClose, onDecision, onAddCandidate, onOpenCandidate, onSaved }: { requisition: HiringRequisition; candidates: HiringCandidate[]; activity: HiringActivity[]; busy: boolean; onClose: () => void; onDecision: (action: "approve" | "reject", note?: string) => Promise<void>; onAddCandidate: () => void; onOpenCandidate: (candidateId: string) => void; onSaved: (message: string, close: boolean) => Promise<void> }) {
   const [nextAction, setNextAction] = useState(requisition.nextAction)
   const [dueDate, setDueDate] = useState(requisition.dueDate ?? dateAfterToday(7))
   const [note, setNote] = useState("")
@@ -309,6 +309,23 @@ function RequisitionDialog({ requisition, activity, busy, onClose, onDecision, o
           <p className="text-label font-semibold text-muted-foreground">Business justification</p>
           <p className="mt-1 text-body">{requisition.justification}</p>
         </div>
+      </div>
+
+      <div className="border-t border-border px-5 py-4">
+        <div className="flex items-center justify-between gap-3">
+          <div><p className="text-card-title font-semibold">Candidates</p><p className="mt-0.5 text-meta text-muted-foreground">Applicants linked to this requisition.</p></div>
+          {requisition.canAddCandidate && <Button size="xs" variant="outline" onClick={onAddCandidate}>Add candidate</Button>}
+        </div>
+        <div className="mt-3 divide-y divide-border/70 rounded-md border border-border">
+          {candidates.slice(0, 8).map((candidate) => <div key={candidate.id} className="grid gap-2 px-3 py-2.5 sm:grid-cols-[minmax(0,1fr)_100px_120px_auto] sm:items-center">
+            <div className="min-w-0"><p className="truncate text-body font-semibold">{candidate.fullName}</p><p className="truncate text-meta text-muted-foreground">{candidate.email}</p></div>
+            <span className={cn("text-meta font-semibold", statusTone(candidate.stage))}>{candidate.stage}</span>
+            <span className={cn("text-meta", candidate.isOverdue ? "font-semibold text-destructive" : "text-muted-foreground")}>{formatDate(candidate.nextStepDueAt)}</span>
+            <Button size="xs" variant="ghost" onClick={() => onOpenCandidate(candidate.id)}>Open</Button>
+          </div>)}
+          {!candidates.length && <p className="px-3 py-5 text-center text-meta text-muted-foreground">No candidates are linked to this requisition.</p>}
+        </div>
+        {candidates.length > 8 && <p className="mt-2 text-meta text-muted-foreground">Showing 8 of {candidates.length} candidates. Use the candidate view for the complete pipeline.</p>}
       </div>
 
       {requisition.canDecide && (
@@ -691,11 +708,13 @@ export function HiringWorkspace({ canRequestHiring, basePath = "/hiring", initia
         <RequisitionDialog
           key={`${selectedRequisition.id}-${selectedRequisition.status}-${selectedRequisition.dueDate}-${selectedRequisition.nextAction}`}
           requisition={selectedRequisition}
+          candidates={data.candidates.filter((candidate) => candidate.requisitionId === selectedRequisition.id)}
           activity={requisitionActivity}
           busy={busyId === selectedRequisition.id}
           onClose={closeRequisition}
           onDecision={(action, note) => decideRequisition(selectedRequisition, action, note)}
           onAddCandidate={() => openCandidateForm(selectedRequisition.id)}
+          onOpenCandidate={(candidateId) => openCandidateRecord(candidateId)}
           onSaved={async (message, close) => { if (close) closeRequisition(); await loadOperations(message) }}
         />
       )}

@@ -15,6 +15,7 @@ import { listLearningOperations } from "@/lib/server/learning"
 import { listHiringOperations } from "@/lib/server/hiring"
 import { listOnboardingOperations } from "@/lib/server/onboarding"
 import { listAssets, listEmployeeExits } from "@/lib/server/exit-assets"
+import { getOperationalRetentionEvidence } from "@/lib/server/operational-retention"
 
 const filtersShape = {
   from: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional().describe("Start date in YYYY-MM-DD format"),
@@ -281,6 +282,7 @@ export function createHrMcpServer(actor?: RequestActor): McpServer {
         employeeId: item.employeeId,
         status: item.status,
         priority: item.priority,
+        priorityAssessment: item.priorityAssessment,
         owner: item.owner,
         dueDate: item.dueDate,
         slaStatus: item.slaStatus,
@@ -302,7 +304,7 @@ export function createHrMcpServer(actor?: RequestActor): McpServer {
     annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false },
   }, async (filters: FilterArgs) => {
     const [analytics, workflows] = await Promise.all([getWorkforceAnalytics(filters), workflowSnapshot()])
-    const activeDirectory = analytics.directoryEmployees.filter((employee) => !employee.archived_at && ["active", "on leave", "on bench", "notice period", "scheduled exit", "preboarding"].includes(employee.employment_status.toLowerCase()))
+    const activeDirectory = analytics.directoryEmployees.filter((employee) => !employee.archived_at && ["active", "on leave", "on bench", "notice period", "scheduled exit", "pending start", "preboarding"].includes(employee.employment_status.toLowerCase()))
     return result({
       ...evidence(analytics),
       kpis: analytics.kpis,
@@ -386,7 +388,7 @@ export function createHrMcpServer(actor?: RequestActor): McpServer {
     annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false },
   }, async ({ recordScope = "summary", query = "", employeeIds = [], includeExplanations = false, limit = 10, ...filters }: FilterArgs & { recordScope?: "summary" | "exited" | "high_risk" | "all"; query?: string; employeeIds?: string[]; includeExplanations?: boolean; limit?: number }) => {
     const analytics = await getWorkforceAnalytics(filters)
-    const retention = await getRetentionIntelligence(analytics)
+    const [retention, operational] = await Promise.all([getRetentionIntelligence(analytics), getOperationalRetentionEvidence(100)])
     const activeModelRecords = analytics.attrition.employeeRecords.filter((record) => !/terminated/i.test(record.employmentStatus))
     const activeHighRiskRecords = activeModelRecords.filter((record) => record.riskLevel === "high")
     const riskDistribution = {
@@ -451,6 +453,15 @@ export function createHrMcpServer(actor?: RequestActor): McpServer {
         impact360: retention.impact360,
         operatingCycle: retention.operatingCycle,
         governance: retention.governance,
+      },
+      operationalRetention: {
+        policy: operational.policy,
+        records: operational.records.filter((record) => {
+          if (exactEmployeeIds.size && !exactEmployeeIds.has(record.employeeId.toUpperCase())) return false
+          if (!terms.length) return record.reviewLevel !== "Monitor"
+          const searchable = `${record.employeeId} ${record.name} ${record.department} ${record.jobTitle} ${record.location}`.toLowerCase()
+          return terms.every((term) => searchable.includes(term))
+        }).slice(0, limit),
       },
       recordScope,
       matchCount: scopedRecords.length,

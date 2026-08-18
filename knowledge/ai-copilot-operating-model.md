@@ -8,7 +8,7 @@ Conversation history resolves explicit follow-ups but is not a factual source. C
 
 ## Current-page behavior
 
-The assistant receives a validated route and allow-listed filters. On Home and Work queue, decision questions use persisted actor-scoped workflow items. On People, named employee facts use directory records and service questions use linked workflows. On Onboarding, readiness questions combine preboarding records with recruiting handoffs. Leaves and Learning use their persisted domain records. Insights combines normalized workforce measures and durable exception work. Retention separates observed exits from model evidence.
+The assistant receives a validated route and allow-listed filters. On Home and Work queue, decision questions use persisted actor-scoped workflow items. On People, named employee facts use directory records and service questions use linked workflows. On Onboarding, readiness questions combine pending-start records with recruiting handoffs. Leaves and Learning use their persisted domain records. Insights combines normalized workforce measures and durable exception work. Retention separates observed exits, current operational review evidence, and historical model evidence.
 
 The page label is never used as an employee search phrase. A new self-contained request replaces the prior topic. Pronouns such as these employees or that department may use the most recent completed structured tool context.
 

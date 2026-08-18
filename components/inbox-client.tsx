@@ -104,7 +104,7 @@ function ItemRow({ item, onAction, selected, returnTo }: { item: InboxItem; onAc
         <div className="min-w-0">
           <div className="flex flex-wrap items-center gap-2 text-status font-semibold">
             <span className="text-muted-foreground">{domainLabel[item.type]}</span>
-            {item.priority === "high" && !item.isCompleted && <span className="text-destructive">High priority</span>}
+            {!item.isCompleted && <span className={cn(item.priorityAssessment.level === "P1" ? "text-destructive" : "text-muted-foreground")}>{item.priorityAssessment.level} · {item.priorityAssessment.score}</span>}
           </div>
           <Link href={recordHref} className="mt-1 block truncate text-card-title font-semibold hover:text-primary hover:underline">{item.title}</Link>
           <p className="mt-0.5 truncate text-meta text-muted-foreground">{item.person ? `${item.person} · ` : ""}{item.detail}</p>
@@ -150,6 +150,16 @@ function ActionDialog({ pending, leave, note, score, busy, error, onActionChange
       </header>
       <button type="button" aria-label="Close" onClick={onClose} className="absolute right-5 top-5 text-muted-foreground hover:text-foreground"><X className="size-4" /></button>
       <div className="space-y-4 p-5">
+        {!item.isCompleted && <div className="rounded-md border border-border bg-muted/20 p-3">
+          <div className="flex items-center justify-between gap-3">
+            <p className="text-label font-semibold">Calculated priority</p>
+            <p className="text-body font-semibold tabular-nums">{item.priorityAssessment.level} · {item.priorityAssessment.score}/100</p>
+          </div>
+          <ul className="mt-2 space-y-1 text-meta text-muted-foreground">
+            {item.priorityAssessment.factors.slice(0, 4).map((factor) => <li key={factor.code}><span className="font-semibold text-foreground">+{factor.points} {factor.label}:</span> {factor.evidence}</li>)}
+          </ul>
+          <p className="mt-2 text-status text-muted-foreground">Policy {item.priorityAssessment.policyVersion} orders follow-up only; it does not make the decision.</p>
+        </div>}
         <div className="grid gap-3 rounded-md border border-border bg-muted/25 p-3 sm:grid-cols-2">
           {item.requestContext.map((context) => <div key={context.label} className={context.label.toLowerCase().includes("justification") || context.label.toLowerCase().includes("note") ? "sm:col-span-2" : undefined}><p className="text-label font-semibold text-muted-foreground">{context.label}</p><p className="mt-0.5 text-body">{context.value}</p></div>)}
           {item.type === "leave" && leave && <div className="sm:col-span-2 border-t border-border pt-3"><p className="text-label font-semibold text-muted-foreground">Department coverage</p><p className="mt-0.5 text-body">{leave.coverage.approvedAway} of {leave.coverage.departmentHeadcount} employees already have approved overlapping leave; {leave.coverage.pendingRequests} other request{leave.coverage.pendingRequests === 1 ? " is" : "s are"} pending.</p></div>}

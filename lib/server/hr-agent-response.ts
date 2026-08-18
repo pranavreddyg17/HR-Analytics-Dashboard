@@ -62,7 +62,9 @@ function renderWorkQueue(plan: ToolPlan, data: Record<string, unknown>): string 
     ...rows.map((row, index) => {
       const due = row.slaStatus === "overdue" ? `overdue since ${String(row.dueDate ?? "an unrecorded date")}` : row.dueDate ? `due ${String(row.dueDate)}` : "no due date"
       const decision = row.requiresDecision ? row.actionable ? "decision available" : "decision pending outside your action scope" : "follow-up"
-      return `${index + 1}. ${String(row.title)} (${String(row.id)}) — ${String(row.domain)} · ${due} · ${decision}. Owner: ${String(row.owner)}. Next: ${String(row.nextAction)} Reason: ${String(row.attentionReason)}`
+      const assessment = object(row.priorityAssessment)
+      const factors = records(assessment.factors).slice(0, 2).map((factor) => String(factor.label)).join(", ")
+      return `${index + 1}. ${String(row.title)} (${String(row.id)}) — ${String(row.domain)} · ${String(assessment.level || row.priority)} ${Number(assessment.score) || 0}/100${factors ? ` (${factors})` : ""} · ${due} · ${decision}. Owner: ${String(row.owner)}. Next: ${String(row.nextAction)} Reason: ${String(row.attentionReason)}`
     }),
     "Open the matching record from this page to complete the action; the assistant has not changed any workflow state.",
   ].join("\n")
@@ -75,7 +77,7 @@ function renderWorkforce(plan: ToolPlan, data: Record<string, unknown>): string 
     return [
       sourceLine(data),
       "People directory",
-      `- ${number(quality, "records")} total records; ${number(quality, "activeRecords")} active, on-leave, or preboarding records.`,
+      `- ${number(quality, "records")} total records; ${number(quality, "activeRecords")} active, on-leave, or pending-start records.`,
       `- ${number(quality, "missingWorkEmail")} active records missing work email; ${number(quality, "missingManager")} missing a manager assignment.`,
       `- ${number(quality, "missingLocation")} missing location; ${number(quality, "missingJobTitle")} missing job title; ${number(quality, "missingDepartment")} missing department.`,
       number(quality, "missingWorkEmail") + number(quality, "missingManager") + number(quality, "missingLocation") + number(quality, "missingJobTitle") + number(quality, "missingDepartment") > 0
@@ -162,6 +164,8 @@ function renderAttrition(plan: ToolPlan, data: Record<string, unknown>): string 
 
   if (plan.purpose === "attrition_retention_strategy") {
     const retention = object(data.retentionIntelligence)
+    const operational = object(data.operationalRetention)
+    const employeeReviews = records(operational.records).slice(0, 5)
     const cohorts = records(retention.cohortAlerts).slice(0, 3)
     const priorities = records(retention.priorities).slice(0, 3)
     const continuity = records(retention.continuity).slice(0, 3)
@@ -174,6 +178,13 @@ function renderAttrition(plan: ToolPlan, data: Record<string, unknown>): string 
       ...(cohorts.length ? cohorts.map((row) => `- ${String(row.department)}: ${Number(row.recordedAttritionRate)}% recorded attrition; ${Number(row.aboveThreshold)} of ${Number(row.population)} profiles above the review threshold; ${String(row.replacementStatus).toLowerCase()} replacement coverage.`) : ["- No cohort meets the reporting threshold."]),
       "Actions",
       ...priorities.map((row, index) => `${index + 1}. ${String(row.cohort)} — ${String(row.action)} Owner: ${String(row.owner)}. Measure: ${String(row.measure)}.`),
+      ...(employeeReviews.length ? [
+        "Current employee review evidence",
+        ...employeeReviews.map((row) => {
+          const factors = records(row.factors)
+          return `- ${String(row.name)} (${String(row.employeeId)}): ${String(row.reviewLevel)} review, ${Number(row.reviewScore)}/100 with ${Number(row.evidenceCoverage)}% evidence coverage. ${factors.slice(0, 2).map((factor) => String(factor.evidence)).join(" ")} Next check: ${String(row.recommendedReview)}`
+        }),
+      ] : []),
       ...(continuity.some((row) => Number(row.incompleteDevelopment) > 0) ? [
         "Skills and continuity",
         ...continuity.filter((row) => Number(row.incompleteDevelopment) > 0).map((row) => `- ${String(row.department)}: ${Number(row.incompleteDevelopment)} incomplete development assignments; exposed role ${String(row.leadingRole)}; ${Number(row.openRequisitions)} open roles. ${String(row.action)}`),
@@ -343,7 +354,7 @@ function renderOnboardingReadiness(plan: ToolPlan, data: Record<string, unknown>
   return [
     sourceLine(data),
     "Onboarding readiness",
-    `- ${number(summary, "preboarding")} people are preboarding; ${number(summary, "awaitingVerification")} await verification and ${number(summary, "missingManager")} are missing a manager.`,
+    `- ${number(summary, "preboarding")} people are pending a start; ${number(summary, "awaitingVerification")} await verification and ${number(summary, "missingManager")} are missing a manager.`,
     `- ${number(summary, "openRequisitions")} active requisitions and ${number(summary, "candidatesAtOffer")} offer-stage candidates are in the recruiting handoff.`,
     ...joiners.map((row) => `- ${String(row.name)} (${String(row.employeeId)}) — starts ${String(row.startDate)}; ${String(row.verificationStatus)}. Next: ${String(row.nextAction)}`),
     ...offers.map((row) => `- Offer follow-up: ${String(row.name)} · ${String(row.role)}. ${String(row.nextStep)}${row.dueDate ? ` by ${String(row.dueDate)}` : ""}.`),

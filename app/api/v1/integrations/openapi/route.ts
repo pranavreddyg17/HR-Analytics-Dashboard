@@ -38,7 +38,7 @@ export async function GET(request: Request) {
     openapi: "3.1.0",
     info: {
       title: "LaidbackHR Workforce Intelligence API",
-      version: "1.2.0",
+      version: "1.3.0",
       description: "Versioned, scope-controlled access to workforce analytics, operational resources, persisted AI Assistant conversations, governed workflows, retention evidence, model scenarios, imports, and read-only specialist agents.",
     },
     servers: [{ url: origin }],
@@ -61,6 +61,10 @@ export async function GET(request: Request) {
         parameters: [identifier("employeeId")],
       },
       "/api/v1/integrations/v1/retention": operation("Read retention intelligence and review state", "retention:read", "get"),
+      "/api/v1/integrations/v1/retention/evidence": {
+        ...operation("Read explainable operational retention evidence", "retention:read", "get"),
+        parameters: [{ name: "limit", in: "query", schema: { type: "integer", minimum: 1, maximum: 500, default: 100 } }],
+      },
       "/api/v1/integrations/v1/retention/model": operation("Read retention model metadata and input contract", "retention:read", "get"),
       "/api/v1/integrations/v1/retention/predict": {
         post: {
@@ -83,6 +87,7 @@ export async function GET(request: Request) {
         ...operation("Read the operational work queue", "operations:read", "get"),
         parameters: [...paginationParameters, ...["type", "status"].map((name) => ({ name, in: "query", schema: { type: "string" } }))],
       },
+      "/api/v1/integrations/v1/work-items/priority-policy": operation("Read the versioned work-priority policy", "operations:read", "get"),
       "/api/v1/integrations/v1/exits": operation("Read confirmed employee exits and offboarding progress", "operations:read", "get"),
       "/api/v1/integrations/v1/assets": operation("Read asset inventory, custody, and lifecycle status", "operations:read", "get"),
       "/api/v1/integrations/v1/assistant/conversations": {

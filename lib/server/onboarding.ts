@@ -126,7 +126,7 @@ export async function listOnboardingOperations(actor: RequestActor): Promise<Onb
         AND source_entity_id=s.id AND type='employee_onboarding'
       ORDER BY created_at DESC LIMIT 1
     ) w ON TRUE
-    WHERE e.archived_at IS NULL AND LOWER(e.employment_status)='preboarding' ${managerSql}
+    WHERE e.archived_at IS NULL AND LOWER(e.employment_status) IN ('pending start','preboarding') ${managerSql}
     ORDER BY e.hire_date, e.last_name, e.first_name
     LIMIT 500
   `).bind(...(actor.role === "manager" ? [actorEmployee?.employee_id ?? ""] : [])).all<OnboardingPersistenceRow>())

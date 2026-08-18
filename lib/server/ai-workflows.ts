@@ -518,7 +518,7 @@ export async function createAiWorkflowDraft(value: unknown, actor: RequestActor)
     : []
   const learningRecipientIds = input.type === "learning_assignment"
     ? (await db.prepare(`SELECT e.employee_id FROM employee_directory_view e
-        WHERE e.archived_at IS NULL AND LOWER(e.employment_status) IN ('active','preboarding','on leave')
+        WHERE e.archived_at IS NULL AND LOWER(e.employment_status) IN ('active','pending start','preboarding','on leave')
           AND CASE ?
             WHEN 'department' THEN e.department=?
             WHEN 'job_title' THEN e.job_title=?

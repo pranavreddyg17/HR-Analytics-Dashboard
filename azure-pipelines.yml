@@ -56,8 +56,11 @@ stages:
               set -euo pipefail
               corepack enable
               pnpm install --frozen-lockfile
+              pnpm audit --prod --audit-level high
               pnpm test:interactions
               pnpm test:providers
+              pnpm test:priority
+              pnpm test:onboarding
               pnpm test:pagination
               pnpm test:insights
               docker run --detach --rm --name laidbackhr-test-postgres \

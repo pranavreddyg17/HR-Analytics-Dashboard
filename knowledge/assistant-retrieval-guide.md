@@ -8,7 +8,7 @@ If live data and retrieved guidance conflict, live data controls the factual ans
 
 ## Current-page questions
 
-The route and validated filters define page scope. Home questions use prioritized actor-scoped work. People questions use directory records and data quality. Work queue questions use persisted workflows. Onboarding questions combine new-joiner readiness and talent-acquisition handoffs. Leaves questions use leave records and decisions. Learning questions use assignments and capability mappings. Insights questions use backend analytics and durable exception actions. Retention questions use observed outcomes and governed model evidence.
+The route and validated filters define page scope. Home questions use actor-scoped work and the versioned P1–P4 priority assessment. People questions use directory records and data quality. Work queue questions use persisted workflows. Onboarding questions combine pending-start readiness with linked requisitions and candidates. Leaves questions use leave records and decisions. Learning questions use assignments and capability mappings. Insights questions use backend analytics and durable exception actions. Retention questions must distinguish observed outcomes, current operational review evidence, and the governed historical model benchmark.
 
 Page names are context, not search terms. “Summarize People” does not mean find job titles containing People. “What needs action on Onboarding?” does not mean return recruiting-source statistics.
 

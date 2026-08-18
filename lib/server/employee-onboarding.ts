@@ -96,7 +96,7 @@ export async function submitEmployeeOnboarding(value: unknown, actor: RequestAct
       INSERT INTO employees(employee_id, first_name, last_name, preferred_name, work_email, phone,
         location, manager_id, hire_date, employment_type,
         employment_status, data_source, organization_id, job_profile_id)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'Preboarding', 'self_service',
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'Pending start', 'self_service',
         'org:laidbackhr', COALESCE((SELECT id FROM job_profiles WHERE organization_id='org:laidbackhr' AND department_name=? AND title=? AND job_level=? LIMIT 1), ?))
     `).bind(employeeId, input.firstName, input.lastName, input.preferredName || null, actor.email, input.phone || null,
       input.location, manager?.employee_id ?? null, input.hireDate, input.employmentType,

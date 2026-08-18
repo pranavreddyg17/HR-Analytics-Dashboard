@@ -41,7 +41,7 @@ export async function searchWorkspace(query: string, actor: RequestActor): Promi
         AND LOWER(employee_id || ' ' || first_name || ' ' || last_name || ' ' ||
           COALESCE(preferred_name, '') || ' ' || COALESCE(work_email, '') || ' ' ||
           job_title || ' ' || department || ' ' || location) LIKE ?
-      ORDER BY CASE employment_status WHEN 'Active' THEN 0 WHEN 'Preboarding' THEN 1 ELSE 2 END, label
+      ORDER BY CASE employment_status WHEN 'Active' THEN 0 WHEN 'Pending start' THEN 1 WHEN 'Preboarding' THEN 1 ELSE 2 END, label
       LIMIT 6
     `).bind(pattern).all<SearchRow>(),
     database.prepare(`

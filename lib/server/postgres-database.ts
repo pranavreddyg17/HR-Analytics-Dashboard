@@ -13,6 +13,7 @@ import adminProviderSnapshotsMigration from "@/db/postgres/0010_admin_provider_s
 import exitAndAssetsMigration from "@/db/postgres/0011_exit_and_assets.sql?raw"
 import federatedIdentitiesMigration from "@/db/postgres/0012_federated_identities.sql?raw"
 import integrationExpansionMigration from "@/db/postgres/0013_integration_expansion.sql?raw"
+import reviewIntelligenceMigration from "@/db/postgres/0014_review_intelligence.sql?raw"
 import type { Database, Statement } from "@/lib/server/hr-repository"
 import { invalidateAnalyticsReads, sqlAffectsAnalytics } from "@/lib/server/analytics-cache"
 import { runtimeEnv } from "@/lib/server/runtime-env"
@@ -140,6 +141,7 @@ async function initialize(pool: Pool): Promise<void> {
       { id: "0011_exit_and_assets", sql: exitAndAssetsMigration },
       { id: "0012_federated_identities", sql: federatedIdentitiesMigration },
       { id: "0013_integration_expansion", sql: integrationExpansionMigration },
+      { id: "0014_review_intelligence", sql: reviewIntelligenceMigration },
     ]
     for (const migration of migrations) {
       const applied = await client.query<QueryResultRow>("SELECT id FROM schema_migrations WHERE id=$1", [migration.id])

@@ -5,6 +5,7 @@ import type { EmployeeActivity, EmployeeDirectoryResponse, EmployeeInput, Employ
 import type { RequestActor } from "@/lib/server/request-user"
 import { ensureHrDatabase, inferJobLevel, type Database } from "@/lib/server/hr-repository"
 import { getAsset, listEmployeeExits } from "@/lib/server/exit-assets"
+import { assessWorkPriority, persistWorkPriorityAssessments } from "@/lib/server/work-priority"
 
 export class PeopleError extends Error {
   constructor(message: string, public status = 400) { super(message) }
@@ -33,7 +34,7 @@ const employeeSchema = z.object({
   manager_id: optionalText(40),
   hire_date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
   employment_type: z.enum(["Full-time", "Part-time", "Contract", "Intern", "Temporary"]),
-  employment_status: z.enum(["Preboarding", "Active", "On Bench", "Notice Period", "Scheduled Exit", "On leave", "Terminated", "Resigned"]),
+  employment_status: z.enum(["Pending start", "Preboarding", "Active", "On Bench", "Notice Period", "Scheduled Exit", "On leave", "Terminated", "Resigned"]),
   version: z.number().int().positive().optional(),
 })
 
@@ -130,7 +131,7 @@ export async function listPeople({
   const safeLimit = Math.max(1, Math.min(250, limit))
   const safeOffset = Math.max(0, offset)
   const [itemsResult, countResult, dimensionResult, compositionResult] = await Promise.all([
-    database.prepare(`${employeeSelect}${clause} ORDER BY CASE e.employment_status WHEN 'Preboarding' THEN 0 WHEN 'Active' THEN 1 WHEN 'On Bench' THEN 2 WHEN 'On leave' THEN 3 WHEN 'Notice Period' THEN 4 WHEN 'Scheduled Exit' THEN 5 ELSE 6 END, display_name LIMIT ? OFFSET ?`)
+    database.prepare(`${employeeSelect}${clause} ORDER BY CASE e.employment_status WHEN 'Pending start' THEN 0 WHEN 'Preboarding' THEN 0 WHEN 'Active' THEN 1 WHEN 'On Bench' THEN 2 WHEN 'On leave' THEN 3 WHEN 'Notice Period' THEN 4 WHEN 'Scheduled Exit' THEN 5 ELSE 6 END, display_name LIMIT ? OFFSET ?`)
       .bind(...bindings, safeLimit, safeOffset).all<ManagedEmployee>(),
     database.prepare(`SELECT COUNT(*) AS count FROM employee_directory_view e${clause}`).bind(...bindings).first<{ count: number }>(),
     database.prepare(`SELECT department, location, employment_status, employment_type FROM employee_directory_view e WHERE ${populationCondition}`).all<{ department: string; location: string; employment_status: string; employment_type: string }>(),
@@ -172,7 +173,7 @@ export async function getPerson(employeeId: string, actor?: RequestActor): Promi
     database.prepare("SELECT * FROM attrition_events_view WHERE employee_id = ? ORDER BY exit_date DESC LIMIT 20").bind(employeeId).all<AttritionRecord>(),
     database.prepare("SELECT * FROM attrition_model_profiles_view WHERE employee_id = ?").bind(employeeId).first<AttritionModelProfile>(),
     database.prepare("SELECT * FROM employee_activity WHERE employee_id = ? ORDER BY created_at DESC LIMIT 100").bind(employeeId).all<EmployeeActivity>(),
-    database.prepare(`SELECT p.id, p.code, p.name, p.client_name, p.status, a.role_title, a.allocation_percent, a.starts_on, a.ends_on, a.is_primary
+    database.prepare(`SELECT p.id, p.code, p.name, p.client_name, p.status, p.business_criticality, p.delivery_impact, a.role_title, a.allocation_percent, a.starts_on, a.ends_on, a.is_primary
       FROM employee_project_assignments a JOIN projects p ON p.id=a.project_id
       WHERE a.employee_id=? ORDER BY a.is_primary DESC, a.starts_on DESC LIMIT 30`).bind(employeeId).all<Record<string, unknown>>(),
     canViewSensitiveHrData ? database.prepare("SELECT annual_salary, currency, pay_frequency, effective_from, effective_to FROM employee_compensation WHERE employee_id=? ORDER BY effective_from DESC LIMIT 20").bind(employeeId).all<Record<string, unknown>>() : Promise.resolve({ results: [] as Record<string, unknown>[] }),
@@ -345,6 +346,7 @@ export async function deletePersonPermanently(employeeId: string, actor: Request
 
 export async function listInboxItems(actor?: RequestActor): Promise<InboxItem[]> {
   const database = await databaseOrThrow()
+  type UnassessedInboxItem = Omit<InboxItem, "priorityAssessment">
   type WorkflowPerson = {
     first_name?: string
     last_name?: string
@@ -517,8 +519,8 @@ export async function listInboxItems(actor?: RequestActor): Promise<InboxItem[]>
   }
   const reviewHref = (type: InboxItem["type"], id: string, view: "decisions" | "employees" | "my_work" | "completed"): string =>
     `/inbox?view=${view}&type=${type}&item=${encodeURIComponent(id)}`
-  return [
-    ...visibleLeave.map((row): InboxItem => {
+  const items = [
+    ...visibleLeave.map((row): UnassessedInboxItem => {
       const isCompleted = Boolean(row.completed_at) || ["approved", "rejected"].includes(row.approval_status.toLowerCase())
       const dueDate = row.due_at?.slice(0, 10) || detailValue(row, "decisionDueDate") || row.start_date
       const sla = slaStatus(dueDate, isCompleted)
@@ -541,7 +543,7 @@ export async function listInboxItems(actor?: RequestActor): Promise<InboxItem[]>
         recordHref: `/leaves?request=${encodeURIComponent(row.id)}`,
       }
     }),
-    ...visibleHiring.map((row): InboxItem => {
+    ...visibleHiring.map((row): UnassessedInboxItem => {
       const status = String(row.recruitment_status)
       const isCompleted = Boolean(row.completed_at) || ["closed", "rejected", "hired"].includes(status.toLowerCase())
       const dueDate = row.due_at?.slice(0, 10) || String(row.application_date)
@@ -571,7 +573,7 @@ export async function listInboxItems(actor?: RequestActor): Promise<InboxItem[]>
         recordHref: `/onboarding?view=talent&requisition=${encodeURIComponent(String(row.id))}`,
       }
     }),
-    ...visibleTraining.map((row): InboxItem => {
+    ...visibleTraining.map((row): UnassessedInboxItem => {
       const isCompleted = Boolean(row.completed_at) || row.completion_status.toLowerCase() === "completed"
       const dueDate = row.due_at?.slice(0, 10) || detailValue(row, "dueDate") || row.completion_date
       const sla = slaStatus(dueDate, isCompleted)
@@ -594,7 +596,7 @@ export async function listInboxItems(actor?: RequestActor): Promise<InboxItem[]>
         recordHref: `/courses?assignment=${encodeURIComponent(row.id)}`,
       }
     }),
-    ...visibleInsight.map((row): InboxItem => {
+    ...visibleInsight.map((row): UnassessedInboxItem => {
       const isCompleted = Boolean(row.completed_at) || row.workflow_status?.toLowerCase() === "completed"
       const dueDate = row.due_at?.slice(0, 10) ?? null
       const sla = slaStatus(dueDate, isCompleted)
@@ -619,7 +621,7 @@ export async function listInboxItems(actor?: RequestActor): Promise<InboxItem[]>
         recordHref: insightRecordHref(row),
       }
     }),
-    ...visibleServices.map((row): InboxItem => {
+    ...visibleServices.map((row): UnassessedInboxItem => {
       const type = row.type === "reimbursement" ? "reimbursement" : "case"
       const status = row.workflow_status || "Open"
       const isCompleted = Boolean(row.completed_at) || ["approved", "rejected", "paid", "resolved", "closed"].includes(status.toLowerCase())
@@ -656,7 +658,7 @@ export async function listInboxItems(actor?: RequestActor): Promise<InboxItem[]>
         recordHref: reviewHref(type, row.id, isCompleted ? "completed" : type === "reimbursement" ? "decisions" : "my_work"),
       }
     }),
-    ...visibleOnboarding.map((row): InboxItem => {
+    ...visibleOnboarding.map((row): UnassessedInboxItem => {
       const status = row.workflow_status || "Submitted"
       const isCompleted = Boolean(row.completed_at) || ["approved", "rejected"].includes(status.toLowerCase())
       const dueDate = row.due_at?.slice(0, 10) ?? null
@@ -686,7 +688,7 @@ export async function listInboxItems(actor?: RequestActor): Promise<InboxItem[]>
         recordHref: `/people/${encodeURIComponent(row.employee_id)}`,
       }
     }),
-    ...visibleOffboarding.map((row): InboxItem => {
+    ...visibleOffboarding.map((row): UnassessedInboxItem => {
       const isCompleted = Boolean(row.completed_at) || ["completed", "cancelled", "closed"].includes((row.exit_status || row.workflow_status || "").toLowerCase())
       const dueDate = row.due_at?.slice(0, 10) || row.expected_exit_date
       const sla = slaStatus(dueDate, isCompleted)
@@ -711,8 +713,32 @@ export async function listInboxItems(actor?: RequestActor): Promise<InboxItem[]>
         recordHref: `/exits?exit=${encodeURIComponent(row.id)}`,
       }
     }),
-  ].sort((left, right) => Number(left.isCompleted) - Number(right.isCompleted)
-    || ({ high: 0, medium: 1, low: 2 })[left.priority] - ({ high: 0, medium: 1, low: 2 })[right.priority]
+  ] as UnassessedInboxItem[]
+  const assessedWithPolicy = items.map((item) => {
+    const assessment = assessWorkPriority(item)
+    return {
+      assessment,
+      item: {
+        ...item,
+        priority: assessment.level === "P1" || assessment.level === "P2" ? "high" as const : assessment.level === "P3" ? "medium" as const : "low" as const,
+        priorityAssessment: {
+          policyId: assessment.policyId,
+          policyVersion: assessment.policyVersion,
+          level: assessment.level,
+          score: assessment.score,
+          factors: assessment.factors,
+        },
+      },
+    }
+  })
+  await persistWorkPriorityAssessments(database, assessedWithPolicy.map(({ item, assessment }) => ({
+    workflowId: item.id,
+    assessment,
+  })))
+  const assessed: InboxItem[] = assessedWithPolicy.map(({ item }) => item)
+  return assessed.sort((left, right) => Number(left.isCompleted) - Number(right.isCompleted)
+    || left.priorityAssessment.level.localeCompare(right.priorityAssessment.level)
+    || right.priorityAssessment.score - left.priorityAssessment.score
     || (left.dueDate ?? "9999-12-31").localeCompare(right.dueDate ?? "9999-12-31")
     || right.createdAt.localeCompare(left.createdAt))
 }

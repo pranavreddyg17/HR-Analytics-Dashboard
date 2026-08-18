@@ -10,6 +10,7 @@ const capabilities = {
     { method: "GET", path: "/api/v1/integrations/v1/people", scope: "people:read", purpose: "Paginated employee directory with operational profile fields" },
     { method: "GET", path: "/api/v1/integrations/v1/people/{employeeId}", scope: "people:read", purpose: "Minimum employee profile and linked operational counts" },
     { method: "GET", path: "/api/v1/integrations/v1/retention", scope: "retention:read", purpose: "Retention cohorts, model governance, and durable review state" },
+    { method: "GET", path: "/api/v1/integrations/v1/retention/evidence", scope: "retention:read", purpose: "Explainable operational review signals from current HR records" },
     { method: "GET", path: "/api/v1/integrations/v1/retention/model", scope: "retention:read", purpose: "Prediction model metadata, input contract, and intended-use controls" },
     { method: "POST", path: "/api/v1/integrations/v1/retention/predict", scope: "model:invoke", purpose: "Explainable historical-model scenario assessment" },
     { method: "GET", path: "/api/v1/integrations/v1/operations", scope: "operations:read", purpose: "Actor-neutral operational counts for onboarding, leave, learning, and work queues" },
@@ -18,6 +19,7 @@ const capabilities = {
     { method: "GET", path: "/api/v1/integrations/v1/leave", scope: "operations:read", purpose: "Filtered leave register, schedule, and coverage" },
     { method: "GET", path: "/api/v1/integrations/v1/learning", scope: "operations:read", purpose: "Learning assignments, capability evidence, and cohort recommendations" },
     { method: "GET", path: "/api/v1/integrations/v1/work-items", scope: "operations:read", purpose: "Paginated operational work queue and durable status" },
+    { method: "GET", path: "/api/v1/integrations/v1/work-items/priority-policy", scope: "operations:read", purpose: "Versioned priority factors, thresholds, and decision controls" },
     { method: "GET", path: "/api/v1/integrations/v1/exits", scope: "operations:read", purpose: "Confirmed exit workflows, offboarding progress, asset recovery, and access-removal exceptions" },
     { method: "GET", path: "/api/v1/integrations/v1/assets", scope: "operations:read", purpose: "Equipment inventory, custody, condition, warranty, and lifecycle exceptions" },
     { method: "GET", path: "/api/v1/integrations/v1/assistant/conversations", scope: "assistant:use", purpose: "List service-client-owned assistant conversations" },
@@ -34,7 +36,7 @@ const capabilities = {
     { method: "POST", path: "/api/v1/integrations/v1/data/import", scope: "data:write", purpose: "Validate or apply a governed domain import" },
   ],
   agents: agentCatalog,
-  guarantees: ["PostgreSQL is the system of record", "service credentials are scoped, expiring, and revocable", "service clients are rate limited", "assistant conversations are isolated per service client", "agent tools are read-only", "workflow mutations require explicit confirmation and idempotency", "approval and employment decisions are not exposed to service credentials", "every authenticated service request is audited"],
+  guarantees: ["PostgreSQL is the system of record", "service credentials are scoped, expiring, and revocable", "service clients are rate limited", "assistant conversations are isolated per service client", "agent tools are read-only", "work priority is explainable and never makes a decision", "workflow mutations require explicit confirmation and idempotency", "approval and employment decisions are not exposed to service credentials", "every authenticated service request is audited"],
 }
 
 export async function GET(request: Request) {

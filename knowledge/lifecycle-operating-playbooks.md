@@ -2,7 +2,7 @@
 
 ## New-joiner onboarding
 
-Onboarding starts after an employee profile is created with Preboarding status. The minimum readiness record includes legal or preferred name, work email, department, job profile, location, employment type, start date, and reporting manager. Employee-submitted organization and compensation details remain pending until People Operations verifies them.
+Onboarding starts after an employee profile is created with Pending start status. The minimum readiness record includes legal or preferred name, work email, department, job profile, location, employment type, start date, and reporting manager. Employee-submitted organization and compensation details remain pending until People Operations verifies them.
 
 The readiness sequence is: verify submitted details, resolve missing manager or job profile, confirm start date, activate the employee, and record the verification event. Rejection requires a clear correction reason. Approval updates the employee status, onboarding state, compensation record, workflow status, and audit activity in one domain operation.
 

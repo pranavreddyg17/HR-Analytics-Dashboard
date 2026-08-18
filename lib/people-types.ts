@@ -86,6 +86,13 @@ export type InboxItem = {
   dueDate: string | null
   status: string
   priority: "high" | "medium" | "low"
+  priorityAssessment: {
+    policyId: string
+    policyVersion: string
+    level: "P1" | "P2" | "P3" | "P4"
+    score: number
+    factors: Array<{ code: string; label: string; points: number; evidence: string }>
+  }
   owner: string
   ownerEmail: string | null
   nextAction: string

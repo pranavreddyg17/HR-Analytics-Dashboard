@@ -10,6 +10,7 @@ on:
 permissions:
   contents: read
   id-token: write
+  security-events: write
 
 concurrency:
   group: laidbackhr-production
@@ -44,6 +45,11 @@ jobs:
           --health-retries 12
     steps:
       - uses: actions/checkout@v7
+      - name: Initialize CodeQL
+        uses: github/codeql-action/init@v4
+        with:
+          languages: javascript-typescript
+          queries: security-extended
       - uses: pnpm/action-setup@v4
         with:
           version: 11.20.0
@@ -57,8 +63,11 @@ jobs:
           set -euo pipefail
           corepack enable
           pnpm install --frozen-lockfile
+          pnpm audit --prod --audit-level high
           pnpm test:interactions
           pnpm test:providers
+          pnpm test:priority
+          pnpm test:onboarding
           pnpm test:pagination
           pnpm test:insights
           DATABASE_URL='postgresql://postgres:postgres@127.0.0.1:5432/laidbackhr_test' DATABASE_SSL_MODE=disable pnpm test:operations
@@ -107,6 +116,8 @@ jobs:
           terraform -chdir=infra init -backend=false
           terraform -chdir=infra fmt -check -recursive
           terraform -chdir=infra validate
+      - name: Analyze application security
+        uses: github/codeql-action/analyze@v4
 
   deploy:
     name: Deploy
@@ -169,6 +180,8 @@ jobs:
           tags: ${{ env.ACR_LOGIN_SERVER }}/laidbackhr-web:${{ env.IMAGE_TAG }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
+          provenance: mode=max
+          sbom: true
       - name: Apply Azure infrastructure
         run: |
           set -euo pipefail

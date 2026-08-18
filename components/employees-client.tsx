@@ -136,13 +136,22 @@ export function EmployeesClient({ employees, total }: { employees: Employee[]; t
 
                 {open && (
                   <div className="border-t border-border bg-muted/25 px-4 py-3">
+                    <div className="grid gap-4 md:grid-cols-[1.35fr_1fr]">
                       <div>
-                        <p className="text-xs font-semibold">Review guidance</p>
-                        <p className="mt-1 text-sm text-pretty">{employee.suggestion}</p>
-                        <p className="mt-2 text-xs text-muted-foreground">
-                          Tenure: {employee.tenure} · Job satisfaction: {employee.jobSatisfaction}/4 · Work-life balance: {employee.workLifeBalance}/4 · Historical outcome: {employee.observedAttrition}
-                        </p>
+                        <p className="text-xs font-semibold">Model contributors</p>
+                        <div className="mt-2 space-y-2">
+                          {employee.modelDrivers.map((driver) => <div key={driver.feature} className="rounded-md border border-border bg-background px-3 py-2">
+                            <div className="flex items-center justify-between gap-3"><p className="text-body font-semibold">{driver.label}</p><p className="text-meta tabular-nums text-muted-foreground">+{driver.contribution.toFixed(1)} points</p></div>
+                            <p className="mt-1 text-meta text-muted-foreground">{driver.explanation}</p>
+                          </div>)}
+                        </div>
                       </div>
+                      <div>
+                        <p className="text-xs font-semibold">Human review</p>
+                        <p className="mt-1 text-sm text-pretty">{employee.suggestion}</p>
+                        <p className="mt-2 text-xs text-muted-foreground">Historical outcome: {employee.observedAttrition}. Contributors compare this record with the model reference profile; they are not proven causes.</p>
+                      </div>
+                    </div>
                   </div>
                 )}
               </div>
