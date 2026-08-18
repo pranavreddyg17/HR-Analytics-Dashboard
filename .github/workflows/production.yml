@@ -50,18 +50,15 @@ jobs:
         with:
           languages: javascript-typescript
           queries: security-extended
-      - uses: pnpm/action-setup@v4
+      - uses: pnpm/setup@v1
         with:
           version: 11.20.0
-      - uses: actions/setup-node@v6
-        with:
-          node-version: "22"
-          cache: pnpm
-          cache-dependency-path: pnpm-lock.yaml
+          runtime: node@22
+          cache: true
+          install: false
       - name: Validate web application
         run: |
           set -euo pipefail
-          corepack enable
           pnpm install --frozen-lockfile
           pnpm audit --prod --audit-level high
           pnpm test:interactions
@@ -127,14 +124,12 @@ jobs:
     environment: production
     steps:
       - uses: actions/checkout@v7
-      - uses: pnpm/action-setup@v4
+      - uses: pnpm/setup@v1
         with:
           version: 11.20.0
-      - uses: actions/setup-node@v6
-        with:
-          node-version: "22"
-          cache: pnpm
-          cache-dependency-path: pnpm-lock.yaml
+          runtime: node@22
+          cache: true
+          install: false
       - name: Sign in to Azure with OIDC
         uses: azure/login@v3
         with:
@@ -198,7 +193,6 @@ jobs:
       - name: Synchronize grounded HR knowledge
         run: |
           set -euo pipefail
-          corepack enable
           pnpm install --frozen-lockfile
           export AZURE_AI_SEARCH_API_KEY="$(az keyvault secret show --vault-name "$APP_KEY_VAULT" --name azure-ai-search-key --query value -o tsv)"
           export AZURE_AI_SEARCH_ENDPOINT="$(az keyvault secret show --vault-name "$APP_KEY_VAULT" --name azure-ai-search-endpoint --query value -o tsv)"
