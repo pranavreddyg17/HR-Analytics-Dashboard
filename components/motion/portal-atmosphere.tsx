@@ -105,6 +105,7 @@ export function PortalAtmosphere({
         className={styles.starField}
         style={reduceMotion ? undefined : { x: farX, y: farY }}
       />
+      <div className={styles.depthField} />
       <m.div
         className={cn(styles.nebula, styles.farNebula)}
         style={reduceMotion ? undefined : { x: farX, y: farY }}
@@ -112,6 +113,14 @@ export function PortalAtmosphere({
       <m.div
         className={cn(styles.nebula, styles.nearNebula)}
         style={reduceMotion ? undefined : { x: nearX, y: nearY }}
+      />
+      <m.div
+        className={cn(styles.nebula, styles.middleNebula)}
+        style={reduceMotion ? undefined : { x: farX, y: nearY }}
+      />
+      <m.div
+        className={cn(styles.nebula, styles.lowerNebula)}
+        style={reduceMotion ? undefined : { x: nearX, y: farY }}
       />
       <m.div
         className={styles.mesh}

@@ -5,6 +5,7 @@
 }
 
 .starField,
+.depthField,
 .nebula,
 .mesh,
 .orbit,
@@ -16,14 +17,25 @@
 
 .starField {
   inset: -20px;
-  opacity: 0.2;
+  opacity: 0.25;
   background-image:
-    radial-gradient(circle, rgb(101 82 190 / 0.34) 0 0.6px, transparent 0.9px),
-    radial-gradient(circle, rgb(31 126 172 / 0.22) 0 0.55px, transparent 0.85px);
+    radial-gradient(circle, rgb(101 82 190 / 0.38) 0 0.65px, transparent 1px),
+    radial-gradient(circle, rgb(31 126 172 / 0.26) 0 0.55px, transparent 0.9px),
+    radial-gradient(circle, rgb(151 130 255 / 0.24) 0 0.5px, transparent 0.85px);
   background-position: 0 0, 19px 23px;
-  background-size: 43px 43px, 61px 61px;
-  mask-image: linear-gradient(180deg, black 0%, rgb(0 0 0 / 0.34) 34%, transparent 74%);
-  -webkit-mask-image: linear-gradient(180deg, black 0%, rgb(0 0 0 / 0.34) 34%, transparent 74%);
+  background-size: 43px 43px, 61px 61px, 89px 89px;
+  mask-image: linear-gradient(180deg, black 0%, rgb(0 0 0 / 0.46) 18%, black 42%, rgb(0 0 0 / 0.42) 70%, black 100%);
+  -webkit-mask-image: linear-gradient(180deg, black 0%, rgb(0 0 0 / 0.46) 18%, black 42%, rgb(0 0 0 / 0.42) 70%, black 100%);
+}
+
+.depthField {
+  inset: 0;
+  opacity: 0.56;
+  background:
+    radial-gradient(ellipse 36% 18% at 88% 30%, rgb(122 88 246 / 0.085), transparent 72%),
+    radial-gradient(ellipse 30% 16% at 12% 57%, rgb(30 145 191 / 0.07), transparent 74%),
+    radial-gradient(ellipse 38% 20% at 74% 84%, rgb(112 79 232 / 0.072), transparent 75%),
+    linear-gradient(115deg, transparent 15%, rgb(112 79 232 / 0.025) 42%, transparent 64%);
 }
 
 .nebula {
@@ -42,13 +54,33 @@
 }
 
 .nearNebula {
-  top: 238px;
+  top: 22%;
   left: -290px;
   width: 620px;
   height: 620px;
   opacity: 0.34;
   background:
     radial-gradient(circle at 55% 46%, rgb(20 143 190 / 0.105) 0%, rgb(61 81 187 / 0.035) 44%, transparent 72%);
+}
+
+.middleNebula {
+  top: 49%;
+  right: -330px;
+  width: 700px;
+  height: 700px;
+  opacity: 0.31;
+  background:
+    radial-gradient(circle at 43% 50%, rgb(126 88 244 / 0.12) 0%, rgb(103 75 221 / 0.042) 44%, transparent 73%);
+}
+
+.lowerNebula {
+  bottom: -240px;
+  left: 18%;
+  width: 780px;
+  height: 620px;
+  opacity: 0.3;
+  background:
+    radial-gradient(ellipse at 52% 55%, rgb(33 141 188 / 0.09) 0%, rgb(91 73 210 / 0.036) 48%, transparent 74%);
 }
 
 .mesh {
@@ -122,6 +154,14 @@
 
   .nearNebula {
     left: -420px;
+  }
+
+  .middleNebula {
+    right: -510px;
+  }
+
+  .lowerNebula {
+    left: -360px;
   }
 }
 

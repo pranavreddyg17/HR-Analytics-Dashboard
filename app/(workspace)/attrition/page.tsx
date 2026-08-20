@@ -60,28 +60,6 @@ export default async function AttritionPage() {
         { label: "Coverage gaps", value: replacementGaps, detail: "Hiring and succession coverage" },
       ]} />
 
-      <section aria-labelledby="operational-evidence-heading">
-        <WorkspaceSectionHeader
-          title="Operational review signals"
-          description="Current pay, role tenure, performance, staffing, project, and manager-support evidence. Scores prioritize review; they are not resignation probabilities."
-        />
-        <Card className="mt-3 gap-0 overflow-hidden py-0 shadow-none">
-          <CardContent className="p-0">
-            <div className="hidden grid-cols-[1.1fr_100px_1.35fr_1.35fr_auto] gap-4 border-b bg-muted/35 px-5 py-2.5 text-label text-muted-foreground lg:grid">
-              <span>Employee</span><span>Review</span><span>Leading evidence</span><span>Recommended check</span><span>Open</span>
-            </div>
-            {employeeReviews.slice(0, 8).map((record) => <div key={record.employeeId} className="grid gap-3 border-b px-5 py-4 last:border-b-0 lg:grid-cols-[1.1fr_100px_1.35fr_1.35fr_auto] lg:items-start lg:gap-4">
-              <div><p className="text-card-title font-semibold">{record.name}</p><p className="mt-1 text-meta text-muted-foreground">{record.jobTitle} · {record.department}</p></div>
-              <div><Badge variant={record.reviewLevel === "Priority" ? "destructive" : "secondary"}>{record.reviewLevel}</Badge><p className="mt-1 text-meta tabular-nums text-muted-foreground">{record.reviewScore}/100 · {record.evidenceCoverage}% coverage</p></div>
-              <div><p className="text-body font-semibold">{record.factors[0]?.label}</p><p className="mt-1 text-meta text-muted-foreground">{record.factors[0]?.evidence}</p></div>
-              <p className="text-body">{record.recommendedReview}</p>
-              <Button nativeButton={false} size="xs" variant="outline" render={<Link href={`/people/${encodeURIComponent(record.employeeId)}?returnTo=%2Fattrition`} />}>Review</Button>
-            </div>)}
-            {!employeeReviews.length && <p className="px-5 py-8 text-center text-body text-muted-foreground">No current employee records meet the operational review threshold.</p>}
-          </CardContent>
-        </Card>
-      </section>
-
       <section aria-labelledby="department-review-heading">
         <WorkspaceSectionHeader
           title="Department continuity"
