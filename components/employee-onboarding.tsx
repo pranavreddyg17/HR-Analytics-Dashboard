@@ -6,6 +6,7 @@ import * as m from "motion/react-m"
 
 import { SignOutControl } from "@/components/sign-out-control"
 import { SessionRevalidator } from "@/components/session-revalidator"
+import { PortalAtmosphere } from "@/components/motion/portal-atmosphere"
 import { Button } from "@/components/ui/button"
 import type { EmployeeOnboardingState } from "@/lib/server/employee-onboarding"
 
@@ -45,10 +46,11 @@ export function EmployeeOnboarding({ user, onboarding }: { user: { name: string;
 
   return <main className="employee-shell min-h-screen text-foreground">
     <SessionRevalidator enabled={user.authenticated} />
+    <PortalAtmosphere intensity={0.55} />
     <header className="employee-shell__header">
       <div className="mx-auto flex min-h-14 max-w-3xl items-center justify-end gap-3 px-4 sm:px-6"><div className="flex items-center gap-3">{user.workspaceAccess && <Link href="/" className="employee-shell__sign-out">HR workspace</Link>}<SignOutControl className="employee-shell__sign-out" /></div></div>
     </header>
-    <div className="mx-auto max-w-3xl px-4 py-8 sm:px-6">
+    <div className="relative z-[1] mx-auto max-w-3xl px-4 py-8 sm:px-6">
       {onboarding.status === "submitted" ? <m.section className="surface-card p-6" initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }}>
         <h1 className="text-page-title">Profile awaiting verification</h1>
         <p className="mt-2 text-page-description text-muted-foreground">People Operations is reviewing your role, reporting line, and employment details. Employee services will open after approval.</p>

@@ -6,5 +6,5 @@ export const dynamic = "force-dynamic"
 
 export default async function AssetsPage() {
   const actor = await requireRequestActor()
-  return <AssetInventoryWorkspace initialData={await listAssets({ limit: 250 })} canManage={["admin", "hr"].includes(actor.role)} />
+  return <AssetInventoryWorkspace initialData={await listAssets({ limit: 25 })} canManage={["admin", "hr"].includes(actor.role)} />
 }

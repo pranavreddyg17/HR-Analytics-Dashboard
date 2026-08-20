@@ -1,5 +1,9 @@
 import type { ReactNode } from "react"
 
+import {
+  MotionMetricStrip,
+  type WorkspaceMetric,
+} from "@/components/motion/motion-metric-strip"
 import { cn } from "@/lib/utils"
 
 export function WorkspacePage({ children, className }: { children: ReactNode; className?: string }) {
@@ -29,28 +33,8 @@ export function WorkspaceHeader({
   )
 }
 
-type WorkspaceMetric = {
-  label: string
-  value: ReactNode
-  detail?: ReactNode
-}
-
 export function MetricStrip({ metrics, className }: { metrics: WorkspaceMetric[]; className?: string }) {
-  return (
-    <section
-      aria-label="Summary"
-      className={cn("workspace-metrics", className)}
-      style={{ "--metric-count": metrics.length } as React.CSSProperties}
-    >
-      {metrics.map((metric) => (
-        <div key={metric.label} className="workspace-metric">
-          <p className="text-label text-muted-foreground">{metric.label}</p>
-          <p className="mt-1 text-kpi font-semibold tabular-nums">{metric.value}</p>
-          {metric.detail && <p className="mt-1 text-meta text-muted-foreground">{metric.detail}</p>}
-        </div>
-      ))}
-    </section>
-  )
+  return <MotionMetricStrip metrics={metrics} className={className} />
 }
 
 export function WorkspaceSectionHeader({

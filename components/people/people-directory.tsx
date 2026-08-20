@@ -4,6 +4,8 @@ import Link from "next/link"
 import { useRouter, useSearchParams } from "next/navigation"
 import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { FilterX, Plus, Search, SlidersHorizontal } from "lucide-react"
+import { useReducedMotion } from "motion/react"
+import * as m from "motion/react-m"
 import { Cell, Pie, PieChart, ResponsiveContainer } from "recharts"
 
 import { Button } from "@/components/ui/button"
@@ -221,6 +223,7 @@ export function PeopleDirectory({ initialData, initialManagerPool }: { initialDa
 
         <div className="relative min-h-48">
           {loading && data && <div className="absolute inset-x-0 top-0 z-10 h-0.5 overflow-hidden bg-primary/10"><div className="h-full w-full animate-pulse bg-primary" /></div>}
+          <m.div key={loadedRequest ?? "initial-loading"} initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ duration: 0.14 }}>
           {!data && loading ? <DirectorySkeleton /> : error ? (
             <div className="flex min-h-64 flex-col items-center justify-center gap-3 p-6 text-center"><div><p className="font-semibold">Employee records could not be loaded</p><p className="mt-1 text-sm text-muted-foreground">{error}</p></div><Button variant="outline" onClick={() => setRetry((current) => current + 1)}>Try again</Button></div>
           ) : data?.items.length ? (
@@ -230,6 +233,7 @@ export function PeopleDirectory({ initialData, initialManagerPool }: { initialDa
           ) : (
             <div className="flex min-h-72 flex-col items-center justify-center p-6 text-center"><h3 className="font-semibold">No employees found</h3><p className="mt-1 max-w-sm text-sm text-muted-foreground">Change the search or filters, or add an employee record.</p><div className="mt-4 flex gap-2"><Button variant="outline" onClick={clearFilters}>Reset filters</Button><Button onClick={openDrawer}><Plus className="size-4" />Add employee</Button></div></div>
           )}
+          </m.div>
         </div>
 
         {data && data.items.length > 0 && <div className="flex flex-col gap-3 border-t border-border/70 bg-muted/20 px-5 py-3 sm:flex-row sm:items-center sm:justify-between"><p className="text-xs text-muted-foreground">{firstRecord.toLocaleString()}–{lastRecord.toLocaleString()} of {data.total.toLocaleString()}</p><div className="flex gap-2"><Button size="sm" variant="outline" disabled={page === 0 || loading} onClick={() => setPage((current) => Math.max(0, current - 1))}>Previous</Button><Button size="sm" variant="outline" disabled={page + 1 >= totalPages || loading} onClick={() => setPage((current) => Math.min(totalPages - 1, current + 1))}>Next</Button></div></div>}
@@ -256,6 +260,7 @@ function WorkforceComposition({
   selected: string
   onSelect: (department: string) => void
 }) {
+  const reduceMotion = useReducedMotion()
   const total = rows.reduce((sum, row) => sum + row.count, 0)
   const visible = rows.slice(0, 6)
   const remaining = rows.slice(6).reduce((sum, row) => sum + row.count, 0)
@@ -281,6 +286,8 @@ function WorkforceComposition({
                   paddingAngle={1}
                   stroke="var(--card)"
                   strokeWidth={2}
+                  isAnimationActive={!reduceMotion}
+                  animationDuration={reduceMotion ? 0 : 360}
                   onClick={(entry) => {
                     const name = String((entry as { name?: unknown }).name ?? "")
                     if (name && name !== "Other") onSelect(name)

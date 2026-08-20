@@ -4,6 +4,8 @@ import { useEffect, useMemo, useRef, useState } from "react"
 import Link from "next/link"
 import { useRouter, useSearchParams } from "next/navigation"
 import { Check, ChevronsUpDown, LoaderCircle, Search } from "lucide-react"
+import { LayoutGroup, useReducedMotion } from "motion/react"
+import * as m from "motion/react-m"
 import {
   Bar,
   BarChart,
@@ -47,6 +49,13 @@ type Filters = {
 type CostInputs = Required<Pick<Filters, "recruitingCostPerHire" | "vacancyProductivityPercent" | "onboardingDays" | "onboardingProductivityPercent" | "courseFeePerLearner" | "courseHoursPerLearner">>
 
 type AnalysisView = "overview" | "impact" | "talent" | "capability"
+
+const insightViews: Array<{ id: AnalysisView; label: string }> = [
+  { id: "overview", label: "Overview" },
+  { id: "impact", label: "Workforce impact" },
+  { id: "talent", label: "Talent supply" },
+  { id: "capability", label: "Capability" },
+]
 
 const viewGuidance: Record<AnalysisView, { title: string; description: string }> = {
   overview: { title: "Operating overview", description: "Start with department exceptions, then create or open the work item that owns the follow-up." },
@@ -135,6 +144,7 @@ function FlowTooltip({ active, payload, label }: { active?: boolean; payload?: A
 }
 
 function FlowChart({ rows }: { rows: ReturnType<typeof flowRows> }) {
+  const reduceMotion = useReducedMotion()
   if (!rows.length) return <div className="flex h-64 items-center justify-center rounded-md border border-dashed border-border px-6 text-center text-body text-muted-foreground">No hires or exits are recorded for this period.</div>
   return (
     <div className="h-64 w-full">
@@ -145,8 +155,8 @@ function FlowChart({ rows }: { rows: ReturnType<typeof flowRows> }) {
           <YAxis allowDecimals={false} axisLine={false} tickLine={false} tick={{ fill: "var(--muted-foreground)", fontSize: 12 }} />
           <Tooltip content={<FlowTooltip />} />
           <Legend />
-          <Bar dataKey="hires" name="Completed hires" fill={chartSeries.positive} radius={[3, 3, 0, 0]} />
-          <Bar dataKey="exits" name="Recorded exits" fill={chartSeries.negative} radius={[3, 3, 0, 0]} />
+          <Bar dataKey="hires" name="Completed hires" fill={chartSeries.positive} radius={[3, 3, 0, 0]} isAnimationActive={!reduceMotion} animationDuration={360} />
+          <Bar dataKey="exits" name="Recorded exits" fill={chartSeries.negative} radius={[3, 3, 0, 0]} isAnimationActive={!reduceMotion} animationDuration={360} />
         </BarChart>
       </ResponsiveContainer>
     </div>
@@ -154,6 +164,7 @@ function FlowChart({ rows }: { rows: ReturnType<typeof flowRows> }) {
 }
 
 function ExitReasonChart({ rows }: { rows: BreakdownPoint[] }) {
+  const reduceMotion = useReducedMotion()
   if (!rows.length) return <div className="flex h-64 items-center justify-center rounded-md border border-dashed border-border px-6 text-center text-body text-muted-foreground">No exit reasons are recorded for this period.</div>
   const total = rows.reduce((sum, row) => sum + row.value, 0)
   return (
@@ -161,7 +172,7 @@ function ExitReasonChart({ rows }: { rows: BreakdownPoint[] }) {
       <div className="h-48 w-full">
         <ResponsiveContainer width="100%" height="100%" minWidth={0} initialDimension={{ width: 180, height: 192 }}>
           <PieChart>
-            <Pie data={rows} dataKey="value" nameKey="label" innerRadius={45} outerRadius={76} paddingAngle={1} stroke="var(--card)">
+            <Pie data={rows} dataKey="value" nameKey="label" innerRadius={45} outerRadius={76} paddingAngle={1} stroke="var(--card)" isAnimationActive={!reduceMotion} animationDuration={360}>
               {rows.map((row, index) => <Cell key={row.label} fill={categoricalChartColors[index % categoricalChartColors.length]} />)}
             </Pie>
             <Tooltip formatter={(value) => [`${value} exits`, "Recorded"]} />
@@ -201,6 +212,7 @@ function DepartmentPressure({ data, onSelect }: { data: WorkforceAnalytics; onSe
 }
 
 function TenureAttrition({ data }: { data: WorkforceAnalytics }) {
+  const reduceMotion = useReducedMotion()
   const rows = data.decisionSupport.tenureAttrition
   return <div className="h-64 w-full"><ResponsiveContainer width="100%" height="100%" minWidth={0} initialDimension={{ width: 560, height: 256 }}>
     <BarChart data={rows} margin={{ top: 12, right: 18, bottom: 4, left: -10 }}>
@@ -209,12 +221,13 @@ function TenureAttrition({ data }: { data: WorkforceAnalytics }) {
       <YAxis unit="%" axisLine={false} tickLine={false} tick={{ fill: "var(--muted-foreground)", fontSize: 11 }} />
       <Tooltip formatter={(value, name, item) => name === "Attrition rate" ? [`${value}% (${item.payload.exits} exits / ${item.payload.population})`, name] : [value, name]} />
       <ReferenceLine y={data.attrition.rate} stroke="var(--muted-foreground)" strokeDasharray="4 4" label={{ value: "Company", position: "right", fill: "var(--muted-foreground)", fontSize: 10 }} />
-      <Bar dataKey="attritionRate" name="Attrition rate" fill={chartSeries.negative} radius={[3, 3, 0, 0]} />
+      <Bar dataKey="attritionRate" name="Attrition rate" fill={chartSeries.negative} radius={[3, 3, 0, 0]} isAnimationActive={!reduceMotion} animationDuration={360} />
     </BarChart>
   </ResponsiveContainer></div>
 }
 
 function SourceEfficiency({ data }: { data: WorkforceAnalytics }) {
+  const reduceMotion = useReducedMotion()
   const rows = [...data.hiring.sourceStats].sort((left, right) => right.hires - left.hires || left.averageDays - right.averageDays).slice(0, 8)
   if (!rows.length) return <div className="flex h-64 items-center justify-center text-body text-muted-foreground">No completed hires with source data in this scope.</div>
   return <div className="h-64 w-full"><ResponsiveContainer width="100%" height="100%" minWidth={0} initialDimension={{ width: 640, height: 256 }}>
@@ -225,13 +238,14 @@ function SourceEfficiency({ data }: { data: WorkforceAnalytics }) {
       <YAxis yAxisId="days" orientation="right" unit="d" axisLine={false} tickLine={false} tick={{ fill: "var(--muted-foreground)", fontSize: 11 }} />
       <Tooltip />
       <Legend />
-      <Bar yAxisId="hires" dataKey="hires" name="Completed hires" fill={chartSeries.positive} radius={[3, 3, 0, 0]} />
-      <Line yAxisId="days" type="monotone" dataKey="averageDays" name="Average days to hire" stroke={chartSeries.primary} strokeWidth={2} dot={{ r: 3 }} />
+      <Bar yAxisId="hires" dataKey="hires" name="Completed hires" fill={chartSeries.positive} radius={[3, 3, 0, 0]} isAnimationActive={!reduceMotion} animationDuration={360} />
+      <Line yAxisId="days" type="monotone" dataKey="averageDays" name="Average days to hire" stroke={chartSeries.primary} strokeWidth={2} dot={{ r: 3 }} isAnimationActive={!reduceMotion} animationDuration={360} />
     </ComposedChart>
   </ResponsiveContainer></div>
 }
 
 function ManagerConcentration({ data }: { data: WorkforceAnalytics }) {
+  const reduceMotion = useReducedMotion()
   const rows = data.operatingSignals.managerExitConcentration.slice(0, 8).map((row) => ({
     ...row,
     cohortPopulation: row.activeTeamSize + row.exits,
@@ -255,7 +269,7 @@ function ManagerConcentration({ data }: { data: WorkforceAnalytics }) {
               formatter={(value) => [`${value}%`, "Observed team exits"]}
               labelFormatter={(_, payload) => payload?.[0]?.payload ? `${payload[0].payload.manager} · ${payload[0].payload.department}` : ""}
             />
-            <Bar dataKey="observedExitRate" name="Observed team exits" fill={chartSeries.negative} radius={[0, 3, 3, 0]} />
+            <Bar dataKey="observedExitRate" name="Observed team exits" fill={chartSeries.negative} radius={[0, 3, 3, 0]} isAnimationActive={!reduceMotion} animationDuration={360} />
           </BarChart>
         </ResponsiveContainer>
       </div>
@@ -352,6 +366,7 @@ function CapabilityAssumptions({ data, onApply }: { data: WorkforceAnalytics; on
 }
 
 function ReplacementCostChart({ data }: { data: WorkforceAnalytics }) {
+  const reduceMotion = useReducedMotion()
   const rows = [...data.decisionSupport.workforceImpact.roles]
     .filter((row) => row.replacementCostPerExit > 0)
     .sort((left, right) => right.replacementCostPerExit - left.replacementCostPerExit)
@@ -364,7 +379,7 @@ function ReplacementCostChart({ data }: { data: WorkforceAnalytics }) {
       <XAxis type="number" tickFormatter={(value) => currency(Number(value))} axisLine={false} tickLine={false} tick={{ fill: "var(--muted-foreground)", fontSize: 10 }} />
       <YAxis type="category" dataKey="label" width={142} axisLine={false} tickLine={false} tick={{ fill: "var(--muted-foreground)", fontSize: 10 }} />
       <Tooltip formatter={(value) => [currency(Number(value)), "Replacement scenario"]} labelFormatter={(_, payload) => payload?.[0]?.payload ? `${payload[0].payload.jobTitle} · ${payload[0].payload.department}` : ""} />
-      <Bar dataKey="replacementCostPerExit" fill={chartSeries.primary} radius={[0, 3, 3, 0]} />
+      <Bar dataKey="replacementCostPerExit" fill={chartSeries.primary} radius={[0, 3, 3, 0]} isAnimationActive={!reduceMotion} animationDuration={360} />
     </BarChart>
   </ResponsiveContainer></div>
 }
@@ -480,6 +495,7 @@ function RoleContinuityTable({ data }: { data: WorkforceAnalytics }) {
 }
 
 function CapabilityAnalysis({ data, onFilterDepartment }: { data: WorkforceAnalytics; onFilterDepartment: (department: string) => void }) {
+  const reduceMotion = useReducedMotion()
   const rows = data.decisionSupport.workforceImpact.capabilityPlans
   const [selectedDepartment, setSelectedDepartment] = useState(rows[0]?.department ?? "")
   if (!rows.length) return <Card className="shadow-none"><CardContent className="p-8 text-center text-body text-muted-foreground">No learning assignments match this reporting scope.</CardContent></Card>
@@ -499,8 +515,8 @@ function CapabilityAnalysis({ data, onFilterDepartment }: { data: WorkforceAnaly
               <XAxis type="number" domain={[0, 100]} unit="%" axisLine={false} tickLine={false} tick={{ fill: "var(--muted-foreground)", fontSize: 11 }} />
               <YAxis type="category" dataKey="department" width={160} axisLine={false} tickLine={false} tick={{ fill: "var(--muted-foreground)", fontSize: 11 }} />
               <Tooltip formatter={(value, name) => [`${value}%`, name]} />
-              <Bar dataKey="completionRate" stackId="completion" name="Completed" fill={chartSeries.positive} radius={[3, 0, 0, 3]} />
-              <Bar dataKey="openRate" stackId="completion" name="Open" fill={chartSeries.caution} radius={[0, 3, 3, 0]} />
+              <Bar dataKey="completionRate" stackId="completion" name="Completed" fill={chartSeries.positive} radius={[3, 0, 0, 3]} isAnimationActive={!reduceMotion} animationDuration={360} />
+              <Bar dataKey="openRate" stackId="completion" name="Open" fill={chartSeries.caution} radius={[0, 3, 3, 0]} isAnimationActive={!reduceMotion} animationDuration={360} />
             </BarChart>
           </ResponsiveContainer>
         </div>
@@ -546,6 +562,7 @@ export function InsightsWorkspace({ initialData }: { initialData: WorkforceAnaly
   const [data, setData] = useState<WorkforceAnalytics | null>(initialData)
   const [loadedQuery, setLoadedQuery] = useState<string | null>(() => queryFor(initialFilters(searchParams)))
   const lastRequestKey = useRef(`${queryFor(initialFilters(searchParams))}:0`)
+  const viewTabRefs = useRef<Array<HTMLButtonElement | null>>([])
   const [refreshVersion, setRefreshVersion] = useState(0)
   const [error, setError] = useState("")
   const requestedView = searchParams.get("view")
@@ -571,6 +588,18 @@ export function InsightsWorkspace({ initialData }: { initialData: WorkforceAnaly
     if (view === "overview") params.delete("view")
     else params.set("view", view)
     router.replace(`/insights${params.size ? `?${params.toString()}` : ""}`, { scroll: false })
+  }
+
+  function handleViewKeyDown(event: React.KeyboardEvent<HTMLButtonElement>, index: number) {
+    let nextIndex = index
+    if (event.key === "ArrowRight") nextIndex = (index + 1) % insightViews.length
+    else if (event.key === "ArrowLeft") nextIndex = (index - 1 + insightViews.length) % insightViews.length
+    else if (event.key === "Home") nextIndex = 0
+    else if (event.key === "End") nextIndex = insightViews.length - 1
+    else return
+    event.preventDefault()
+    selectAnalysisView(insightViews[nextIndex].id)
+    window.requestAnimationFrame(() => viewTabRefs.current[nextIndex]?.focus())
   }
 
   const actions = useMemo(() => {
@@ -651,12 +680,30 @@ export function InsightsWorkspace({ initialData }: { initialData: WorkforceAnaly
       {error && <div className="rounded-md border border-rose-200 bg-rose-50 px-4 py-3 text-meta text-rose-800 dark:border-rose-900/40 dark:bg-rose-950/20 dark:text-rose-200">{error}</div>}
 
       <div className="view-switcher">
-        <div className="view-switcher__tabs" role="tablist" aria-label="Insights view">
-          {([['overview', 'Overview'], ['impact', 'Workforce impact'], ['talent', 'Talent supply'], ['capability', 'Capability']] as Array<[AnalysisView, string]>).map(([id, label]) => <button key={id} type="button" className="view-switcher__tab" role="tab" aria-selected={analysisView === id} onClick={() => selectAnalysisView(id)}>{label}</button>)}
-        </div>
+        <LayoutGroup id="insights-view-switcher">
+          <div className="view-switcher__tabs" role="tablist" aria-label="Insights view">
+            {insightViews.map(({ id, label }, index) => {
+              const active = analysisView === id
+              return <button type="button" key={id} ref={(element) => { viewTabRefs.current[index] = element }} id={`insights-tab-${id}`} className={cn("view-switcher__tab", active && "!bg-transparent")} role="tab" aria-selected={active} aria-controls={`insights-panel-${id}`} tabIndex={active ? 0 : -1} onClick={() => selectAnalysisView(id)} onKeyDown={(event) => handleViewKeyDown(event, index)}>
+                {active && <m.span layoutId="insights-active-view" className="absolute inset-0 rounded-lg" style={{ background: "var(--surface-selected)", boxShadow: "inset 0 0 0 1px rgb(102 85 232 / 0.12)" }} aria-hidden="true" />}
+                <span className="relative z-[1]">{label}</span>
+              </button>
+            })}
+          </div>
+        </LayoutGroup>
         <div className="view-switcher__context"><span className="font-semibold text-foreground">{viewGuidance[analysisView].title}</span><span aria-hidden="true"> · </span>{viewGuidance[analysisView].description}</div>
       </div>
 
+      <m.div
+        key={analysisView}
+        id={`insights-panel-${analysisView}`}
+        role="tabpanel"
+        aria-labelledby={`insights-tab-${analysisView}`}
+        className="flex flex-col gap-3.5"
+        initial={{ opacity: 0 }}
+        animate={{ opacity: 1 }}
+        transition={{ duration: 0.16 }}
+      >
       {analysisView === "overview" && <>
         <MetricStrip metrics={[
           { label: "Active employees", value: compact(data.kpis.activeEmployees), detail: `${data.employeeAnalytics.onLeave} on leave` },
@@ -715,6 +762,7 @@ export function InsightsWorkspace({ initialData }: { initialData: WorkforceAnaly
           <CapabilityAssumptions key={`capability-${impact.assumptions.courseFeePerLearner}-${impact.assumptions.courseHoursPerLearner}`} data={data} onApply={(values) => setFilters((current) => ({ ...current, ...values }))} />
         </div>
       </>}
+      </m.div>
     </WorkspacePage>
   )
 }

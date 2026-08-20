@@ -11,6 +11,7 @@ import { cn } from "@/lib/utils"
 import { formatWorkspaceDateTime } from "@/lib/date-format"
 import { WorkspaceHeader, WorkspacePage } from "@/components/workspace-ui"
 import { IntegrationApiManager } from "@/components/integration-api-manager"
+import { RegisterPagination } from "@/components/register-pagination"
 
 function parseCsv(text: string): Array<Record<string, string>> {
   const matrix: string[][] = []
@@ -80,6 +81,7 @@ export function DataManager({ canManageApi }: { canManageApi: boolean }) {
   const [rows, setRows] = useState<Array<Record<string, string>>>([])
   const [filename, setFilename] = useState("")
   const [preview, setPreview] = useState<ImportPreview | null>(null)
+  const [previewRevision, setPreviewRevision] = useState(0)
   const [replaceConfirmed, setReplaceConfirmed] = useState(false)
   const [dataStatus, setDataStatus] = useState<DataStatusResponse>(emptyStatus)
   const [busy, setBusy] = useState<"status" | "validate" | "apply" | null>(null)
@@ -145,7 +147,10 @@ export function DataManager({ canManageApi }: { canManageApi: boolean }) {
         body: JSON.stringify({ action, domain, rows, filename, mode }),
       })
       const body = await response.json() as { imported?: number; preview?: ImportPreview; error?: string }
-      if (body.preview) setPreview(body.preview)
+      if (body.preview) {
+        setPreview(body.preview)
+        setPreviewRevision((current) => current + 1)
+      }
       if (!response.ok) throw new Error(body.error ?? `Import request failed (${response.status}).`)
       if (action === "validate") return
       setMessage(`${body.imported?.toLocaleString() ?? rows.length.toLocaleString()} ${domainLabel(domain).toLowerCase()} records imported.`)
@@ -231,7 +236,16 @@ export function DataManager({ canManageApi }: { canManageApi: boolean }) {
                 <div><dt className="text-meta text-muted-foreground">Updates</dt><dd className="text-card-title tabular-nums">{preview.updates.toLocaleString()}</dd></div>
                 <div><dt className="text-meta text-muted-foreground">Errors</dt><dd className="text-card-title tabular-nums">{preview.issues.filter((item) => item.severity === "error").length.toLocaleString()}</dd></div>
               </dl>
-              {preview.issues.length ? <div className="max-h-44 overflow-auto border-t border-border pt-2">{preview.issues.map((issue, index) => <p key={`${issue.code}-${issue.row ?? 0}-${index}`} className={cn("py-1 text-meta", issue.severity === "error" ? "text-destructive" : "text-warning")}><span className="font-semibold">{issue.severity === "error" ? "Error" : "Warning"}{issue.row ? ` · row ${issue.row}` : ""}</span> — {issue.message}</p>)}</div> : null}
+              {preview.issues.length ? <div className="overflow-hidden border-t border-border">
+                <RegisterPagination
+                  rows={preview.issues}
+                  itemLabel="issues"
+                  resetKey={`${domain}|${filename}|${previewRevision}`}
+                  initialPageSize={10}
+                >
+                  {(pageIssues) => <div className="max-h-44 overflow-auto pt-2">{pageIssues.map((issue, index) => <p key={`${issue.code}-${issue.row ?? 0}-${index}`} className={cn("py-1 text-meta", issue.severity === "error" ? "text-destructive" : "text-warning")}><span className="font-semibold">{issue.severity === "error" ? "Error" : "Warning"}{issue.row ? ` · row ${issue.row}` : ""}</span> — {issue.message}</p>)}</div>}
+                </RegisterPagination>
+              </div> : null}
               {mode === "replace_imported" && preview.canApply ? <label className="flex items-start gap-2 border-t border-border pt-3 text-body"><input type="checkbox" checked={replaceConfirmed} onChange={(event) => setReplaceConfirmed(event.target.checked)} className="mt-1 accent-primary" /><span>Replace {preview.replacedRows.toLocaleString()} existing imported {domainLabel(domain).toLowerCase()} records. Manually created and sample records are preserved.</span></label> : null}
               <Button type="button" onClick={() => void submit("apply")} disabled={!canApply || busy !== null}>{busy === "apply" ? "Importing…" : "Import records"}</Button>
             </section> : null}

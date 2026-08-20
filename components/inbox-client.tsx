@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from "react"
 import Link from "next/link"
 import { useRouter, useSearchParams } from "next/navigation"
 import { CheckCircle2, CircleAlert, LoaderCircle, X } from "lucide-react"
+import * as m from "motion/react-m"
 
 import { Button } from "@/components/ui/button"
 import { WorkflowCreator, type WorkflowType } from "@/components/workflow-creator"
@@ -349,7 +350,9 @@ export function InboxClient({ initialData, actor, people }: { initialData: Inbox
           <p className="text-card-title font-semibold">{queueOptions.find((option) => option.id === queue)?.label}</p>
           <p className="text-meta text-muted-foreground">{visibleItems.length.toLocaleString()} item{visibleItems.length === 1 ? "" : "s"}</p>
         </header>
-        {pagedItems.length ? pagedItems.map((item) => <ItemRow key={`${item.type}-${item.id}`} item={item} onAction={(selected) => void openAction(selected)} selected={item.id === selectedId} returnTo={currentInboxHref} />) : <div className="flex min-h-[160px] flex-col items-center justify-center px-6 text-center"><h3 className="text-subsection font-semibold">No matching work</h3><p className="mt-1 text-meta text-muted-foreground">Change the queue, domain, or search filter.</p></div>}
+        <m.div key={`${queue}:${domain}:${query}:${page}:${data.generatedAt}`} initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ duration: 0.14 }}>
+          {pagedItems.length ? pagedItems.map((item) => <ItemRow key={`${item.type}-${item.id}`} item={item} onAction={(selected) => void openAction(selected)} selected={item.id === selectedId} returnTo={currentInboxHref} />) : <div className="flex min-h-[160px] flex-col items-center justify-center px-6 text-center"><h3 className="text-subsection font-semibold">No matching work</h3><p className="mt-1 text-meta text-muted-foreground">Change the queue, domain, or search filter.</p></div>}
+        </m.div>
         {visibleItems.length > PAGE_SIZE && <footer className="flex items-center justify-between border-t border-border bg-muted/20 px-4 py-3"><p className="text-meta text-muted-foreground">{page * PAGE_SIZE + 1}–{Math.min((page + 1) * PAGE_SIZE, visibleItems.length)} of {visibleItems.length}</p><div className="flex gap-2"><Button size="xs" variant="outline" disabled={page === 0} onClick={() => setPage((current) => Math.max(0, current - 1))}>Previous</Button><Button size="xs" variant="outline" disabled={page + 1 >= totalPages} onClick={() => setPage((current) => Math.min(totalPages - 1, current + 1))}>Next</Button></div></footer>}
       </section>
 

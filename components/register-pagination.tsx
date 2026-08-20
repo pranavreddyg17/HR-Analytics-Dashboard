@@ -1,6 +1,7 @@
 "use client"
 
 import { useState } from "react"
+import * as m from "motion/react-m"
 
 import { Button } from "@/components/ui/button"
 import { getPaginationWindow, pageForItem } from "@/lib/pagination"
@@ -49,7 +50,15 @@ export function RegisterPagination<T>({
   }
 
   return <>
-    {children(pageRows)}
+    <m.div
+      key={`${resetKey}:${window.page}:${window.pageSize}`}
+      className="register-pagination__content"
+      initial={{ opacity: 0, y: 3 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ duration: 0.14 }}
+    >
+      {children(pageRows)}
+    </m.div>
     {rows.length > 0 && <div className="flex flex-col gap-2 border-t border-border bg-muted/20 px-4 py-2.5 text-meta text-muted-foreground sm:flex-row sm:items-center sm:justify-between">
       <p aria-live="polite" className="tabular-nums">
         {window.firstItem}–{window.lastItem} of {rows.length.toLocaleString()} {label}

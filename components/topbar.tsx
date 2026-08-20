@@ -52,23 +52,25 @@ export function Topbar({ user, navigation, onOpenPalette, onOpenNavigation }: { 
           {navigation}
         </div>
 
-        <button
+        <m.button
           type="button"
           onClick={onOpenPalette}
           className="topbar-search"
           aria-label="Search pages, actions, reports, and people"
+          whileHover={{ y: -1 }}
+          whileTap={{ scale: 0.995 }}
         >
           <Search className="topbar-search__icon" aria-hidden="true" />
           <span className="topbar-search__full">Search workspace records and pages</span>
           <span className="topbar-search__compact">Search</span>
-        </button>
+        </m.button>
 
         <div className="topbar__utilities">
           <div ref={accountRef} className="user-menu">
-            <button ref={accountButtonRef} type="button" className="user-menu__trigger" aria-label="Open account menu" aria-haspopup="menu" aria-expanded={accountOpen} onClick={() => setAccountOpenPath((current) => current === pathname ? null : pathname)}>
+            <m.button ref={accountButtonRef} type="button" className="user-menu__trigger" aria-label="Open account menu" aria-haspopup="menu" aria-expanded={accountOpen} onClick={() => setAccountOpenPath((current) => current === pathname ? null : pathname)} whileHover={{ y: -1 }} whileTap={{ scale: 0.985 }}>
               <span className="avatar-soft avatar-soft--small">{initials(user.displayName)}</span>
               <span className="user-menu__name">{user.displayName}</span>
-            </button>
+            </m.button>
             <AnimatePresence>
             {accountOpen && <m.div role="menu" className="user-menu__popover" initial={{ opacity: 0, y: -4, scale: 0.985 }} animate={{ opacity: 1, y: 0, scale: 1 }} exit={{ opacity: 0, y: -3, scale: 0.985 }} transition={{ duration: 0.14 }}>
               <div className="border-b border-border px-3.5 py-3">

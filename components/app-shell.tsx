@@ -14,6 +14,7 @@ import {
 } from "@/components/app-navigation"
 import { Topbar } from "@/components/topbar"
 import { ContextualAiAssistant } from "@/components/contextual-ai-assistant"
+import { PortalAtmosphere } from "@/components/motion/portal-atmosphere"
 import { SessionRevalidator } from "@/components/session-revalidator"
 import { cn } from "@/lib/utils"
 
@@ -221,6 +222,7 @@ export function AppShell({ user, children }: { user: ShellUser; children: React.
   return (
     <div className="app-frame">
       <SessionRevalidator enabled={user.authenticated} />
+      <PortalAtmosphere respondToScroll intensity={0.7} />
       <div className="app-stage">
         <div className="app-header">
           <Topbar
@@ -231,11 +233,9 @@ export function AppShell({ user, children }: { user: ShellUser; children: React.
           />
         </div>
         <main className="app-content">
-          <AnimatePresence initial={false} mode="sync">
-            <m.div key={pathname} initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: 0.14 }}>
-              {children}
-            </m.div>
-          </AnimatePresence>
+          <m.div key={pathname} initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ duration: 0.16 }}>
+            {children}
+          </m.div>
         </main>
       </div>
       <AnimatePresence>{paletteOpen && <CommandPalette user={user} onClose={closePalette} />}</AnimatePresence>

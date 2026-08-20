@@ -4,6 +4,7 @@ import { useCallback, useEffect, useState } from "react"
 import { Loader2 } from "lucide-react"
 
 import { formatWorkspaceDateTime } from "@/lib/date-format"
+import { RegisterPagination } from "@/components/register-pagination"
 import { WorkspaceHeader, WorkspacePage } from "@/components/workspace-ui"
 
 type User = { email: string; display_name: string; role: string; status: string; created_at: string; last_login_at: string | null; identity_providers?: Array<"google" | "microsoft"> }
@@ -102,32 +103,38 @@ export function AccessManager({ ownerEmail }: { ownerEmail: string }) {
         {loading ? (
           <div className="flex h-40 items-center justify-center"><Loader2 className="size-5 animate-spin text-muted-foreground" /></div>
         ) : (
-          <div className="divide-y divide-border">
-            {users.map((user) => (
-              <div key={user.email} className="grid gap-3 px-4 py-3 md:grid-cols-[minmax(0,1fr)_140px_120px_76px] md:items-center">
-                <div className="min-w-0">
-                  <p className="truncate text-sm font-semibold">
-                    {user.display_name || user.email.split("@")[0]}
-                    {user.email === ownerEmail && <span className="ml-2 text-meta font-semibold text-muted-foreground">Current user</span>}
-                  </p>
-                  <p className="truncate text-xs text-muted-foreground">
-                    {user.email} · {user.identity_providers?.length ? user.identity_providers.map((provider) => provider === "microsoft" ? "Microsoft" : "Google").join(" + ") : "No linked sign-in"} · {user.last_login_at ? `Last sign-in ${new Date(user.last_login_at).toLocaleDateString()}` : "No sign-in recorded"}
-                  </p>
+          <RegisterPagination
+            rows={users}
+            itemLabel="accounts"
+            resetKey="access-accounts"
+          >
+            {(pageRows) => <div className="divide-y divide-border">
+              {pageRows.map((user) => (
+                <div key={user.email} className="grid gap-3 px-4 py-3 md:grid-cols-[minmax(0,1fr)_140px_120px_76px] md:items-center">
+                  <div className="min-w-0">
+                    <p className="truncate text-sm font-semibold">
+                      {user.display_name || user.email.split("@")[0]}
+                      {user.email === ownerEmail && <span className="ml-2 text-meta font-semibold text-muted-foreground">Current user</span>}
+                    </p>
+                    <p className="truncate text-xs text-muted-foreground">
+                      {user.email} · {user.identity_providers?.length ? user.identity_providers.map((provider) => provider === "microsoft" ? "Microsoft" : "Google").join(" + ") : "No linked sign-in"} · {user.last_login_at ? `Last sign-in ${new Date(user.last_login_at).toLocaleDateString()}` : "No sign-in recorded"}
+                    </p>
+                  </div>
+                  <select aria-label={`Role for ${user.email}`} value={user.role} disabled={user.email === ownerEmail} onChange={(event) => update(user, { role: event.target.value })} className="h-9 rounded-md border border-border bg-background px-2 text-sm disabled:opacity-60">
+                    <option value="admin">Admin</option>
+                    <option value="hr">HR</option>
+                    <option value="manager">Manager</option>
+                    <option value="employee">Employee</option>
+                    <option value="viewer">Viewer</option>
+                  </select>
+                  <button type="button" disabled={user.email === ownerEmail} onClick={() => update(user, { status: user.status === "active" ? "disabled" : "active" })} className="h-9 rounded-md border border-border bg-background px-3 text-xs font-semibold capitalize disabled:opacity-50">
+                    {user.status}
+                  </button>
+                  <button type="button" disabled={user.email === ownerEmail} onClick={() => setRemoveTarget(user)} className="inline-flex h-9 items-center justify-center rounded-md border border-border px-3 text-muted-foreground hover:bg-muted hover:text-destructive disabled:cursor-not-allowed disabled:opacity-30" aria-label={`Remove ${user.email}`} title={user.email === ownerEmail ? "The workspace owner cannot be removed" : "Remove access"}>Remove</button>
                 </div>
-                <select aria-label={`Role for ${user.email}`} value={user.role} disabled={user.email === ownerEmail} onChange={(event) => update(user, { role: event.target.value })} className="h-9 rounded-md border border-border bg-background px-2 text-sm disabled:opacity-60">
-                  <option value="admin">Admin</option>
-                  <option value="hr">HR</option>
-                  <option value="manager">Manager</option>
-                  <option value="employee">Employee</option>
-                  <option value="viewer">Viewer</option>
-                </select>
-                <button type="button" disabled={user.email === ownerEmail} onClick={() => update(user, { status: user.status === "active" ? "disabled" : "active" })} className="h-9 rounded-md border border-border bg-background px-3 text-xs font-semibold capitalize disabled:opacity-50">
-                  {user.status}
-                </button>
-                <button type="button" disabled={user.email === ownerEmail} onClick={() => setRemoveTarget(user)} className="inline-flex h-9 items-center justify-center rounded-md border border-border px-3 text-muted-foreground hover:bg-muted hover:text-destructive disabled:cursor-not-allowed disabled:opacity-30" aria-label={`Remove ${user.email}`} title={user.email === ownerEmail ? "The workspace owner cannot be removed" : "Remove access"}>Remove</button>
-              </div>
-            ))}
-          </div>
+              ))}
+            </div>}
+          </RegisterPagination>
         )}
       </section>
 

@@ -4,6 +4,7 @@ import { useEffect, useState } from "react"
 
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
+import { RegisterPagination } from "@/components/register-pagination"
 import { formatWorkspaceDateTime } from "@/lib/date-format"
 
 type ApiClient = {
@@ -147,7 +148,7 @@ export function IntegrationApiManager({ canManage }: { canManage: boolean }) {
 
       <Card>
         <CardHeader className="border-b border-border"><CardTitle>API clients</CardTitle></CardHeader>
-        <CardContent className="p-0"><div className="divide-y divide-border">{clients.length ? clients.map((client) => <div key={client.id} className="grid gap-2 px-4 py-3 md:grid-cols-[minmax(0,1fr)_180px_120px_auto] md:items-center"><div><p className="text-card-title">{client.name}</p><p className="text-meta text-muted-foreground">{client.keyPrefix} · {client.scopes.join(", ")}</p></div><div><p className="text-meta text-muted-foreground">Expires</p><p className="text-body">{formatWorkspaceDateTime(client.expiresAt)}</p></div><div><p className="text-meta text-muted-foreground">Last used</p><p className="text-body">{client.lastUsedAt ? formatWorkspaceDateTime(client.lastUsedAt) : "Never"}</p></div>{client.status === "active" ? <Button type="button" size="sm" variant="outline" disabled={busy} onClick={() => setPendingRevoke(client)}>Revoke</Button> : <span className="text-status font-semibold text-muted-foreground">Revoked</span>}</div>) : <p className="p-5 text-body text-muted-foreground">No API clients.</p>}</div></CardContent>
+        <CardContent className="p-0"><RegisterPagination rows={clients} itemLabel="API clients" resetKey="integration-api-clients">{(pageRows) => <div className="divide-y divide-border">{pageRows.length ? pageRows.map((client) => <div key={client.id} className="grid gap-2 px-4 py-3 md:grid-cols-[minmax(0,1fr)_180px_120px_auto] md:items-center"><div><p className="text-card-title">{client.name}</p><p className="text-meta text-muted-foreground">{client.keyPrefix} · {client.scopes.join(", ")}</p></div><div><p className="text-meta text-muted-foreground">Expires</p><p className="text-body">{formatWorkspaceDateTime(client.expiresAt)}</p></div><div><p className="text-meta text-muted-foreground">Last used</p><p className="text-body">{client.lastUsedAt ? formatWorkspaceDateTime(client.lastUsedAt) : "Never"}</p></div>{client.status === "active" ? <Button type="button" size="sm" variant="outline" disabled={busy} onClick={() => setPendingRevoke(client)}>Revoke</Button> : <span className="text-status font-semibold text-muted-foreground">Revoked</span>}</div>) : <p className="p-5 text-body text-muted-foreground">No API clients.</p>}</div>}</RegisterPagination></CardContent>
       </Card>
     </div>}
     {pendingRevoke && <div className="fixed inset-0 z-[120] flex items-center justify-center bg-foreground/25 p-4" role="dialog" aria-modal="true" aria-labelledby="revoke-api-client-title">

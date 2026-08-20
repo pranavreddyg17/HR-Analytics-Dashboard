@@ -124,6 +124,7 @@
   --motion-standard: 190ms;
   --motion-emphasized: 260ms;
   --elevation-card: 0 1px 2px rgb(24 18 31 / 0.035), 0 12px 32px rgb(36 26 53 / 0.035);
+  --elevation-interactive: 0 2px 4px rgb(24 18 31 / 0.055), 0 16px 36px rgb(67 48 100 / 0.075);
   --elevation-float: 0 22px 60px rgb(20 14 29 / 0.2);
   --radius: 0.625rem;
 }
@@ -288,16 +289,95 @@
 }
 
 .app-frame {
+  position: relative;
   min-height: 100dvh;
+  isolation: isolate;
   background:
     radial-gradient(circle at 82% -12%, rgb(111 79 232 / 0.1), transparent 30rem),
     linear-gradient(180deg, #f8f7fc 0, var(--background) 300px);
 }
 
 .app-stage {
+  position: relative;
+  z-index: 1;
   min-width: 0;
   min-height: 100dvh;
   background: transparent;
+}
+
+.portal-atmosphere {
+  z-index: 0;
+  contain: paint;
+  perspective: 1200px;
+}
+
+.portal-atmosphere__layer {
+  position: absolute;
+  border-radius: 999px;
+}
+
+.portal-atmosphere__layer--far {
+  top: -300px;
+  right: -240px;
+  width: 700px;
+  height: 700px;
+  opacity: 0.38;
+  background: radial-gradient(circle, rgb(112 78 235 / 0.13) 0%, rgb(112 78 235 / 0.045) 42%, transparent 72%);
+}
+
+.portal-atmosphere__layer--near {
+  top: 260px;
+  left: -260px;
+  width: 560px;
+  height: 560px;
+  opacity: 0.3;
+  background: radial-gradient(circle, rgb(22 141 190 / 0.1) 0%, rgb(22 141 190 / 0.035) 46%, transparent 72%);
+}
+
+.portal-atmosphere__layer--scroll {
+  top: 62%;
+  right: 8%;
+  width: min(520px, 44vw);
+  height: 170px;
+  border: 1px solid rgb(102 85 232 / 0.055);
+  border-radius: 44%;
+  background: linear-gradient(118deg, transparent 8%, rgb(102 85 232 / 0.035), rgb(29 129 174 / 0.025), transparent 88%);
+  transform: rotate(-9deg);
+}
+
+.portal-atmosphere__mesh {
+  position: absolute;
+  top: 88px;
+  right: -76px;
+  width: min(460px, 42vw);
+  height: 210px;
+  opacity: 0.17;
+  border: 1px solid rgb(112 88 228 / 0.12);
+  border-radius: 34px;
+  background-image:
+    linear-gradient(rgb(100 80 205 / 0.08) 1px, transparent 1px),
+    linear-gradient(90deg, rgb(100 80 205 / 0.08) 1px, transparent 1px),
+    linear-gradient(135deg, rgb(255 255 255 / 0.22), transparent 46%);
+  background-size: 28px 28px, 28px 28px, 100% 100%;
+  mask-image: linear-gradient(110deg, transparent 2%, black 32%, black 74%, transparent 98%);
+  -webkit-mask-image: linear-gradient(110deg, transparent 2%, black 32%, black 74%, transparent 98%);
+  transform: rotateX(61deg) rotateZ(-12deg);
+  transform-style: preserve-3d;
+}
+
+.portal-atmosphere__arc {
+  position: absolute;
+  top: 126px;
+  right: 10%;
+  width: 240px;
+  height: 240px;
+  opacity: 0.12;
+  border: 1px solid rgb(108 79 227 / 0.32);
+  border-right-color: rgb(27 149 190 / 0.24);
+  border-bottom-color: transparent;
+  border-radius: 50%;
+  transform: rotateX(68deg) rotateZ(24deg);
+  transform-style: preserve-3d;
 }
 
 .app-header {
@@ -387,6 +467,14 @@
   box-shadow: var(--elevation-card);
 }
 
+.workspace-metric::after {
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(125deg, rgb(255 255 255 / 0.38), transparent 38%, rgb(102 85 232 / 0.025) 72%, transparent);
+  content: "";
+  pointer-events: none;
+}
+
 .workspace-metric::before {
   position: absolute;
   inset: 0 auto 0 0;
@@ -412,6 +500,21 @@
   border-radius: 13px;
   background: linear-gradient(160deg, var(--surface-raised) 0%, #fdfcff 100%);
   box-shadow: var(--elevation-card);
+}
+
+.workspace-loading__bar,
+.workspace-loading__surface {
+  overflow: hidden;
+  background:
+    linear-gradient(100deg, transparent 25%, rgb(255 255 255 / 0.8) 44%, transparent 64%),
+    #e9e8ef;
+  background-size: 220% 100%, 100% 100%;
+  animation: workspace-loading-shimmer 1.6s ease-in-out infinite;
+}
+
+@keyframes workspace-loading-shimmer {
+  from { background-position: 115% 0, 0 0; }
+  to { background-position: -115% 0, 0 0; }
 }
 
 @media (max-width: 1023px) {
@@ -1385,10 +1488,65 @@ summary:hover {
   transform: translateZ(-22px) rotateY(20deg) rotateZ(8deg);
 }
 
+.login-depth__wordmark {
+  position: absolute;
+  top: 61%;
+  left: 50%;
+  width: 112%;
+  margin-left: -56%;
+  transform-style: preserve-3d;
+  text-align: center;
+}
+
+.login-depth__wordmark span {
+  position: relative;
+  display: inline-block;
+  color: transparent;
+  background: linear-gradient(104deg, #ffffff 3%, #dcd4ff 36%, #a99bff 58%, #d7f4ff 78%, #ffffff 96%);
+  background-clip: text;
+  background-size: 180% 100%;
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  filter: drop-shadow(0 18px 28px rgb(8 4 18 / 0.38));
+  font-size: clamp(34px, 4.3vw, 58px);
+  font-weight: 600;
+  line-height: 1;
+  letter-spacing: -0.045em;
+  white-space: nowrap;
+  animation: login-wordmark-sheen 7.5s ease-in-out infinite alternate;
+}
+
+.login-depth__wordmark span::before,
+.login-depth__wordmark span::after {
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  content: "LAIDBACKHR.AI";
+  -webkit-text-fill-color: initial;
+}
+
+.login-depth__wordmark span::before {
+  color: #35245f;
+  transform: translate3d(4px, 6px, -10px);
+  text-shadow: 0 1px 0 #4b347b, 0 2px 0 #432e70, 0 3px 0 #38265f, 0 4px 0 #2b1d4c;
+}
+
+.login-depth__wordmark span::after {
+  color: rgb(177 155 255 / 0.38);
+  transform: translate3d(2px, 3px, -4px);
+}
+
+@keyframes login-wordmark-sheen {
+  from { background-position: 100% 50%; }
+  to { background-position: 0% 50%; }
+}
+
 .login-card {
   position: relative;
   z-index: 2;
+  display: grid;
   width: 100%;
+  gap: 22px;
   padding: 34px 36px 38px;
   border: 1px solid rgb(255 255 255 / 0.5);
   border-radius: 18px;
@@ -1403,14 +1561,22 @@ summary:hover {
   line-height: 22px;
 }
 
+.login-card__identity,
+.login-card__content {
+  display: grid;
+  gap: 16px;
+}
+
 .login-card__divider {
   height: 1px;
-  margin-block: 28px;
+  margin: 0;
   background: linear-gradient(90deg, var(--border), rgb(102 85 232 / 0.18), var(--border));
 }
 
 .login-card__providers {
-  margin-top: 24px;
+  display: grid;
+  gap: 0;
+  margin: 0;
 }
 
 .login-provider-separator {
@@ -1418,7 +1584,7 @@ summary:hover {
   grid-template-columns: 1fr auto 1fr;
   align-items: center;
   gap: 12px;
-  margin-block: 14px;
+  margin-block: 12px;
   color: var(--muted-foreground);
   font-size: 12px;
   line-height: 16px;
@@ -1431,7 +1597,7 @@ summary:hover {
 }
 
 .login-notice {
-  margin-top: 20px;
+  margin: 0;
   padding: 10px 12px;
   border: 1px solid var(--border);
   border-radius: 9px;
@@ -1466,6 +1632,15 @@ summary:hover {
     width: min(620px, 110vw);
   }
 
+  .login-depth__wordmark {
+    top: 64%;
+    opacity: 0.82;
+  }
+
+  .login-depth__wordmark span {
+    font-size: clamp(30px, 9vw, 50px);
+  }
+
   .login-card {
     max-width: 420px;
   }
@@ -1484,9 +1659,15 @@ summary:hover {
   .login-depth {
     opacity: 0.38;
   }
+
+  .login-depth__wordmark {
+    top: 66%;
+  }
 }
 
 .employee-shell {
+  position: relative;
+  isolation: isolate;
   background:
     radial-gradient(circle at 82% -12%, rgb(111 79 232 / 0.1), transparent 30rem),
     linear-gradient(180deg, #f8f7fc 0, var(--background) 300px);
@@ -1659,6 +1840,8 @@ summary:hover {
 }
 
 .employee-request-switcher button {
+  position: relative;
+  isolation: isolate;
   height: 32px;
   padding-inline: 12px;
   border-radius: 8px;
@@ -1668,8 +1851,13 @@ summary:hover {
 
 .employee-request-switcher button[aria-selected="true"] {
   color: var(--accent-foreground);
+  background: transparent;
+  box-shadow: none;
+}
+
+.employee-request-switcher__indicator {
   background: var(--surface-selected);
-  box-shadow: inset 0 0 0 1px rgb(102 85 232 / 0.12);
+  box-shadow: inset 0 0 0 1px rgb(102 85 232 / 0.12), 0 2px 8px rgb(80 60 145 / 0.08);
 }
 
 .view-switcher {
@@ -1805,4 +1993,35 @@ summary:hover {
     transition-duration: 0.01ms !important;
   }
 
+  .portal-atmosphere,
+  .login-depth__orbit,
+  .login-depth__wordmark span,
+  .assistant-launcher::before {
+    animation: none !important;
+  }
+
+}
+
+@media (forced-colors: active) {
+  .portal-atmosphere,
+  .login-depth {
+    display: none;
+  }
+
+  .login-card,
+  .surface-card,
+  .workspace-metric,
+  .view-switcher,
+  .assistant-workspace {
+    border: 1px solid CanvasText;
+    background: Canvas;
+    box-shadow: none;
+  }
+
+  .enterprise-nav__indicator,
+  .employee-shell__navigation-indicator,
+  .employee-request-switcher__indicator {
+    background: Highlight;
+    box-shadow: none;
+  }
 }

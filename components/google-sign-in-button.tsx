@@ -123,10 +123,10 @@ export function GoogleSignInButton({ clientId }: { clientId: string }) {
 
   return (
     <div>
-      <div className="relative h-11 w-full overflow-hidden">
-        <div ref={container} className={`absolute inset-0 flex h-11 w-full items-center justify-center transition-opacity ${loading ? "opacity-0" : "opacity-100"}`} />
-        {loading && clientId && <div className="absolute inset-0 flex h-11 items-center justify-center gap-2 text-sm text-muted-foreground"><LoaderCircle className="size-4 animate-spin" />Loading Google sign-in</div>}
-      </div>
+      {clientId && <div className="relative h-11 w-full overflow-hidden">
+          <div ref={container} className={`absolute inset-0 flex h-11 w-full items-center justify-center transition-opacity ${loading ? "opacity-0" : "opacity-100"}`} />
+          {loading && <div className="absolute inset-0 flex h-11 items-center justify-center gap-2 text-sm text-muted-foreground"><LoaderCircle className="size-4 animate-spin" />Loading Google sign-in</div>}
+        </div>}
       {displayedError && <p role="alert" className="mt-3 rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-900">{displayedError}</p>}
     </div>
   )

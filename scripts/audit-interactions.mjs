@@ -16,8 +16,10 @@ await collect("components")
 await collect("app")
 
 const failures = []
+let usesLayoutProjection = false
 for (const file of files) {
   const source = await readFile(join(root, file), "utf8")
+  if (/\blayout(Id)?\s*=/.test(source) && source.includes("motion/")) usesLayoutProjection = true
   for (const match of source.matchAll(/<button\b[\s\S]*?>/g)) {
     if (!/\btype\s*=/.test(match[0])) failures.push(`${relative(root, file)}: native button is missing an explicit type`)
   }
@@ -28,6 +30,13 @@ for (const file of files) {
         failures.push(`${relative(root, file)}: Button inside a form is missing an explicit type`)
       }
     }
+  }
+}
+
+if (usesLayoutProjection) {
+  const motionFeatures = await readFile(join(root, "components/motion/motion-features.ts"), "utf8")
+  if (!/\bdomMax\b/.test(motionFeatures)) {
+    failures.push("components/motion/motion-features.ts: layout projection requires the domMax feature bundle")
   }
 }
 

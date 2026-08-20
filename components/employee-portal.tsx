@@ -1,13 +1,15 @@
 "use client"
 
 import Link from "next/link"
-import { useState } from "react"
+import { useRef, useState } from "react"
 import { useRouter, useSearchParams } from "next/navigation"
 import { AnimatePresence, LayoutGroup } from "motion/react"
 import * as m from "motion/react-m"
 
 import { SignOutControl } from "@/components/sign-out-control"
 import { SessionRevalidator } from "@/components/session-revalidator"
+import { RegisterPagination } from "@/components/register-pagination"
+import { PortalAtmosphere } from "@/components/motion/portal-atmosphere"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { StatusIndicator } from "@/components/status-indicator"
@@ -37,11 +39,19 @@ type PortalData = {
 }
 
 type PortalView = "overview" | "requests" | "learning" | "reviews"
+type RequestType = "leave" | "expense" | "help"
+
 const portalViews: Array<{ value: PortalView; label: string }> = [
   { value: "overview", label: "Overview" },
   { value: "requests", label: "Requests" },
   { value: "learning", label: "Learning" },
   { value: "reviews", label: "Reviews" },
+]
+
+const requestTypes: Array<{ value: RequestType; label: string }> = [
+  { value: "leave", label: "Leave" },
+  { value: "expense", label: "Reimbursement" },
+  { value: "help", label: "HR help" },
 ]
 
 const portalViewCopy: Record<PortalView, { title: string; description: string }> = {
@@ -76,17 +86,40 @@ export function EmployeePortal({ initialData, user }: { initialData: PortalData;
   const [data, setData] = useState(initialData)
   const [busy, setBusy] = useState(false)
   const [message, setMessage] = useState("")
-  const [requestType, setRequestType] = useState<"leave" | "expense" | "help">("leave")
+  const [requestType, setRequestType] = useState<RequestType>("leave")
+  const requestTabRefs = useRef<Array<HTMLButtonElement | null>>([])
   const requestedView = searchParams.get("view")
   const active: PortalView = portalViews.some((item) => item.value === requestedView) ? requestedView as PortalView : "overview"
   const activeCopy = portalViewCopy[active]
 
-  function selectView(view: PortalView) {
+  function viewHref(view: PortalView): string {
     const next = new URLSearchParams(searchParams.toString())
     if (view === "overview") next.delete("view")
     else next.set("view", view)
     const query = next.toString()
-    router.push(query ? `/employee?${query}` : "/employee", { scroll: false })
+    return query ? `/employee?${query}` : "/employee"
+  }
+
+  function selectView(view: PortalView) {
+    router.push(viewHref(view), { scroll: false })
+  }
+
+  function selectRequestType(next: RequestType, focus = false) {
+    setRequestType(next)
+    if (!focus) return
+    const index = requestTypes.findIndex((item) => item.value === next)
+    window.requestAnimationFrame(() => requestTabRefs.current[index]?.focus())
+  }
+
+  function handleRequestTabKeyDown(event: React.KeyboardEvent<HTMLButtonElement>, index: number) {
+    let nextIndex = index
+    if (event.key === "ArrowRight") nextIndex = (index + 1) % requestTypes.length
+    else if (event.key === "ArrowLeft") nextIndex = (index - 1 + requestTypes.length) % requestTypes.length
+    else if (event.key === "Home") nextIndex = 0
+    else if (event.key === "End") nextIndex = requestTypes.length - 1
+    else return
+    event.preventDefault()
+    selectRequestType(requestTypes[nextIndex].value, true)
   }
 
   async function refresh() {
@@ -255,12 +288,18 @@ export function EmployeePortal({ initialData, user }: { initialData: PortalData;
     ...data.cases.map((row) => ({ id: String(row.id), kind: "HR request", title: String(row.subject), status: row.status, submitted: row.submitted_at, outcome: row.resolution_note })),
     ...data.leave.map((row) => ({ id: String(row.id), kind: "Leave", title: `${String(row.leave_type)} · ${String(row.leave_days)} days`, status: row.approval_status, submitted: row.start_date, outcome: row.decision_note })),
   ].sort((a, b) => String(b.submitted || "").localeCompare(String(a.submitted || "")))
+  const requestHistoryResetKey = requestHistory.map((row) => `${row.kind}:${row.id}:${String(row.status)}`).join("|")
+  const learningResetKey = data.learning.map((row) => `${String(row.id)}:${String(row.status)}`).join("|")
+  const exitTaskCount = Number(data.exit?.task_count ?? 0)
+  const exitCompletedTaskCount = Number(data.exit?.completed_task_count ?? 0)
+  const exitProgress = exitTaskCount > 0 ? Math.min(100, Math.round(exitCompletedTaskCount / exitTaskCount * 100)) : 0
   return <div className="employee-shell min-h-screen text-foreground">
     <SessionRevalidator enabled={user.authenticated} />
+    <PortalAtmosphere respondToScroll intensity={0.55} />
     <header className="employee-shell__header">
       <div className="employee-shell__header-inner mx-auto flex min-h-[60px] max-w-[1380px] items-center px-4 sm:px-7">
         <LayoutGroup id="employee-primary-navigation"><nav className="employee-shell__navigation" aria-label="Employee navigation">
-          {portalViews.map((item) => <button key={item.value} type="button" aria-current={active === item.value ? "page" : undefined} onClick={() => selectView(item.value)} className={active === item.value ? "employee-shell__navigation-link employee-shell__navigation-link--active" : "employee-shell__navigation-link"}>{item.label}{active === item.value && <m.span layoutId="employee-nav-indicator" className="employee-shell__navigation-indicator" aria-hidden="true" />}</button>)}
+          {portalViews.map((item) => <Link key={item.value} href={viewHref(item.value)} scroll={false} aria-current={active === item.value ? "page" : undefined} className={active === item.value ? "employee-shell__navigation-link employee-shell__navigation-link--active" : "employee-shell__navigation-link"}>{item.label}{active === item.value && <m.span layoutId="employee-nav-indicator" className="employee-shell__navigation-indicator" aria-hidden="true" />}</Link>)}
         </nav></LayoutGroup>
         <div className="employee-shell__account hidden text-right md:block"><p className="text-card-title">{user.name}</p><p className="text-meta">{user.email}</p></div>
         <div className="employee-shell__utilities">
@@ -270,12 +309,14 @@ export function EmployeePortal({ initialData, user }: { initialData: PortalData;
       </div>
     </header>
 
-    <main className="mx-auto max-w-[1380px] space-y-4 px-4 py-6 sm:px-7 sm:py-7">
+    <main className="relative z-[1] mx-auto max-w-[1380px] space-y-4 px-4 py-6 sm:px-7 sm:py-7">
       <div className="employee-page-header"><h1 className="text-page-title">{activeCopy.title}</h1><p className="text-page-description text-muted-foreground">{activeCopy.description}</p></div>
-      {message && <div className="notice-bar" role="status">{message}</div>}
+      <AnimatePresence initial={false}>
+        {message && <m.div layout className="notice-bar" role="status" aria-live="polite" aria-atomic="true" initial={{ opacity: 0, y: -4 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -3 }}>{message}</m.div>}
+      </AnimatePresence>
 
-      <AnimatePresence initial={false} mode="sync">
-      <m.div key={active} className="space-y-4" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: 0.14 }}>
+      <AnimatePresence initial={false} mode="wait">
+      <m.div key={active} className="space-y-4" initial={{ opacity: 0, y: 4 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -2 }} transition={{ duration: 0.14 }}>
       {active === "overview" && <>
         <section className="grid gap-4 lg:grid-cols-[1.3fr_1fr]">
           <div className="surface-card p-5">
@@ -296,7 +337,7 @@ export function EmployeePortal({ initialData, user }: { initialData: PortalData;
         </section>
         {(data.assets.length > 0 || data.exit) && <section className="grid gap-4 lg:grid-cols-2">
           <div className="surface-card overflow-hidden"><div className="border-b border-border px-5 py-4"><h2 className="text-section-title">Assigned equipment</h2></div><div className="divide-y divide-border">{data.assets.length ? data.assets.map((asset) => <div key={String(asset.id)} className="grid gap-1 px-5 py-3 sm:grid-cols-[1fr_auto] sm:items-center"><div><p className="text-card-title">{String(asset.asset_tag)}</p><p className="text-meta text-muted-foreground">{String(asset.asset_type)} · {[asset.manufacturer, asset.model].filter(Boolean).map(String).join(" ") || "Model not recorded"}</p></div><Status value={asset.condition} /></div>) : <p className="px-5 py-8 text-body text-muted-foreground">No equipment is assigned.</p>}</div></div>
-          {data.exit && <div className="surface-card p-5"><div className="flex items-start justify-between gap-3"><div><h2 className="text-section-title">Offboarding</h2><p className="mt-1 text-body text-muted-foreground">{String(data.exit.exit_type)} · last working date {date(data.exit.expected_exit_date)}</p></div><Status value={data.exit.status} /></div><div className="mt-5"><div className="flex justify-between text-meta"><span>Checklist progress</span><span>{Number(data.exit.completed_task_count)} of {Number(data.exit.task_count)}</span></div><div className="mt-2 h-2 overflow-hidden rounded-full bg-muted"><div className="h-full rounded-full bg-primary" style={{ width: `${Number(data.exit.task_count) ? Math.round(Number(data.exit.completed_task_count) / Number(data.exit.task_count) * 100) : 0}%` }} /></div></div><p className="mt-3 text-meta text-muted-foreground">HR, your manager, IT, and payroll own the checklist. Contact HR if the exit details are incorrect.</p></div>}
+          {data.exit && <div className="surface-card p-5"><div className="flex items-start justify-between gap-3"><div><h2 className="text-section-title">Offboarding</h2><p className="mt-1 text-body text-muted-foreground">{String(data.exit.exit_type)} · last working date {date(data.exit.expected_exit_date)}</p></div><Status value={data.exit.status} /></div><div className="mt-5"><div className="flex justify-between text-meta"><span>Checklist progress</span><span>{exitCompletedTaskCount} of {exitTaskCount}</span></div><div className="mt-2 h-2 overflow-hidden rounded-full bg-muted" role="progressbar" aria-label="Offboarding checklist progress" aria-valuemin={0} aria-valuemax={100} aria-valuenow={exitProgress}><m.div className="h-full w-full origin-left rounded-full bg-primary" initial={false} animate={{ scaleX: exitProgress / 100 }} transition={{ type: "spring", stiffness: 180, damping: 28 }} /></div></div><p className="mt-3 text-meta text-muted-foreground">HR, your manager, IT, and payroll own the checklist. Contact HR if the exit details are incorrect.</p></div>}
         </section>}
         <section className="grid gap-4 lg:grid-cols-[1fr_1.4fr]">
           <form onSubmit={submitDocument} className="surface-card p-5">
@@ -313,25 +354,55 @@ export function EmployeePortal({ initialData, user }: { initialData: PortalData;
       </>}
 
       {active === "requests" && <div className="space-y-4">
-        <div className="employee-request-switcher" role="tablist" aria-label="Employee request type">
-          <button type="button" role="tab" aria-selected={requestType === "leave"} onClick={() => setRequestType("leave")}>Leave</button>
-          <button type="button" role="tab" aria-selected={requestType === "expense"} onClick={() => setRequestType("expense")}>Reimbursement</button>
-          <button type="button" role="tab" aria-selected={requestType === "help"} onClick={() => setRequestType("help")}>HR help</button>
-        </div>
+        <LayoutGroup id="employee-request-types"><div className="employee-request-switcher" role="tablist" aria-label="Employee request type">
+          {requestTypes.map((item, index) => {
+            const selected = requestType === item.value
+            return <button
+              type="button"
+              key={item.value}
+              ref={(element) => { requestTabRefs.current[index] = element }}
+              id={`employee-request-tab-${item.value}`}
+              role="tab"
+              aria-selected={selected}
+              aria-controls={`employee-request-panel-${item.value}`}
+              tabIndex={selected ? 0 : -1}
+              className="relative isolate"
+              onClick={() => selectRequestType(item.value)}
+              onKeyDown={(event) => handleRequestTabKeyDown(event, index)}
+            >
+              {selected && <m.span layoutId="employee-request-indicator" className="employee-request-switcher__indicator absolute inset-0 -z-10 rounded-[8px] bg-[var(--surface-selected)] shadow-[inset_0_0_0_1px_rgb(102_85_232_/_0.12)]" aria-hidden="true" />}
+              <span className="relative z-10">{item.label}</span>
+            </button>
+          })}
+        </div></LayoutGroup>
         <div className="grid gap-4 xl:grid-cols-[minmax(320px,0.72fr)_minmax(0,1.28fr)]">
-          {requestType === "leave" && <form onSubmit={submitLeave} className="surface-card p-5"><h2 className="text-section-title">Request leave</h2><div className="mt-4 space-y-3"><label className="block text-label">Leave type<select name="leaveType" className={fieldClass} defaultValue="Annual"><option>Annual</option><option>Sick</option><option>Parental</option><option>Personal</option><option>Caregiver</option><option>Unpaid</option></select></label><label className="block text-label">Start date<Input required name="startDate" type="date" className={fieldClass} /></label><label className="block text-label">End date<Input required name="endDate" type="date" className={fieldClass} /></label><label className="block text-label">Note<textarea name="note" className={textAreaClass} maxLength={600} /></label><Button type="submit" disabled={busy} className="w-full">Submit leave request</Button></div></form>}
-          {requestType === "expense" && <form onSubmit={submitExpense} className="surface-card p-5"><h2 className="text-section-title">Submit reimbursement</h2><div className="mt-4 space-y-3"><label className="block text-label">Category<select name="category" className={fieldClass} defaultValue="travel"><option value="travel">Travel</option><option value="meals">Meals</option><option value="office">Office</option><option value="training">Training</option><option value="wellness">Wellness</option><option value="other">Other</option></select></label><label className="block text-label">Expense date<Input required name="expenseDate" type="date" className={fieldClass} /></label><div className="grid grid-cols-[1fr_90px] gap-2"><label className="block text-label">Amount<Input required name="amount" type="number" min="0.01" step="0.01" className={fieldClass} /></label><label className="block text-label">Currency<Input required name="currency" defaultValue="USD" maxLength={3} className={fieldClass} /></label></div><label className="block text-label">Description<textarea required name="description" className={textAreaClass} minLength={5} maxLength={1000} /></label><label className="block text-label">Receipt<Input name="receipt" type="file" accept=".pdf,.jpg,.jpeg,.png" className={fieldClass} /></label><Button type="submit" disabled={busy} className="w-full">Submit reimbursement</Button></div></form>}
-          {requestType === "help" && <form onSubmit={submitCase} className="surface-card p-5"><h2 className="text-section-title">Ask HR for help</h2><div className="mt-4 space-y-3"><label className="block text-label">Category<select name="category" className={fieldClass} defaultValue="payroll"><option value="payroll">Payroll</option><option value="benefits">Benefits</option><option value="workplace">Workplace</option><option value="equipment">Equipment</option><option value="access">Access</option><option value="policy">Policy</option><option value="other">Other</option></select></label><label className="block text-label">Subject<Input required name="subject" minLength={4} maxLength={160} className={fieldClass} /></label><label className="block text-label">Details<textarea required name="description" className={textAreaClass} minLength={10} maxLength={4000} /></label><label className="block text-label">Visible to<select name="confidentiality" className={fieldClass} defaultValue="hr"><option value="hr">HR</option><option value="manager">Manager and HR</option><option value="restricted">Restricted HR</option></select></label><Button type="submit" disabled={busy} className="w-full">Submit request</Button></div></form>}
-          <section className="surface-card overflow-hidden"><div className="border-b border-border px-5 py-4"><h2 className="text-section-title">Request history</h2></div><div className="max-h-[620px] divide-y divide-border overflow-y-auto">{requestHistory.length ? requestHistory.map((row) => <div key={`${row.kind}-${row.id}`} className="grid gap-2 px-5 py-3 sm:grid-cols-[110px_minmax(0,1fr)_auto] sm:items-start"><span className="text-meta text-muted-foreground">{row.kind}</span><div><p className="text-body font-semibold capitalize">{row.title}</p>{Boolean(row.outcome) && <p className="mt-1 text-meta text-muted-foreground">Response: {String(row.outcome)}</p>}<p className="mt-1 text-meta text-muted-foreground">{date(row.submitted)}</p></div><Status value={row.status} /></div>) : <p className="px-5 py-8 text-body text-muted-foreground">No requests submitted.</p>}</div></section>
+          <AnimatePresence initial={false} mode="wait">
+            <m.div
+              key={requestType}
+              id={`employee-request-panel-${requestType}`}
+              role="tabpanel"
+              aria-labelledby={`employee-request-tab-${requestType}`}
+              className="min-w-0"
+              initial={{ opacity: 0, y: 4 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -2 }}
+              transition={{ duration: 0.14 }}
+            >
+              {requestType === "leave" && <form onSubmit={submitLeave} className="surface-card p-5"><h2 className="text-section-title">Request leave</h2><div className="mt-4 space-y-3"><label className="block text-label">Leave type<select name="leaveType" className={fieldClass} defaultValue="Annual"><option>Annual</option><option>Sick</option><option>Parental</option><option>Personal</option><option>Caregiver</option><option>Unpaid</option></select></label><label className="block text-label">Start date<Input required name="startDate" type="date" className={fieldClass} /></label><label className="block text-label">End date<Input required name="endDate" type="date" className={fieldClass} /></label><label className="block text-label">Note<textarea name="note" className={textAreaClass} maxLength={600} /></label><Button type="submit" disabled={busy} className="w-full">Submit leave request</Button></div></form>}
+              {requestType === "expense" && <form onSubmit={submitExpense} className="surface-card p-5"><h2 className="text-section-title">Submit reimbursement</h2><div className="mt-4 space-y-3"><label className="block text-label">Category<select name="category" className={fieldClass} defaultValue="travel"><option value="travel">Travel</option><option value="meals">Meals</option><option value="office">Office</option><option value="training">Training</option><option value="wellness">Wellness</option><option value="other">Other</option></select></label><label className="block text-label">Expense date<Input required name="expenseDate" type="date" className={fieldClass} /></label><div className="grid grid-cols-[1fr_90px] gap-2"><label className="block text-label">Amount<Input required name="amount" type="number" min="0.01" step="0.01" className={fieldClass} /></label><label className="block text-label">Currency<Input required name="currency" defaultValue="USD" maxLength={3} className={fieldClass} /></label></div><label className="block text-label">Description<textarea required name="description" className={textAreaClass} minLength={5} maxLength={1000} /></label><label className="block text-label">Receipt<Input name="receipt" type="file" accept=".pdf,.jpg,.jpeg,.png" className={fieldClass} /></label><Button type="submit" disabled={busy} className="w-full">Submit reimbursement</Button></div></form>}
+              {requestType === "help" && <form onSubmit={submitCase} className="surface-card p-5"><h2 className="text-section-title">Ask HR for help</h2><div className="mt-4 space-y-3"><label className="block text-label">Category<select name="category" className={fieldClass} defaultValue="payroll"><option value="payroll">Payroll</option><option value="benefits">Benefits</option><option value="workplace">Workplace</option><option value="equipment">Equipment</option><option value="access">Access</option><option value="policy">Policy</option><option value="other">Other</option></select></label><label className="block text-label">Subject<Input required name="subject" minLength={4} maxLength={160} className={fieldClass} /></label><label className="block text-label">Details<textarea required name="description" className={textAreaClass} minLength={10} maxLength={4000} /></label><label className="block text-label">Visible to<select name="confidentiality" className={fieldClass} defaultValue="hr"><option value="hr">HR</option><option value="manager">Manager and HR</option><option value="restricted">Restricted HR</option></select></label><Button type="submit" disabled={busy} className="w-full">Submit request</Button></div></form>}
+            </m.div>
+          </AnimatePresence>
+          <section className="surface-card overflow-hidden"><div className="border-b border-border px-5 py-4"><h2 className="text-section-title">Request history</h2></div><RegisterPagination rows={requestHistory} itemLabel="requests" resetKey={requestHistoryResetKey} initialPageSize={8} pageSizeOptions={[8, 16, 32]}>{(pageRows) => <AnimatePresence initial={false} mode="wait"><m.div key={pageRows.map((row) => `${row.kind}-${row.id}`).join("|") || "empty"} className="divide-y divide-border" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: 0.12 }}>{pageRows.length ? pageRows.map((row) => <div key={`${row.kind}-${row.id}`} className="grid gap-2 px-5 py-3 sm:grid-cols-[110px_minmax(0,1fr)_auto] sm:items-start"><span className="text-meta text-muted-foreground">{row.kind}</span><div><p className="text-body font-semibold capitalize">{row.title}</p>{Boolean(row.outcome) && <p className="mt-1 text-meta text-muted-foreground">Response: {String(row.outcome)}</p>}<p className="mt-1 text-meta text-muted-foreground">{date(row.submitted)}</p></div><Status value={row.status} /></div>) : <p className="px-5 py-8 text-body text-muted-foreground">No requests submitted.</p>}</m.div></AnimatePresence>}</RegisterPagination></section>
         </div>
       </div>}
 
       {active === "learning" && <section className="surface-card overflow-hidden">
         <div className="border-b border-border px-5 py-4"><h2 className="text-section-title">Assigned learning</h2><p className="text-page-description text-muted-foreground">Courses assigned by HR or your manager.</p></div>
-        <div className="divide-y divide-border">{data.learning.length ? data.learning.map((assignment) => {
+        <RegisterPagination rows={data.learning} itemLabel="assignments" resetKey={learningResetKey} initialPageSize={10}>{(pageRows) => <AnimatePresence initial={false} mode="wait"><m.div key={pageRows.map((row) => String(row.id)).join("|") || "empty"} className="divide-y divide-border" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: 0.12 }}>{pageRows.length ? pageRows.map((assignment) => {
           const completed = String(assignment.status).toLowerCase() === "completed"
-          return <div key={String(assignment.id)} className="grid gap-3 px-5 py-4 sm:grid-cols-[1fr_auto_auto] sm:items-center"><div><p className="text-card-title">{String(assignment.title)}</p><p className="text-meta text-muted-foreground">{completed ? `Completed ${date(assignment.completed_at)}` : `Due ${date(assignment.due_date)}`}</p></div><Status value={assignment.status}/>{!completed ? <Button size="sm" disabled={busy} onClick={() => void completeCourse(String(assignment.id))}>Mark complete</Button> : <span className="text-meta text-muted-foreground">Recorded</span>}</div>
-        }) : <p className="px-5 py-10 text-center text-body text-muted-foreground">No learning assignments.</p>}</div>
+          return <m.div layout="position" key={String(assignment.id)} className="grid gap-3 px-5 py-4 sm:grid-cols-[1fr_auto_auto] sm:items-center"><div><p className="text-card-title">{String(assignment.title)}</p><p className="text-meta text-muted-foreground">{completed ? `Completed ${date(assignment.completed_at)}` : `Due ${date(assignment.due_date)}`}</p></div><Status value={assignment.status}/>{!completed ? <Button size="sm" disabled={busy} onClick={() => void completeCourse(String(assignment.id))}>Mark complete</Button> : <span className="text-meta text-muted-foreground">Recorded</span>}</m.div>
+        }) : <p className="px-5 py-10 text-center text-body text-muted-foreground">No learning assignments.</p>}</m.div></AnimatePresence>}</RegisterPagination>
       </section>}
 
       {active === "reviews" && <div className="grid gap-4 lg:grid-cols-2">

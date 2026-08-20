@@ -2,6 +2,7 @@
 
 import * as m from "motion/react-m"
 
+import { PortalAtmosphere } from "@/components/motion/portal-atmosphere"
 import { SignOutControl } from "@/components/sign-out-control"
 
 export function EmployeeAccessEnded({
@@ -13,7 +14,8 @@ export function EmployeeAccessEnded({
 }) {
   return (
     <main className="employee-shell flex min-h-screen items-center justify-center px-4 py-10 text-foreground">
-      <m.section className="w-full max-w-lg rounded-lg border border-border bg-background p-6 shadow-sm sm:p-8" aria-labelledby="employment-ended-title" initial={{ opacity: 0, y: 8, scale: 0.99 }} animate={{ opacity: 1, y: 0, scale: 1 }}>
+      <PortalAtmosphere intensity={0.55} />
+      <m.section className="relative z-[1] w-full max-w-lg rounded-lg border border-border bg-background p-6 shadow-sm sm:p-8" aria-labelledby="employment-ended-title" initial={{ opacity: 0, y: 8, scale: 0.99 }} animate={{ opacity: 1, y: 0, scale: 1 }}>
         <p className="text-card-title">LaidbackHR.ai</p>
         <h1 id="employment-ended-title" className="mt-6 text-page-title">Employee access ended</h1>
         <p className="mt-3 text-body text-muted-foreground">
