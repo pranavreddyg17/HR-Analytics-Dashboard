@@ -20,37 +20,43 @@ type AtomicOrbitProps = {
   direction: 1 | -1
   duration: number
   reduceMotion: boolean | null
-  rotateX: number
-  rotateY: number
 }
 
-function AtomicOrbit({ className, direction, duration, reduceMotion, rotateX, rotateY }: AtomicOrbitProps) {
+function AtomicOrbit({ className, direction, duration, reduceMotion }: AtomicOrbitProps) {
   const rotation = direction * 360
-  const inverseTilt = { transform: `rotateY(${-rotateY}deg) rotateX(${-rotateX}deg)` }
   const transition = { duration, ease: "linear" as const, repeat: Infinity }
 
   return (
-    <m.div
-      className={className}
-      animate={reduceMotion ? undefined : { rotateZ: rotation }}
-      style={{ rotateX, rotateY }}
-      transition={transition}
-    >
+    <div className={className}>
       <m.span
-        className="login-depth__electron-anchor login-depth__electron-anchor--primary"
+        className="login-depth__orbit-rotor"
         animate={reduceMotion ? undefined : { rotateZ: -rotation }}
         transition={transition}
       >
-        <span className="login-depth__electron" style={inverseTilt} />
+        <span className="login-depth__electron-anchor login-depth__electron-anchor--primary">
+          <m.span
+            className="login-depth__electron-counter"
+            animate={reduceMotion ? undefined : { rotateZ: rotation }}
+            transition={transition}
+          >
+            <span className="login-depth__electron-billboard">
+              <span className="login-depth__electron" />
+            </span>
+          </m.span>
+        </span>
+        <span className="login-depth__electron-anchor login-depth__electron-anchor--secondary">
+          <m.span
+            className="login-depth__electron-counter"
+            animate={reduceMotion ? undefined : { rotateZ: rotation }}
+            transition={transition}
+          >
+            <span className="login-depth__electron-billboard">
+              <span className="login-depth__electron" />
+            </span>
+          </m.span>
+        </span>
       </m.span>
-      <m.span
-        className="login-depth__electron-anchor login-depth__electron-anchor--secondary"
-        animate={reduceMotion ? undefined : { rotateZ: -rotation }}
-        transition={transition}
-      >
-        <span className="login-depth__electron" style={inverseTilt} />
-      </m.span>
-    </m.div>
+    </div>
   )
 }
 
@@ -129,9 +135,9 @@ export function SignInExperience({
               }}
               transition={{ duration: 7.8, ease: "easeInOut", repeat: Infinity }}
             />
-            <AtomicOrbit className="login-depth__orbit login-depth__orbit--outer" direction={1} duration={30} reduceMotion={reduceMotion} rotateX={64} rotateY={-10} />
-            <AtomicOrbit className="login-depth__orbit login-depth__orbit--inner" direction={-1} duration={22} reduceMotion={reduceMotion} rotateX={-58} rotateY={18} />
-            <AtomicOrbit className="login-depth__orbit login-depth__orbit--polar" direction={1} duration={26} reduceMotion={reduceMotion} rotateX={72} rotateY={72} />
+            <AtomicOrbit className="login-depth__orbit login-depth__orbit--outer" direction={1} duration={30} reduceMotion={reduceMotion} />
+            <AtomicOrbit className="login-depth__orbit login-depth__orbit--inner" direction={-1} duration={22} reduceMotion={reduceMotion} />
+            <AtomicOrbit className="login-depth__orbit login-depth__orbit--polar" direction={1} duration={26} reduceMotion={reduceMotion} />
             <div className="login-depth__core" />
             <m.div
               className="login-depth__wordmark"

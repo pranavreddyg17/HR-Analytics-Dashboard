@@ -1217,6 +1217,10 @@ summary:hover {
 }
 
 .login-depth__orbit {
+  --orbit-angle: -7deg;
+  --orbit-angle-inverse: 7deg;
+  --orbit-flatten: 0.48;
+  --orbit-unflatten: 2.083333;
   --electron-size: 14px;
   --electron-offset: -7px;
   --electron-small-size: 9px;
@@ -1224,14 +1228,26 @@ summary:hover {
   --electron-face: #bca8ff;
   --electron-shadow: #4a278f;
   position: absolute;
-  inset: 8%;
+  top: 50%;
+  left: 50%;
   z-index: 2;
+  width: 86%;
+  aspect-ratio: 1;
   border: 1px solid rgb(202 187 255 / 0.5);
   border-radius: 50%;
   box-shadow:
     inset 0 0 26px rgb(154 112 255 / 0.08),
     0 0 24px rgb(131 86 245 / 0.12);
-  transform-style: preserve-3d;
+  transform: translate(-50%, -50%) rotate(var(--orbit-angle)) scaleY(var(--orbit-flatten));
+  transform-origin: center;
+}
+
+.login-depth__orbit-rotor {
+  position: absolute;
+  inset: 0;
+  display: block;
+  border-radius: 50%;
+  transform-origin: center;
   will-change: transform;
 }
 
@@ -1244,6 +1260,18 @@ summary:hover {
   transform-origin: center;
 }
 
+.login-depth__electron-counter,
+.login-depth__electron-billboard {
+  display: block;
+  width: 100%;
+  height: 100%;
+  transform-origin: center;
+}
+
+.login-depth__electron-billboard {
+  transform: scaleY(var(--orbit-unflatten)) rotate(var(--orbit-angle-inverse));
+}
+
 .login-depth__electron {
   display: block;
   width: 100%;
@@ -1254,9 +1282,9 @@ summary:hover {
     radial-gradient(circle at 31% 27%, #ffffff 0 10%, #e9e0ff 14%, var(--electron-face) 36%, var(--electron-shadow) 76%, #1c102f 100%);
   box-shadow:
     inset -2px -3px 5px rgb(17 8 35 / 0.58),
+    inset 2px 2px 3px rgb(255 255 255 / 0.24),
     0 0 9px rgb(197 174 255 / 0.78),
     0 0 22px rgb(139 92 246 / 0.48);
-  transform-style: preserve-3d;
 }
 
 .login-depth__electron-anchor--primary {
@@ -1273,26 +1301,33 @@ summary:hover {
 }
 
 .login-depth__orbit--inner {
+  --orbit-angle: 21deg;
+  --orbit-angle-inverse: -21deg;
+  --orbit-flatten: 0.58;
+  --orbit-unflatten: 1.724138;
   --electron-size: 12px;
   --electron-offset: -6px;
   --electron-small-size: 8px;
   --electron-small-offset: -4px;
   --electron-face: #d3c5ff;
   --electron-shadow: #5c35aa;
-  inset: 17%;
+  width: 72%;
   border-color: rgb(167 132 255 / 0.38);
 }
 
 .login-depth__orbit--polar {
+  --orbit-angle: 82deg;
+  --orbit-angle-inverse: -82deg;
+  --orbit-flatten: 0.25;
+  --orbit-unflatten: 4;
   --electron-size: 11px;
   --electron-offset: -5.5px;
   --electron-small-size: 7px;
   --electron-small-offset: -3.5px;
   --electron-face: #e1d8ff;
   --electron-shadow: #6847aa;
-  inset: 13%;
+  width: 78%;
   border-color: rgb(227 215 255 / 0.3);
-  opacity: 0.82;
 }
 
 .login-depth__plasma {
