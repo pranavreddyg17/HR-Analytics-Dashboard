@@ -2,6 +2,7 @@
 
 import Link from "next/link"
 import { useState } from "react"
+import * as m from "motion/react-m"
 
 import { SignOutControl } from "@/components/sign-out-control"
 import { SessionRevalidator } from "@/components/session-revalidator"
@@ -48,7 +49,7 @@ export function EmployeeOnboarding({ user, onboarding }: { user: { name: string;
       <div className="mx-auto flex min-h-14 max-w-3xl items-center justify-end gap-3 px-4 sm:px-6"><div className="flex items-center gap-3">{user.workspaceAccess && <Link href="/" className="employee-shell__sign-out">HR workspace</Link>}<SignOutControl className="employee-shell__sign-out" /></div></div>
     </header>
     <div className="mx-auto max-w-3xl px-4 py-8 sm:px-6">
-      {onboarding.status === "submitted" ? <section className="surface-card p-6">
+      {onboarding.status === "submitted" ? <m.section className="surface-card p-6" initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }}>
         <h1 className="text-page-title">Profile awaiting verification</h1>
         <p className="mt-2 text-page-description text-muted-foreground">People Operations is reviewing your role, reporting line, and employment details. Employee services will open after approval.</p>
         <dl className="mt-5 grid gap-4 sm:grid-cols-2">
@@ -57,8 +58,8 @@ export function EmployeeOnboarding({ user, onboarding }: { user: { name: string;
           <div><dt className="text-label text-muted-foreground">Location</dt><dd className="mt-1 text-body">{saved(onboarding.submission, "location")}</dd></div>
           <div><dt className="text-label text-muted-foreground">Manager</dt><dd className="mt-1 text-body">{saved(onboarding.submission, "manager_name", "Not provided")}</dd></div>
         </dl>
-      </section> :
-      <section className="surface-card overflow-hidden">
+      </m.section> :
+      <m.section className="surface-card overflow-hidden" initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }}>
         <div className="border-b border-border px-5 py-4"><h1 className="text-page-title">{onboarding.status === "rejected" ? "Correct your employee profile" : "Set up your employee profile"}</h1><p className="mt-1 text-page-description text-muted-foreground">Signed in as {user.email}. Enter the employment details People Operations will verify.</p>{onboarding.status === "rejected" && <p className="mt-3 rounded-md border border-destructive/25 bg-destructive/5 px-3 py-2 text-body text-destructive">{saved(onboarding.submission, "review_note", "People Operations returned this profile for correction.")}</p>}</div>
         <form onSubmit={submit} className="grid gap-4 p-5 sm:grid-cols-2">
           <label className="text-label sm:col-span-2">Organization<input required name="organizationName" defaultValue={saved(onboarding.submission, "organization_name", "LaidbackHR")} className={inputClass}/></label>
@@ -79,7 +80,7 @@ export function EmployeeOnboarding({ user, onboarding }: { user: { name: string;
           {error && <p role="alert" className="text-body text-destructive sm:col-span-2">{error}</p>}
           <div className="flex justify-end border-t border-border pt-4 sm:col-span-2"><Button type="submit" disabled={busy}>{busy ? "Saving…" : "Save profile"}</Button></div>
         </form>
-      </section>
+      </m.section>
       }
     </div>
   </main>

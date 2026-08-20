@@ -22,6 +22,7 @@ declare global {
 
 export function GoogleSignInButton({ clientId }: { clientId: string }) {
   const container = useRef<HTMLDivElement>(null)
+  const renderedWidth = useRef(0)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState("")
 
@@ -68,6 +69,9 @@ export function GoogleSignInButton({ clientId }: { clientId: string }) {
 
     function render() {
       if (!active || !container.current || !window.google || !clientId) return
+      const width = Math.min(400, Math.max(220, Math.round(container.current.clientWidth || 400)))
+      if (renderedWidth.current === width && container.current.childElementCount) return
+      renderedWidth.current = width
       container.current.replaceChildren()
       window.google.accounts.id.initialize({
         client_id: clientId,
@@ -84,10 +88,13 @@ export function GoogleSignInButton({ clientId }: { clientId: string }) {
         text: "continue_with",
         shape: "rectangular",
         logo_alignment: "left",
-        width: Math.min(400, container.current.clientWidth || 400),
+        width,
       })
       setLoading(false)
     }
+
+    const resizeObserver = typeof ResizeObserver === "undefined" ? null : new ResizeObserver(() => render())
+    if (container.current) resizeObserver?.observe(container.current)
 
     if (!clientId) return () => { active = false }
 
@@ -109,15 +116,17 @@ export function GoogleSignInButton({ clientId }: { clientId: string }) {
       }, 10_000)
     }
 
-    return () => { active = false; if (scriptTimer) window.clearTimeout(scriptTimer) }
+    return () => { active = false; resizeObserver?.disconnect(); if (scriptTimer) window.clearTimeout(scriptTimer) }
   }, [clientId])
 
   const displayedError = clientId ? error : "Google sign-in is temporarily unavailable."
 
   return (
     <div>
-      <div ref={container} className="flex min-h-11 w-full items-center justify-center" />
-      {loading && clientId && <div className="flex h-11 items-center justify-center gap-2 text-sm text-muted-foreground"><LoaderCircle className="size-4 animate-spin" />Loading Google sign-in</div>}
+      <div className="relative h-11 w-full overflow-hidden">
+        <div ref={container} className={`absolute inset-0 flex h-11 w-full items-center justify-center transition-opacity ${loading ? "opacity-0" : "opacity-100"}`} />
+        {loading && clientId && <div className="absolute inset-0 flex h-11 items-center justify-center gap-2 text-sm text-muted-foreground"><LoaderCircle className="size-4 animate-spin" />Loading Google sign-in</div>}
+      </div>
       {displayedError && <p role="alert" className="mt-3 rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-900">{displayedError}</p>}
     </div>
   )

@@ -1,5 +1,7 @@
 "use client"
 
+import * as m from "motion/react-m"
+
 import { SignOutControl } from "@/components/sign-out-control"
 
 export function EmployeeAccessEnded({
@@ -11,7 +13,7 @@ export function EmployeeAccessEnded({
 }) {
   return (
     <main className="employee-shell flex min-h-screen items-center justify-center px-4 py-10 text-foreground">
-      <section className="w-full max-w-lg rounded-lg border border-border bg-background p-6 shadow-sm sm:p-8" aria-labelledby="employment-ended-title">
+      <m.section className="w-full max-w-lg rounded-lg border border-border bg-background p-6 shadow-sm sm:p-8" aria-labelledby="employment-ended-title" initial={{ opacity: 0, y: 8, scale: 0.99 }} animate={{ opacity: 1, y: 0, scale: 1 }}>
         <p className="text-card-title">LaidbackHR.ai</p>
         <h1 id="employment-ended-title" className="mt-6 text-page-title">Employee access ended</h1>
         <p className="mt-3 text-body text-muted-foreground">
@@ -22,7 +24,7 @@ export function EmployeeAccessEnded({
         </dl>
         <p className="mt-5 text-meta text-muted-foreground">If this status is incorrect, contact your People Operations administrator.</p>
         <SignOutControl className="mt-6 inline-flex h-9 items-center rounded-md bg-primary px-4 text-primary-foreground hover:bg-primary/90" />
-      </section>
+      </m.section>
     </main>
   )
 }

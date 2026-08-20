@@ -3,6 +3,8 @@
 import Link from "next/link"
 import { useState } from "react"
 import { useRouter, useSearchParams } from "next/navigation"
+import { AnimatePresence, LayoutGroup } from "motion/react"
+import * as m from "motion/react-m"
 
 import { SignOutControl } from "@/components/sign-out-control"
 import { SessionRevalidator } from "@/components/session-revalidator"
@@ -42,6 +44,13 @@ const portalViews: Array<{ value: PortalView; label: string }> = [
   { value: "reviews", label: "Reviews" },
 ]
 
+const portalViewCopy: Record<PortalView, { title: string; description: string }> = {
+  overview: { title: "Overview", description: "Profile, current work, documents, and equipment." },
+  requests: { title: "Requests", description: "Submit and track leave, reimbursement, and HR requests." },
+  learning: { title: "Learning", description: "Assigned courses and completion status." },
+  reviews: { title: "Reviews", description: "Performance reviews and one-on-one records." },
+}
+
 const fieldClass = "mt-1 h-9 w-full rounded-[9px] border border-input bg-white px-3 text-body shadow-[inset_0_1px_1px_rgb(24_21_31_/_0.025)] outline-none focus:border-ring focus:ring-3 focus:ring-primary/10"
 const textAreaClass = "mt-1 min-h-24 w-full resize-y rounded-[9px] border border-input bg-white px-3 py-2 text-body shadow-[inset_0_1px_1px_rgb(24_21_31_/_0.025)] outline-none focus:border-ring focus:ring-3 focus:ring-primary/10"
 
@@ -70,6 +79,7 @@ export function EmployeePortal({ initialData, user }: { initialData: PortalData;
   const [requestType, setRequestType] = useState<"leave" | "expense" | "help">("leave")
   const requestedView = searchParams.get("view")
   const active: PortalView = portalViews.some((item) => item.value === requestedView) ? requestedView as PortalView : "overview"
+  const activeCopy = portalViewCopy[active]
 
   function selectView(view: PortalView) {
     const next = new URLSearchParams(searchParams.toString())
@@ -249,10 +259,10 @@ export function EmployeePortal({ initialData, user }: { initialData: PortalData;
     <SessionRevalidator enabled={user.authenticated} />
     <header className="employee-shell__header">
       <div className="employee-shell__header-inner mx-auto flex min-h-[60px] max-w-[1380px] items-center px-4 sm:px-7">
-        <nav className="employee-shell__navigation" aria-label="Employee navigation">
-          {portalViews.map((item) => <button key={item.value} type="button" aria-current={active === item.value ? "page" : undefined} onClick={() => selectView(item.value)} className={active === item.value ? "employee-shell__navigation-link employee-shell__navigation-link--active" : "employee-shell__navigation-link"}>{item.label}</button>)}
-        </nav>
-        <div className="employee-shell__account hidden text-right sm:block"><p className="text-card-title">{user.name}</p><p className="text-meta">{user.email}</p></div>
+        <LayoutGroup id="employee-primary-navigation"><nav className="employee-shell__navigation" aria-label="Employee navigation">
+          {portalViews.map((item) => <button key={item.value} type="button" aria-current={active === item.value ? "page" : undefined} onClick={() => selectView(item.value)} className={active === item.value ? "employee-shell__navigation-link employee-shell__navigation-link--active" : "employee-shell__navigation-link"}>{item.label}{active === item.value && <m.span layoutId="employee-nav-indicator" className="employee-shell__navigation-indicator" aria-hidden="true" />}</button>)}
+        </nav></LayoutGroup>
+        <div className="employee-shell__account hidden text-right md:block"><p className="text-card-title">{user.name}</p><p className="text-meta">{user.email}</p></div>
         <div className="employee-shell__utilities">
           {user.workspaceAccess && <Link href="/" className="employee-shell__sign-out">HR workspace</Link>}
           <SignOutControl className="employee-shell__sign-out" />
@@ -261,9 +271,11 @@ export function EmployeePortal({ initialData, user }: { initialData: PortalData;
     </header>
 
     <main className="mx-auto max-w-[1380px] space-y-4 px-4 py-6 sm:px-7 sm:py-7">
-      <div className="employee-page-header"><h1 className="text-page-title">Employee services</h1><p className="text-page-description text-muted-foreground">Profile, requests, learning, and reviews.</p></div>
+      <div className="employee-page-header"><h1 className="text-page-title">{activeCopy.title}</h1><p className="text-page-description text-muted-foreground">{activeCopy.description}</p></div>
       {message && <div className="notice-bar" role="status">{message}</div>}
 
+      <AnimatePresence initial={false} mode="sync">
+      <m.div key={active} className="space-y-4" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: 0.14 }}>
       {active === "overview" && <>
         <section className="grid gap-4 lg:grid-cols-[1.3fr_1fr]">
           <div className="surface-card p-5">
@@ -326,6 +338,8 @@ export function EmployeePortal({ initialData, user }: { initialData: PortalData;
         <section className="surface-card overflow-hidden"><div className="border-b border-border px-5 py-4"><h2 className="text-section-title">Performance reviews</h2></div><div className="divide-y divide-border">{data.reviews.length ? data.reviews.map((review) => <div key={String(review.id)} className="px-5 py-4"><div className="flex items-center justify-between gap-3"><p className="text-card-title">{String(review.cycle_name)}</p><Status value={review.status} /></div><p className="mt-1 text-meta text-muted-foreground">{date(review.starts_on)} – {date(review.ends_on)}</p>{Boolean(review.manager_review) && <p className="mt-3 text-body">{String(review.manager_review)}</p>}{["not_started", "self_review"].includes(String(review.status)) && <form className="mt-4 space-y-3 border-t border-border pt-4" onSubmit={(event) => void submitReview(event, String(review.id))}><label className="block text-label">Self-review<textarea required name="selfReview" minLength={50} maxLength={10000} className={textAreaClass} placeholder="Summarize outcomes, challenges, development, and support needed." /></label><label className="block text-label">Self-rating<select required name="employeeRating" className={fieldClass} defaultValue=""><option value="" disabled>Select rating</option><option value="1">1 – Below expectations</option><option value="2">2 – Developing</option><option value="3">3 – Meets expectations</option><option value="4">4 – Exceeds expectations</option><option value="5">5 – Exceptional</option></select></label><Button type="submit" disabled={busy}>Submit self-review</Button></form>}</div>) : <p className="px-5 py-8 text-center text-body text-muted-foreground">No review cycles assigned.</p>}</div></section>
         <section className="surface-card overflow-hidden"><div className="border-b border-border px-5 py-4"><h2 className="text-section-title">One-on-ones</h2></div><div className="divide-y divide-border">{data.meetings.length ? data.meetings.map((meeting) => <div key={String(meeting.id)} className="px-5 py-4"><div className="flex items-center justify-between gap-3"><p className="text-card-title">{date(meeting.scheduled_at)}</p><Status value={meeting.status} /></div>{Boolean(meeting.ai_summary) && Boolean(meeting.summary_approved_at) && <p className="mt-3 text-body">{String(meeting.ai_summary)}</p>}</div>) : <p className="px-5 py-8 text-center text-body text-muted-foreground">No one-on-ones recorded.</p>}</div></section>
       </div>}
+      </m.div>
+      </AnimatePresence>
     </main>
   </div>
 }

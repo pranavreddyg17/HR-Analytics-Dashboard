@@ -3,6 +3,8 @@
 import { useEffect, useRef, useState } from "react"
 import Link from "next/link"
 import { usePathname } from "next/navigation"
+import { AnimatePresence, LayoutGroup } from "motion/react"
+import * as m from "motion/react-m"
 
 import { SignOutControl } from "@/components/sign-out-control"
 import { cn } from "@/lib/utils"
@@ -85,6 +87,7 @@ export function AppNavigation({ user }: { user: ShellUser }) {
   }, [pathname])
 
   return (
+    <LayoutGroup id="hr-primary-navigation">
     <nav ref={navigationRef} className="enterprise-nav" aria-label="Primary navigation">
       <div className="enterprise-nav__inner">
         <div className="enterprise-nav__primary" aria-label={workspace.label}>
@@ -98,6 +101,7 @@ export function AppNavigation({ user }: { user: ShellUser }) {
                 className={cn("enterprise-nav__link", active && "enterprise-nav__link--active")}
               >
                 {item.label}
+                {active && <m.span layoutId="active-indicator" className="enterprise-nav__indicator" aria-hidden="true" />}
               </Link>
             )
           })}
@@ -110,7 +114,9 @@ export function AppNavigation({ user }: { user: ShellUser }) {
             return (
               <div className={cn("enterprise-nav__menu", groupActive && "enterprise-nav__menu--active", visibleOpenMenu === group.label && "enterprise-nav__menu--open")} key={group.label}>
                 <button type="button" aria-expanded={visibleOpenMenu === group.label} onClick={() => setOpenMenu((current) => ({ label: current.path === pathname && current.label === group.label ? "" : group.label, path: pathname }))}>{group.label}</button>
-                {visibleOpenMenu === group.label && <div className="enterprise-nav__popover">
+                {groupActive && <m.span layoutId="active-indicator" className="enterprise-nav__indicator" aria-hidden="true" />}
+                <AnimatePresence>
+                {visibleOpenMenu === group.label && <m.div className="enterprise-nav__popover" initial={{ opacity: 0, y: -4, scale: 0.985 }} animate={{ opacity: 1, y: 0, scale: 1 }} exit={{ opacity: 0, y: -3, scale: 0.985 }} transition={{ duration: 0.14 }}>
                   {items.map((item) => {
                     const active = isActive(pathname, item)
                     return (
@@ -125,13 +131,15 @@ export function AppNavigation({ user }: { user: ShellUser }) {
                       </Link>
                     )
                   })}
-                </div>}
+                </m.div>}
+                </AnimatePresence>
               </div>
             )
           })}
         </div>
       </div>
     </nav>
+    </LayoutGroup>
   )
 }
 
@@ -145,16 +153,46 @@ export function MobileNavigation({
   user: ShellUser
 }) {
   const pathname = usePathname()
+  const panelRef = useRef<HTMLElement>(null)
+  const closeButtonRef = useRef<HTMLButtonElement>(null)
 
-  if (!open) return null
+  useEffect(() => {
+    if (!open) return
+    const previous = document.activeElement instanceof HTMLElement ? document.activeElement : null
+    const previousOverflow = document.body.style.overflow
+    document.body.style.overflow = "hidden"
+    const focusTimer = window.setTimeout(() => closeButtonRef.current?.focus(), 0)
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        event.preventDefault()
+        onClose()
+        return
+      }
+      if (event.key !== "Tab" || !panelRef.current) return
+      const focusable = [...panelRef.current.querySelectorAll<HTMLElement>('a[href], button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])')]
+      if (!focusable.length) return
+      const first = focusable[0]
+      const last = focusable[focusable.length - 1]
+      if (event.shiftKey && document.activeElement === first) { event.preventDefault(); last.focus() }
+      else if (!event.shiftKey && document.activeElement === last) { event.preventDefault(); first.focus() }
+    }
+    document.addEventListener("keydown", handleKeyDown)
+    return () => {
+      window.clearTimeout(focusTimer)
+      document.body.style.overflow = previousOverflow
+      document.removeEventListener("keydown", handleKeyDown)
+      previous?.focus()
+    }
+  }, [onClose, open])
 
   return (
-    <div className="mobile-navigation-layer" role="dialog" aria-modal="true" aria-label="Application navigation">
-      <button type="button" className="mobile-navigation-backdrop" aria-label="Close navigation" onClick={onClose} />
-      <section className="mobile-navigation-panel">
+    <AnimatePresence>
+    {open && <m.div className="mobile-navigation-layer" role="dialog" aria-modal="true" aria-label="Application navigation" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}>
+      <m.button type="button" className="mobile-navigation-backdrop" aria-label="Close navigation" onClick={onClose} initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} />
+      <m.section ref={panelRef} className="mobile-navigation-panel" initial={{ opacity: 0, y: -10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -8 }} transition={{ duration: 0.17 }}>
         <header className="mobile-navigation-header">
           <h2>Navigation</h2>
-          <button type="button" className="text-button" onClick={onClose}>Close</button>
+          <button ref={closeButtonRef} type="button" className="text-button" onClick={onClose}>Close</button>
         </header>
         <nav className="mobile-navigation-content" aria-label="Mobile navigation">
           {navigationGroups.map((group) => (
@@ -191,8 +229,9 @@ export function MobileNavigation({
               : <span className="text-meta text-muted-foreground">Local session</span>}
           </div>
         </footer>
-      </section>
-    </div>
+      </m.section>
+    </m.div>}
+    </AnimatePresence>
   )
 }
 

@@ -1,5 +1,6 @@
 "use client"
 
+import type { ComponentProps } from "react"
 import { useState } from "react"
 import { signOut } from "next-auth/react"
 
@@ -19,7 +20,9 @@ declare global {
   }
 }
 
-export function SignOutControl({ className }: { className?: string }) {
+type SignOutControlProps = Omit<ComponentProps<"button">, "children" | "disabled" | "onClick" | "type">
+
+export function SignOutControl({ className, ...props }: SignOutControlProps) {
   const [busy, setBusy] = useState(false)
 
   async function leaveWorkspace() {
@@ -43,6 +46,7 @@ export function SignOutControl({ className }: { className?: string }) {
       aria-busy={busy}
       onClick={() => void leaveWorkspace()}
       className={cn("text-button disabled:cursor-wait disabled:opacity-60", className)}
+      {...props}
     >
       {busy ? "Signing out…" : "Sign out"}
     </button>
