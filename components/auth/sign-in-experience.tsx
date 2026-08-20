@@ -82,27 +82,50 @@ export function SignInExperience({
             style={reduceMotion || !pointerDepthEnabled ? undefined : { rotateX, rotateY }}
           >
             <m.div
+              className="login-depth__plasma login-depth__plasma--rear"
+              animate={reduceMotion ? undefined : {
+                opacity: [0.62, 0.9, 0.68],
+                scaleX: [0.96, 1.045, 0.98],
+                scaleY: [0.92, 1.08, 0.96],
+              }}
+              transition={{ duration: 7.8, ease: "easeInOut", repeat: Infinity }}
+            />
+            <m.div
               className="login-depth__orbit login-depth__orbit--outer"
               animate={reduceMotion ? undefined : { rotateZ: 360 }}
-              transition={{ duration: 34, ease: "linear", repeat: Infinity }}
+              style={{ rotateX: 64, rotateY: -10 }}
+              transition={{ duration: 30, ease: "linear", repeat: Infinity }}
             />
             <m.div
               className="login-depth__orbit login-depth__orbit--inner"
               animate={reduceMotion ? undefined : { rotateZ: -360 }}
-              transition={{ duration: 24, ease: "linear", repeat: Infinity }}
+              style={{ rotateX: -58, rotateY: 18 }}
+              transition={{ duration: 22, ease: "linear", repeat: Infinity }}
+            />
+            <m.div
+              className="login-depth__orbit login-depth__orbit--polar"
+              animate={reduceMotion ? undefined : { rotateZ: 360 }}
+              style={{ rotateX: 72, rotateY: 72 }}
+              transition={{ duration: 26, ease: "linear", repeat: Infinity }}
             />
             <div className="login-depth__core" />
-            <div className="login-depth__plane login-depth__plane--one" />
-            <div className="login-depth__plane login-depth__plane--two" />
-            <div className="login-depth__plane login-depth__plane--three" />
             <m.div
               className="login-depth__wordmark"
-              initial={reduceMotion ? false : { opacity: 0, y: 12, z: 72, rotateX: -5 }}
-              animate={{ opacity: 1, y: 0, z: 104, rotateX: 0 }}
-              transition={{ duration: 0.65, delay: 0.08, ease: [0.2, 0.72, 0.2, 1] }}
+              initial={reduceMotion ? false : { opacity: 0, y: 10, z: 72, rotateX: -4 }}
+              animate={{ opacity: 1, y: 0, z: 108, rotateX: 0 }}
+              transition={{ duration: 0.72, delay: 0.08, ease: [0.2, 0.72, 0.2, 1] }}
             >
               <span>LAIDBACKHR.AI</span>
             </m.div>
+            <m.div
+              className="login-depth__plasma login-depth__plasma--front"
+              animate={reduceMotion ? undefined : {
+                opacity: [0.28, 0.52, 0.32],
+                x: ["-2%", "2%", "-1%"],
+                scaleX: [1.02, 0.96, 1.02],
+              }}
+              transition={{ duration: 6.4, ease: "easeInOut", repeat: Infinity }}
+            />
           </m.div>
         </div>
 
