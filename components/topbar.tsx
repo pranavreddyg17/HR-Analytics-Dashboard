@@ -8,8 +8,10 @@ import { AnimatePresence } from "motion/react"
 import * as m from "motion/react-m"
 
 import type { ShellUser } from "@/components/app-navigation"
+import shellStyles from "@/components/motion/cosmic-shell.module.css"
 import { SignOutControl } from "@/components/sign-out-control"
 import { returnDestinationLabel, safeReturnTo } from "@/lib/navigation"
+import { cn } from "@/lib/utils"
 
 function initials(name: string): string {
   return name.split(/\s+/).filter(Boolean).slice(0, 2).map((part) => part[0]?.toUpperCase()).join("") || "HR"
@@ -45,8 +47,8 @@ export function Topbar({ user, navigation, onOpenPalette, onOpenNavigation }: { 
   }, [accountOpen])
 
   return (
-    <header className="topbar">
-      <div className="topbar__inner">
+    <header className={cn("topbar", shellStyles.topbar)}>
+      <div className={cn("topbar__inner", shellStyles.topbarInner)}>
         <div className="topbar__navigation-area">
           {returnTo && <Link href={returnTo} className="topbar-back-link">Back to {returnDestinationLabel(returnTo)}</Link>}
           {navigation}
@@ -55,7 +57,7 @@ export function Topbar({ user, navigation, onOpenPalette, onOpenNavigation }: { 
         <m.button
           type="button"
           onClick={onOpenPalette}
-          className="topbar-search"
+          className={cn("topbar-search", shellStyles.search)}
           aria-label="Search pages, actions, reports, and people"
           whileHover={{ y: -1 }}
           whileTap={{ scale: 0.995 }}
@@ -67,7 +69,7 @@ export function Topbar({ user, navigation, onOpenPalette, onOpenNavigation }: { 
 
         <div className="topbar__utilities">
           <div ref={accountRef} className="user-menu">
-            <m.button ref={accountButtonRef} type="button" className="user-menu__trigger" aria-label="Open account menu" aria-haspopup="menu" aria-expanded={accountOpen} onClick={() => setAccountOpenPath((current) => current === pathname ? null : pathname)} whileHover={{ y: -1 }} whileTap={{ scale: 0.985 }}>
+            <m.button ref={accountButtonRef} type="button" className={cn("user-menu__trigger", shellStyles.accountTrigger)} aria-label="Open account menu" aria-haspopup="menu" aria-expanded={accountOpen} onClick={() => setAccountOpenPath((current) => current === pathname ? null : pathname)} whileHover={{ y: -1 }} whileTap={{ scale: 0.985 }}>
               <span className="avatar-soft avatar-soft--small">{initials(user.displayName)}</span>
               <span className="user-menu__name">{user.displayName}</span>
             </m.button>

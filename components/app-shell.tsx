@@ -15,6 +15,7 @@ import {
 import { Topbar } from "@/components/topbar"
 import { ContextualAiAssistant } from "@/components/contextual-ai-assistant"
 import { PortalAtmosphere } from "@/components/motion/portal-atmosphere"
+import shellStyles from "@/components/motion/cosmic-shell.module.css"
 import { SessionRevalidator } from "@/components/session-revalidator"
 import { cn } from "@/lib/utils"
 
@@ -220,11 +221,11 @@ export function AppShell({ user, children }: { user: ShellUser; children: React.
   }, [])
 
   return (
-    <div className="app-frame">
+    <div className={cn("app-frame", shellStyles.hrFrame)}>
       <SessionRevalidator enabled={user.authenticated} />
       <PortalAtmosphere respondToScroll intensity={0.7} />
       <div className="app-stage">
-        <div className="app-header">
+        <div className={cn("app-header", shellStyles.hrHeader)}>
           <Topbar
             user={user}
             navigation={<AppNavigation user={user} />}
@@ -233,7 +234,7 @@ export function AppShell({ user, children }: { user: ShellUser; children: React.
           />
         </div>
         <main className="app-content">
-          <m.div key={pathname} initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ duration: 0.16 }}>
+          <m.div className={shellStyles.routeContent} key={pathname} initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ duration: 0.16 }}>
             {children}
           </m.div>
         </main>

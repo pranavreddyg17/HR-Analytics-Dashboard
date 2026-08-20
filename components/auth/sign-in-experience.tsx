@@ -15,6 +15,45 @@ type SignInExperienceProps = {
   signedOut: boolean
 }
 
+type AtomicOrbitProps = {
+  className: string
+  direction: 1 | -1
+  duration: number
+  reduceMotion: boolean | null
+  rotateX: number
+  rotateY: number
+}
+
+function AtomicOrbit({ className, direction, duration, reduceMotion, rotateX, rotateY }: AtomicOrbitProps) {
+  const rotation = direction * 360
+  const inverseTilt = { transform: `rotateY(${-rotateY}deg) rotateX(${-rotateX}deg)` }
+  const transition = { duration, ease: "linear" as const, repeat: Infinity }
+
+  return (
+    <m.div
+      className={className}
+      animate={reduceMotion ? undefined : { rotateZ: rotation }}
+      style={{ rotateX, rotateY }}
+      transition={transition}
+    >
+      <m.span
+        className="login-depth__electron-anchor login-depth__electron-anchor--primary"
+        animate={reduceMotion ? undefined : { rotateZ: -rotation }}
+        transition={transition}
+      >
+        <span className="login-depth__electron" style={inverseTilt} />
+      </m.span>
+      <m.span
+        className="login-depth__electron-anchor login-depth__electron-anchor--secondary"
+        animate={reduceMotion ? undefined : { rotateZ: -rotation }}
+        transition={transition}
+      >
+        <span className="login-depth__electron" style={inverseTilt} />
+      </m.span>
+    </m.div>
+  )
+}
+
 export function SignInExperience({
   googleClientId,
   microsoftConfigured,
@@ -90,24 +129,9 @@ export function SignInExperience({
               }}
               transition={{ duration: 7.8, ease: "easeInOut", repeat: Infinity }}
             />
-            <m.div
-              className="login-depth__orbit login-depth__orbit--outer"
-              animate={reduceMotion ? undefined : { rotateZ: 360 }}
-              style={{ rotateX: 64, rotateY: -10 }}
-              transition={{ duration: 30, ease: "linear", repeat: Infinity }}
-            />
-            <m.div
-              className="login-depth__orbit login-depth__orbit--inner"
-              animate={reduceMotion ? undefined : { rotateZ: -360 }}
-              style={{ rotateX: -58, rotateY: 18 }}
-              transition={{ duration: 22, ease: "linear", repeat: Infinity }}
-            />
-            <m.div
-              className="login-depth__orbit login-depth__orbit--polar"
-              animate={reduceMotion ? undefined : { rotateZ: 360 }}
-              style={{ rotateX: 72, rotateY: 72 }}
-              transition={{ duration: 26, ease: "linear", repeat: Infinity }}
-            />
+            <AtomicOrbit className="login-depth__orbit login-depth__orbit--outer" direction={1} duration={30} reduceMotion={reduceMotion} rotateX={64} rotateY={-10} />
+            <AtomicOrbit className="login-depth__orbit login-depth__orbit--inner" direction={-1} duration={22} reduceMotion={reduceMotion} rotateX={-58} rotateY={18} />
+            <AtomicOrbit className="login-depth__orbit login-depth__orbit--polar" direction={1} duration={26} reduceMotion={reduceMotion} rotateX={72} rotateY={72} />
             <div className="login-depth__core" />
             <m.div
               className="login-depth__wordmark"

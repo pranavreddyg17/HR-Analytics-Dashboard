@@ -7,6 +7,7 @@ import { AnimatePresence, LayoutGroup } from "motion/react"
 import * as m from "motion/react-m"
 
 import { SignOutControl } from "@/components/sign-out-control"
+import shellStyles from "@/components/motion/cosmic-shell.module.css"
 import { cn } from "@/lib/utils"
 
 export type ShellUser = {
@@ -88,7 +89,7 @@ export function AppNavigation({ user }: { user: ShellUser }) {
 
   return (
     <LayoutGroup id="hr-primary-navigation">
-    <nav ref={navigationRef} className="enterprise-nav" aria-label="Primary navigation">
+    <nav ref={navigationRef} className={cn("enterprise-nav", shellStyles.navigation)} aria-label="Primary navigation">
       <div className="enterprise-nav__inner">
         <div className="enterprise-nav__primary" aria-label={workspace.label}>
           {visibleItems(user, workspace.items).map((item) => {
@@ -98,10 +99,10 @@ export function AppNavigation({ user }: { user: ShellUser }) {
                 key={item.href}
                 href={item.href}
                 aria-current={active ? "page" : undefined}
-                className={cn("enterprise-nav__link", active && "enterprise-nav__link--active")}
+                className={cn("enterprise-nav__link", shellStyles.navLink, active && "enterprise-nav__link--active", active && shellStyles.navLinkActive)}
               >
                 {item.label}
-                {active && <m.span layoutId="active-indicator" className="enterprise-nav__indicator" aria-hidden="true" />}
+                {active && <m.span layoutId="active-indicator" className={cn("enterprise-nav__indicator", shellStyles.navIndicator)} aria-hidden="true" />}
               </Link>
             )
           })}
@@ -113,10 +114,10 @@ export function AppNavigation({ user }: { user: ShellUser }) {
             if (!items.length) return null
             return (
               <div className={cn("enterprise-nav__menu", groupActive && "enterprise-nav__menu--active", visibleOpenMenu === group.label && "enterprise-nav__menu--open")} key={group.label}>
-                <button type="button" aria-expanded={visibleOpenMenu === group.label} onClick={() => setOpenMenu((current) => ({ label: current.path === pathname && current.label === group.label ? "" : group.label, path: pathname }))}>{group.label}</button>
-                {groupActive && <m.span layoutId="active-indicator" className="enterprise-nav__indicator" aria-hidden="true" />}
+                <button className={cn(shellStyles.menuButton, groupActive && shellStyles.menuActive)} type="button" aria-expanded={visibleOpenMenu === group.label} onClick={() => setOpenMenu((current) => ({ label: current.path === pathname && current.label === group.label ? "" : group.label, path: pathname }))}>{group.label}</button>
+                {groupActive && <m.span layoutId="active-indicator" className={cn("enterprise-nav__indicator", shellStyles.navIndicator)} aria-hidden="true" />}
                 <AnimatePresence>
-                {visibleOpenMenu === group.label && <m.div className="enterprise-nav__popover" initial={{ opacity: 0, y: -4, scale: 0.985 }} animate={{ opacity: 1, y: 0, scale: 1 }} exit={{ opacity: 0, y: -3, scale: 0.985 }} transition={{ duration: 0.14 }}>
+                {visibleOpenMenu === group.label && <m.div className={cn("enterprise-nav__popover", shellStyles.popover)} initial={{ opacity: 0, y: -4, scale: 0.985 }} animate={{ opacity: 1, y: 0, scale: 1 }} exit={{ opacity: 0, y: -3, scale: 0.985 }} transition={{ duration: 0.14 }}>
                   {items.map((item) => {
                     const active = isActive(pathname, item)
                     return (
@@ -124,7 +125,7 @@ export function AppNavigation({ user }: { user: ShellUser }) {
                         key={item.href}
                         href={item.href}
                         aria-current={active ? "page" : undefined}
-                        className={cn("enterprise-nav__popover-link", active && "enterprise-nav__popover-link--active")}
+                        className={cn("enterprise-nav__popover-link", shellStyles.popoverLink, active && "enterprise-nav__popover-link--active", active && shellStyles.popoverLinkActive)}
                         onClick={() => setOpenMenu({ label: "", path: pathname })}
                       >
                         {item.label}

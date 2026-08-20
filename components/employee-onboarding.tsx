@@ -8,7 +8,9 @@ import { SignOutControl } from "@/components/sign-out-control"
 import { SessionRevalidator } from "@/components/session-revalidator"
 import { PortalAtmosphere } from "@/components/motion/portal-atmosphere"
 import { Button } from "@/components/ui/button"
+import shellStyles from "@/components/motion/cosmic-shell.module.css"
 import type { EmployeeOnboardingState } from "@/lib/server/employee-onboarding"
+import { cn } from "@/lib/utils"
 
 const inputClass = "mt-1 h-9 w-full rounded-md border border-border bg-background px-3 text-control outline-none focus:border-ring focus:ring-2 focus:ring-ring/20"
 
@@ -44,10 +46,10 @@ export function EmployeeOnboarding({ user, onboarding }: { user: { name: string;
     finally { setBusy(false) }
   }
 
-  return <main className="employee-shell min-h-screen text-foreground">
+  return <main className={cn("employee-shell min-h-screen text-foreground", shellStyles.employeeFrame)}>
     <SessionRevalidator enabled={user.authenticated} />
     <PortalAtmosphere intensity={0.55} />
-    <header className="employee-shell__header">
+    <header className={cn("employee-shell__header", shellStyles.employeeHeader)}>
       <div className="mx-auto flex min-h-14 max-w-3xl items-center justify-end gap-3 px-4 sm:px-6"><div className="flex items-center gap-3">{user.workspaceAccess && <Link href="/" className="employee-shell__sign-out">HR workspace</Link>}<SignOutControl className="employee-shell__sign-out" /></div></div>
     </header>
     <div className="relative z-[1] mx-auto max-w-3xl px-4 py-8 sm:px-6">

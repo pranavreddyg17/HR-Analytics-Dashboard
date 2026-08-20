@@ -1,0 +1,133 @@
+.root {
+  z-index: 0;
+  contain: paint;
+  perspective: 1200px;
+}
+
+.starField,
+.nebula,
+.mesh,
+.orbit,
+.horizon,
+.scrollLayer {
+  position: absolute;
+  pointer-events: none;
+}
+
+.starField {
+  inset: -20px;
+  opacity: 0.2;
+  background-image:
+    radial-gradient(circle, rgb(101 82 190 / 0.34) 0 0.6px, transparent 0.9px),
+    radial-gradient(circle, rgb(31 126 172 / 0.22) 0 0.55px, transparent 0.85px);
+  background-position: 0 0, 19px 23px;
+  background-size: 43px 43px, 61px 61px;
+  mask-image: linear-gradient(180deg, black 0%, rgb(0 0 0 / 0.34) 34%, transparent 74%);
+  -webkit-mask-image: linear-gradient(180deg, black 0%, rgb(0 0 0 / 0.34) 34%, transparent 74%);
+}
+
+.nebula {
+  border-radius: 999px;
+  filter: blur(0.3px);
+}
+
+.farNebula {
+  top: -330px;
+  right: -260px;
+  width: 740px;
+  height: 740px;
+  opacity: 0.42;
+  background:
+    radial-gradient(circle at 45% 48%, rgb(121 82 247 / 0.15) 0%, rgb(113 77 231 / 0.055) 38%, transparent 70%);
+}
+
+.nearNebula {
+  top: 238px;
+  left: -290px;
+  width: 620px;
+  height: 620px;
+  opacity: 0.34;
+  background:
+    radial-gradient(circle at 55% 46%, rgb(20 143 190 / 0.105) 0%, rgb(61 81 187 / 0.035) 44%, transparent 72%);
+}
+
+.mesh {
+  top: 86px;
+  right: -74px;
+  width: min(470px, 42vw);
+  height: 216px;
+  opacity: 0.14;
+  border: 1px solid rgb(116 93 232 / 0.12);
+  border-radius: 38px;
+  background-image:
+    linear-gradient(rgb(105 85 211 / 0.075) 1px, transparent 1px),
+    linear-gradient(90deg, rgb(105 85 211 / 0.075) 1px, transparent 1px),
+    linear-gradient(135deg, rgb(255 255 255 / 0.2), transparent 46%);
+  background-size: 30px 30px, 30px 30px, 100% 100%;
+  mask-image: linear-gradient(110deg, transparent 2%, black 32%, black 72%, transparent 98%);
+  -webkit-mask-image: linear-gradient(110deg, transparent 2%, black 32%, black 72%, transparent 98%);
+  transform-style: preserve-3d;
+}
+
+.orbit {
+  top: 122px;
+  right: 10%;
+  width: 252px;
+  height: 252px;
+  opacity: 0.13;
+  border: 1px solid rgb(117 83 238 / 0.36);
+  border-right-color: rgb(25 150 190 / 0.24);
+  border-bottom-color: transparent;
+  border-radius: 50%;
+  box-shadow: 0 0 36px rgb(110 77 238 / 0.035);
+  transform-style: preserve-3d;
+}
+
+.horizon {
+  top: 54px;
+  right: 7%;
+  width: min(520px, 46vw);
+  height: 1px;
+  opacity: 0.34;
+  background: linear-gradient(90deg, transparent, rgb(138 117 255 / 0.38) 35%, rgb(62 164 207 / 0.22) 66%, transparent);
+  box-shadow: 0 0 18px rgb(117 83 238 / 0.16);
+}
+
+.scrollLayer {
+  top: 62%;
+  right: 8%;
+  width: min(520px, 44vw);
+  height: 170px;
+  border: 1px solid rgb(102 85 232 / 0.05);
+  border-radius: 44%;
+  background: linear-gradient(118deg, transparent 8%, rgb(102 85 232 / 0.035), rgb(29 129 174 / 0.024), transparent 88%);
+  transform: rotate(-9deg);
+}
+
+@media (max-width: 700px) {
+  .starField {
+    opacity: 0.13;
+  }
+
+  .mesh,
+  .orbit,
+  .horizon,
+  .scrollLayer {
+    display: none;
+  }
+
+  .farNebula {
+    right: -390px;
+  }
+
+  .nearNebula {
+    left: -420px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .root * {
+    animation: none !important;
+    transition: none !important;
+  }
+}

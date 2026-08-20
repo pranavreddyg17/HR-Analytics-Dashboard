@@ -11,6 +11,7 @@ import {
 import * as m from "motion/react-m"
 
 import { cn } from "@/lib/utils"
+import styles from "@/components/motion/portal-atmosphere.module.css"
 
 type PortalAtmosphereProps = {
   className?: string
@@ -42,7 +43,7 @@ function ScrollAtmosphereLayer({ intensity }: { intensity: number }) {
 
   return (
     <m.div
-      className="portal-atmosphere__layer portal-atmosphere__layer--scroll"
+      className={styles.scrollLayer}
       style={{ y, opacity }}
     />
   )
@@ -97,24 +98,32 @@ export function PortalAtmosphere({
   return (
     <div
       aria-hidden="true"
-      className={cn("portal-atmosphere", className)}
+      className={cn("portal-atmosphere", styles.root, className)}
       style={{ inset: 0, overflow: "hidden", pointerEvents: "none", position: "absolute" }}
     >
       <m.div
-        className="portal-atmosphere__layer portal-atmosphere__layer--far"
+        className={styles.starField}
         style={reduceMotion ? undefined : { x: farX, y: farY }}
       />
       <m.div
-        className="portal-atmosphere__layer portal-atmosphere__layer--near"
+        className={cn(styles.nebula, styles.farNebula)}
+        style={reduceMotion ? undefined : { x: farX, y: farY }}
+      />
+      <m.div
+        className={cn(styles.nebula, styles.nearNebula)}
         style={reduceMotion ? undefined : { x: nearX, y: nearY }}
       />
       <m.div
-        className="portal-atmosphere__mesh"
+        className={styles.mesh}
         style={reduceMotion ? undefined : { rotateX: meshRotateX, rotateY: meshRotateY, rotateZ: -12, x: farX, y: farY }}
       />
       <m.div
-        className="portal-atmosphere__arc"
+        className={styles.orbit}
         style={reduceMotion ? undefined : { x: nearX, y: nearY, rotateX: arcRotateX, rotateY: meshRotateY, rotateZ: 24 }}
+      />
+      <m.div
+        className={styles.horizon}
+        style={reduceMotion ? undefined : { x: farX, y: farY }}
       />
       {respondToScroll && !reduceMotion && <ScrollAtmosphereLayer intensity={safeIntensity} />}
     </div>

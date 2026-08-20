@@ -7,6 +7,7 @@ import * as m from "motion/react-m"
 
 import { AgentCopilot, type AssistantWorkflow } from "@/components/agent-copilot"
 import { AgentWorkflows } from "@/components/agent-workflows"
+import styles from "@/components/ai-surfaces.module.css"
 
 type View = "conversation" | "actions"
 
@@ -49,13 +50,13 @@ export function AiAssistantWorkspace({ dataMode, canPrepare }: { dataMode: strin
   }
 
   return (
-    <section className="assistant-workspace">
+    <section className={styles.workspace}>
       <LayoutGroup id="assistant-view-switcher">
-        <div className="assistant-workspace__toolbar" role="tablist" aria-label="AI assistant tools">
+        <div className={styles.workspaceToolbar} role="tablist" aria-label="AI assistant tools">
           {assistantViews.map((item, index) => {
             const active = view === item.id
-            return <button type="button" key={item.id} ref={(element) => { tabRefs.current[index] = element }} id={`assistant-tab-${item.id}`} role="tab" aria-selected={active} aria-controls={`assistant-panel-${item.id}`} tabIndex={active ? 0 : -1} onClick={() => selectView(item.id)} onKeyDown={(event) => handleTabKeyDown(event, index)} className={`assistant-workspace__tab relative ${active ? "!bg-transparent !shadow-none" : ""}`}>
-              {active && <m.span layoutId="assistant-active-view" className="absolute inset-0 rounded-[10px]" style={{ background: "var(--surface-selected)", boxShadow: "inset 0 0 0 1px rgb(102 85 232 / 0.12)" }} aria-hidden="true" />}
+            return <button type="button" key={item.id} ref={(element) => { tabRefs.current[index] = element }} id={`assistant-tab-${item.id}`} role="tab" aria-selected={active} aria-controls={`assistant-panel-${item.id}`} tabIndex={active ? 0 : -1} onClick={() => selectView(item.id)} onKeyDown={(event) => handleTabKeyDown(event, index)} className={styles.workspaceTab}>
+              {active && <m.span layoutId="assistant-active-view" className={styles.activeTab} aria-hidden="true" />}
               <span className="relative z-[1]">{item.label}</span>
             </button>
           })}
@@ -63,9 +64,9 @@ export function AiAssistantWorkspace({ dataMode, canPrepare }: { dataMode: strin
       </LayoutGroup>
 
       {view === "conversation" ? (
-        <m.div key="conversation" id="assistant-panel-conversation" role="tabpanel" aria-labelledby="assistant-tab-conversation" className="flex h-[min(720px,calc(100dvh-190px))] min-h-[560px] flex-col bg-muted/15" initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ duration: 0.16 }}><AgentCopilot dataMode={dataMode} onReviewWorkflow={reviewWorkflow} /></m.div>
+        <m.div key="conversation" id="assistant-panel-conversation" role="tabpanel" aria-labelledby="assistant-tab-conversation" className={`${styles.workspacePanel} h-[min(720px,calc(100dvh-190px))]`} initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ duration: 0.18 }}><AgentCopilot dataMode={dataMode} onReviewWorkflow={reviewWorkflow} /></m.div>
       ) : (
-        <m.div key="actions" id="assistant-panel-actions" role="tabpanel" aria-labelledby="assistant-tab-actions" className="p-4 sm:p-5" initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ duration: 0.16 }}><AgentWorkflows key={actionPrompt || "new-action"} canPrepare={canPrepare} initialPrompt={actionPrompt} /></m.div>
+        <m.div key="actions" id="assistant-panel-actions" role="tabpanel" aria-labelledby="assistant-tab-actions" className={styles.workspacePanel} initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ duration: 0.18 }}><AgentWorkflows key={actionPrompt || "new-action"} canPrepare={canPrepare} initialPrompt={actionPrompt} /></m.div>
       )}
     </section>
   )

@@ -3,7 +3,9 @@
 import * as m from "motion/react-m"
 
 import { PortalAtmosphere } from "@/components/motion/portal-atmosphere"
+import shellStyles from "@/components/motion/cosmic-shell.module.css"
 import { SignOutControl } from "@/components/sign-out-control"
+import { cn } from "@/lib/utils"
 
 export function EmployeeAccessEnded({
   user,
@@ -13,7 +15,7 @@ export function EmployeeAccessEnded({
   employmentStatus: string
 }) {
   return (
-    <main className="employee-shell flex min-h-screen items-center justify-center px-4 py-10 text-foreground">
+    <main className={cn("employee-shell flex min-h-screen items-center justify-center px-4 py-10 text-foreground", shellStyles.employeeFrame)}>
       <PortalAtmosphere intensity={0.55} />
       <m.section className="relative z-[1] w-full max-w-lg rounded-lg border border-border bg-background p-6 shadow-sm sm:p-8" aria-labelledby="employment-ended-title" initial={{ opacity: 0, y: 8, scale: 0.99 }} animate={{ opacity: 1, y: 0, scale: 1 }}>
         <p className="text-card-title">LaidbackHR.ai</p>

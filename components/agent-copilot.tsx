@@ -3,8 +3,11 @@
 import { useEffect, useRef, useState } from "react"
 import { LoaderCircle } from "lucide-react"
 import Link from "next/link"
+import { AnimatePresence, useReducedMotion } from "motion/react"
+import * as m from "motion/react-m"
 
 import { AssistantRichText } from "@/components/assistant-rich-text"
+import styles from "@/components/ai-surfaces.module.css"
 import { Button } from "@/components/ui/button"
 import { assistantPagePrompts, type AssistantPageContext } from "@/lib/assistant-page-context"
 import { cn } from "@/lib/utils"
@@ -61,18 +64,23 @@ function welcomeMessage(dataMode: string): ChatMessage {
 }
 
 export function AgentCopilot({ dataMode, pageContext, compact = false, onReviewWorkflow }: { dataMode: string; pageContext?: AssistantPageContext; compact?: boolean; onReviewWorkflow?: (workflow: AssistantWorkflow) => void }) {
+  const reduceMotion = useReducedMotion()
   const [messages, setMessages] = useState<ChatMessage[]>([welcomeMessage(dataMode)])
   const [conversations, setConversations] = useState<ConversationSummary[]>([])
   const [conversationId, setConversationId] = useState("")
   const [input, setInput] = useState("")
   const [thinking, setThinking] = useState(false)
   const [streamStatus, setStreamStatus] = useState("Reviewing workspace data")
+  const [announcement, setAnnouncement] = useState("")
   const [loadingHistory, setLoadingHistory] = useState(true)
   const [deleteOpen, setDeleteOpen] = useState(false)
   const [deleting, setDeleting] = useState(false)
   const [conversationError, setConversationError] = useState("")
   const scrollRef = useRef<HTMLDivElement>(null)
   const conversationIdRef = useRef("")
+  const deleteDialogRef = useRef<HTMLDivElement>(null)
+  const cancelDeleteRef = useRef<HTMLButtonElement>(null)
+  const stickToBottomRef = useRef(true)
 
   async function refreshConversations(preferredId?: string) {
     const response = await fetch("/api/v1/chat/conversations", { cache: "no-store" })
@@ -115,6 +123,45 @@ export function AgentCopilot({ dataMode, pageContext, compact = false, onReviewW
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
+  useEffect(() => {
+    if (!thinking || !stickToBottomRef.current) return
+    const frame = window.requestAnimationFrame(() => {
+      const container = scrollRef.current
+      if (container) container.scrollTop = container.scrollHeight
+    })
+    return () => window.cancelAnimationFrame(frame)
+  }, [messages, thinking])
+
+  useEffect(() => {
+    if (!deleteOpen) return
+    const previous = document.activeElement instanceof HTMLElement ? document.activeElement : null
+    const previousOverflow = document.body.style.overflow
+    document.body.style.overflow = "hidden"
+    const frame = window.requestAnimationFrame(() => cancelDeleteRef.current?.focus())
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        event.preventDefault()
+        setDeleteOpen(false)
+        setConversationError("")
+        return
+      }
+      if (event.key !== "Tab" || !deleteDialogRef.current) return
+      const focusable = [...deleteDialogRef.current.querySelectorAll<HTMLElement>('button:not([disabled]), [href], [tabindex]:not([tabindex="-1"])')]
+      if (!focusable.length) return
+      const first = focusable[0]
+      const last = focusable[focusable.length - 1]
+      if (event.shiftKey && document.activeElement === first) { event.preventDefault(); last.focus() }
+      else if (!event.shiftKey && document.activeElement === last) { event.preventDefault(); first.focus() }
+    }
+    document.addEventListener("keydown", onKeyDown)
+    return () => {
+      window.cancelAnimationFrame(frame)
+      document.removeEventListener("keydown", onKeyDown)
+      document.body.style.overflow = previousOverflow
+      previous?.focus()
+    }
+  }, [deleteOpen])
+
   function resetConversationState() {
     conversationIdRef.current = ""
     setConversationId("")
@@ -152,9 +199,11 @@ export function AgentCopilot({ dataMode, pageContext, compact = false, onReviewW
     const trimmed = text.trim()
     if (!trimmed || thinking || loadingHistory) return
     setMessages((current) => [...current, { role: "user", content: trimmed }])
+    stickToBottomRef.current = true
     setInput("")
     setThinking(true)
     setStreamStatus("Reviewing workspace records")
+    setAnnouncement("Reviewing workspace records")
     const activeConversationId = conversationIdRef.current
     const streamMessageId = `stream-${crypto.randomUUID()}`
     try {
@@ -200,7 +249,10 @@ export function AgentCopilot({ dataMode, pageContext, compact = false, onReviewW
             conversationIdRef.current = payload.conversationId
             setConversationId(payload.conversationId)
           }
-          if (eventName === "progress" && payload.message) setStreamStatus(payload.message)
+          if (eventName === "progress" && payload.message) {
+            setStreamStatus(payload.message)
+            setAnnouncement(payload.message)
+          }
           if (eventName === "delta" && payload.text) {
             setMessages((current) => current.map((message) => message.id === streamMessageId
               ? { ...message, content: message.content + payload.text }
@@ -224,13 +276,14 @@ export function AgentCopilot({ dataMode, pageContext, compact = false, onReviewW
         : [...current, { role: "assistant", content }])
     } finally {
       setThinking(false)
-      requestAnimationFrame(() => scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight, behavior: "smooth" }))
+      setAnnouncement("Assistant response ready.")
+      if (stickToBottomRef.current) requestAnimationFrame(() => scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight, behavior: reduceMotion ? "auto" : "smooth" }))
     }
   }
 
   return (
-    <div className="flex h-full min-h-0 flex-col">
-      <div className={cn("items-center gap-2 border-b border-border bg-card px-4 py-2.5", compact ? "flex justify-end" : "flex")}>
+    <div className={styles.copilot} aria-busy={thinking || loadingHistory}>
+      <div className={cn(styles.copilotToolbar, compact && "justify-end")}>
         {!compact && <>
         <label className="min-w-0 flex-1 text-meta font-semibold text-muted-foreground">
           Conversation
@@ -238,7 +291,7 @@ export function AgentCopilot({ dataMode, pageContext, compact = false, onReviewW
             value={conversationId}
             onChange={(event) => { if (event.target.value) void loadConversation(event.target.value); else newConversation() }}
             disabled={thinking || loadingHistory}
-            className="ml-2 h-8 max-w-[420px] rounded-md border border-border bg-background px-2 text-xs font-normal text-foreground"
+            className={styles.conversationSelect}
             aria-label="Select a recent conversation"
           >
             <option value="">New conversation</option>
@@ -252,20 +305,42 @@ export function AgentCopilot({ dataMode, pageContext, compact = false, onReviewW
 
       {conversationError && !deleteOpen && <div role="alert" className="border-b border-border bg-destructive/5 px-4 py-2 text-xs text-destructive">{conversationError}</div>}
 
-      <div ref={scrollRef} className="min-h-0 flex-1 space-y-5 overflow-y-auto px-5 py-5">
+      <div
+        ref={scrollRef}
+        className={styles.messageList}
+        role="log"
+        aria-label="Conversation"
+        aria-live="off"
+        onScroll={(event) => {
+          const element = event.currentTarget
+          stickToBottomRef.current = element.scrollHeight - element.scrollTop - element.clientHeight < 96
+        }}
+      >
+        <div className={styles.messageStack}>
         {loadingHistory ? (
           <div className="flex h-full items-center justify-center gap-2 text-sm text-muted-foreground"><LoaderCircle className="size-4 animate-spin"/>Loading conversation</div>
-        ) : messages.map((message, index) => (
-          <article key={message.id ?? index} className={cn("flex", message.role === "user" && "justify-end")}>
-            <div className="max-w-[88%]">
+        ) : messages.map((message, index) => {
+          const pendingStream = message.id?.startsWith("stream-") && !message.content
+          if (pendingStream) return null
+          return (
+          <m.article
+            key={message.id ?? index}
+            className={cn(styles.messageRow, message.role === "user" && styles.messageRowUser)}
+            initial={reduceMotion ? { opacity: 0 } : { opacity: 0, y: 5 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: reduceMotion ? 0.01 : 0.18 }}
+            aria-label={message.role === "assistant" ? "Assistant response" : "Your message"}
+          >
+            <div className={styles.messageContent}>
               <div className={cn(
-                "assistant-bubble px-3.5 py-3",
-                message.role === "assistant" ? "assistant-bubble--assistant text-foreground" : "assistant-bubble--user",
+                styles.bubble,
+                "px-3.5 py-3",
+                message.role === "assistant" ? styles.bubbleAssistant : styles.bubbleUser,
               )}>
                 {message.role === "assistant" ? <AssistantRichText content={message.content} /> : <p className="whitespace-pre-wrap text-body">{message.content}</p>}
               </div>
               {message.role === "assistant" && ((message.tools?.length ?? 0) > 0 || (message.context?.length ?? 0) > 0) && (
-                <details className="mt-2 px-1 text-meta text-muted-foreground">
+                <details className={styles.evidence}>
                   <summary className="w-fit cursor-pointer select-none hover:text-foreground">Evidence used</summary>
                   <div className="mt-1.5 flex flex-wrap gap-x-3 gap-y-1">
                     {message.tools?.map((trace) => <span key={trace.tool}>{toolLabels[trace.tool] ?? trace.tool}</span>)}
@@ -274,7 +349,7 @@ export function AgentCopilot({ dataMode, pageContext, compact = false, onReviewW
                 </details>
               )}
               {message.role === "assistant" && message.workflow && (
-                <div className="mt-3 rounded-md border border-border bg-card p-3">
+                <div className={styles.preparedAction}>
                   <p className="text-label font-semibold">Prepared action</p>
                   <p className="mt-1 text-body font-semibold">{message.workflow.title}</p>
                   <p className="mt-1 text-meta text-muted-foreground">{message.workflow.evidence}</p>
@@ -282,25 +357,28 @@ export function AgentCopilot({ dataMode, pageContext, compact = false, onReviewW
                 </div>
               )}
             </div>
-          </article>
-        ))}
+          </m.article>
+          )
+        })}
         {thinking && (
-          <div className="flex items-center gap-3 text-sm text-muted-foreground">
-            <LoaderCircle className="size-4 animate-spin" />
+          <m.div className={styles.streamStatus} aria-hidden="true" initial={{ opacity: 0 }} animate={{ opacity: 1 }}>
+            <span className={styles.streamOrb} aria-hidden="true" />
             {streamStatus}
-          </div>
+          </m.div>
         )}
+        </div>
       </div>
+      <p className="sr-only" role="status" aria-live="polite" aria-atomic="true">{announcement}</p>
 
-      <div className="border-t border-border bg-card px-4 py-4">
-        <div className={cn("mb-3 grid gap-1", !compact && "sm:grid-cols-2")}>
+      <div className={styles.composerArea}>
+        <div className={cn(styles.suggestions, !compact && styles.suggestionsWide)}>
           {(pageContext ? assistantPagePrompts(pageContext) : defaultSuggestedPrompts).map((prompt) => (
-            <button key={prompt} type="button" onClick={() => void send(prompt)} className="assistant-suggestion text-xs">
+            <m.button key={prompt} type="button" onClick={() => void send(prompt)} className={styles.suggestion} whileTap={reduceMotion ? undefined : { scale: 0.99 }}>
               {prompt}
-            </button>
+            </m.button>
           ))}
         </div>
-        <form onSubmit={(event) => { event.preventDefault(); void send(input) }} className="assistant-composer flex items-end gap-2 border border-input p-1.5 pl-3 focus-within:ring-2 focus-within:ring-ring/25">
+        <form onSubmit={(event) => { event.preventDefault(); void send(input) }} className={styles.composer}>
           <textarea
             rows={1}
             value={input}
@@ -319,19 +397,21 @@ export function AgentCopilot({ dataMode, pageContext, compact = false, onReviewW
         <p className="mt-2 text-meta text-muted-foreground">Uses the current page, live workspace records, and the knowledge index.</p>
       </div>
 
+      <AnimatePresence>
       {deleteOpen && conversationId && (
-        <div className="fixed inset-0 z-[120] flex items-center justify-center bg-foreground/25 p-4" role="dialog" aria-modal="true" aria-labelledby="delete-conversation-title">
-          <div className="w-full max-w-md rounded-lg border border-border bg-card p-5 shadow-none">
+        <m.div className={styles.dialogBackdrop} initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}>
+          <m.div ref={deleteDialogRef} className={styles.dialog} role="dialog" aria-modal="true" aria-labelledby="delete-conversation-title" initial={reduceMotion ? { opacity: 0 } : { opacity: 0, scale: 0.98, y: 6 }} animate={{ opacity: 1, scale: 1, y: 0 }} exit={reduceMotion ? { opacity: 0 } : { opacity: 0, scale: 0.98, y: 4 }}>
             <h3 id="delete-conversation-title" className="text-base font-semibold">Delete conversation?</h3>
             <p className="mt-2 text-sm text-muted-foreground">This permanently removes “{conversations.find((conversation) => conversation.id === conversationId)?.title ?? "this conversation"}” and its message history.</p>
             {conversationError && <p role="alert" className="mt-3 text-xs text-destructive">{conversationError}</p>}
             <div className="mt-5 flex justify-end gap-2">
-              <Button type="button" variant="ghost" onClick={() => { setDeleteOpen(false); setConversationError("") }} disabled={deleting}>Cancel</Button>
+              <Button ref={cancelDeleteRef} type="button" variant="ghost" onClick={() => { setDeleteOpen(false); setConversationError("") }} disabled={deleting}>Cancel</Button>
               <Button type="button" variant="destructive" onClick={() => void deleteActiveConversation()} disabled={deleting}>{deleting ? <><LoaderCircle className="size-4 animate-spin"/>Deleting</> : "Delete conversation"}</Button>
             </div>
-          </div>
-        </div>
+          </m.div>
+        </m.div>
       )}
+      </AnimatePresence>
     </div>
   )
 }

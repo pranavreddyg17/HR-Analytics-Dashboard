@@ -13,6 +13,8 @@ import { PortalAtmosphere } from "@/components/motion/portal-atmosphere"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { StatusIndicator } from "@/components/status-indicator"
+import shellStyles from "@/components/motion/cosmic-shell.module.css"
+import { cn } from "@/lib/utils"
 
 type PortalData = {
   employee: {
@@ -293,18 +295,18 @@ export function EmployeePortal({ initialData, user }: { initialData: PortalData;
   const exitTaskCount = Number(data.exit?.task_count ?? 0)
   const exitCompletedTaskCount = Number(data.exit?.completed_task_count ?? 0)
   const exitProgress = exitTaskCount > 0 ? Math.min(100, Math.round(exitCompletedTaskCount / exitTaskCount * 100)) : 0
-  return <div className="employee-shell min-h-screen text-foreground">
+  return <div className={cn("employee-shell min-h-screen text-foreground", shellStyles.employeeFrame)}>
     <SessionRevalidator enabled={user.authenticated} />
     <PortalAtmosphere respondToScroll intensity={0.55} />
-    <header className="employee-shell__header">
-      <div className="employee-shell__header-inner mx-auto flex min-h-[60px] max-w-[1380px] items-center px-4 sm:px-7">
-        <LayoutGroup id="employee-primary-navigation"><nav className="employee-shell__navigation" aria-label="Employee navigation">
-          {portalViews.map((item) => <Link key={item.value} href={viewHref(item.value)} scroll={false} aria-current={active === item.value ? "page" : undefined} className={active === item.value ? "employee-shell__navigation-link employee-shell__navigation-link--active" : "employee-shell__navigation-link"}>{item.label}{active === item.value && <m.span layoutId="employee-nav-indicator" className="employee-shell__navigation-indicator" aria-hidden="true" />}</Link>)}
+    <header className={cn("employee-shell__header", shellStyles.employeeHeader)}>
+      <div className={cn("employee-shell__header-inner mx-auto flex min-h-[60px] max-w-[1380px] items-center px-4 sm:px-7", shellStyles.employeeHeaderInner)}>
+        <LayoutGroup id="employee-primary-navigation"><nav className={cn("employee-shell__navigation", shellStyles.employeeNavigation)} aria-label="Employee navigation">
+          {portalViews.map((item) => <Link key={item.value} href={viewHref(item.value)} scroll={false} aria-current={active === item.value ? "page" : undefined} className={cn("employee-shell__navigation-link", shellStyles.employeeNavLink, active && "employee-shell__navigation-link--active", active && shellStyles.employeeNavLinkActive)}>{item.label}{active === item.value && <m.span layoutId="employee-nav-indicator" className={cn("employee-shell__navigation-indicator", shellStyles.employeeNavIndicator)} aria-hidden="true" />}</Link>)}
         </nav></LayoutGroup>
-        <div className="employee-shell__account hidden text-right md:block"><p className="text-card-title">{user.name}</p><p className="text-meta">{user.email}</p></div>
+        <div className={cn("employee-shell__account hidden text-right md:block", shellStyles.employeeAccount)}><p className="text-card-title">{user.name}</p><p className="text-meta">{user.email}</p></div>
         <div className="employee-shell__utilities">
-          {user.workspaceAccess && <Link href="/" className="employee-shell__sign-out">HR workspace</Link>}
-          <SignOutControl className="employee-shell__sign-out" />
+          {user.workspaceAccess && <Link href="/" className={cn("employee-shell__sign-out", shellStyles.employeeUtility)}>HR workspace</Link>}
+          <SignOutControl className={cn("employee-shell__sign-out", shellStyles.employeeUtility)} />
         </div>
       </div>
     </header>
